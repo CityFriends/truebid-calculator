@@ -19,8 +19,8 @@ interface Tab {
 
 const tabs: Tab[] = [
   { id: 'upload', label: 'Upload', icon: <Upload className="w-4 h-4" /> },
-  { id: 'roles-pricing', label: 'Roles & Pricing', icon: <Users className="w-4 h-4" /> },
-  { id: 'scoping', label: 'Scoping', icon: <Target className="w-4 h-4" /> },
+  { id: 'scoping', label: 'Scoping', icon: <Target className="w-4 h-4" /> },  // ← Moved up
+  { id: 'roles-pricing', label: 'Roles & Pricing', icon: <Users className="w-4 h-4" /> },  // ← Moved down
   { id: 'subcontractors', label: 'Subcontractors', icon: <Link2 className="w-4 h-4" /> },
   { id: 'prime-check', label: 'Prime Check', icon: <CheckCircle2 className="w-4 h-4" /> },
   { id: 'gsa', label: 'GSA Schedule', icon: <Calendar className="w-4 h-4" /> },
