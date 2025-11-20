@@ -1,163 +1,194 @@
 'use client'
 
-import { useState } from 'react'
-import { useApp } from '@/contexts/app-context'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { Upload, FileText, Loader2 } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Upload, FileText, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 
-export function UploadTab() {
-  const { setRfpData, setRecommendedRoles, setActiveTab } = useApp()
-  const [file, setFile] = useState<File | null>(null)
+interface UploadTabProps {
+  onContinue?: () => void
+}
+
+export function UploadTab({ onContinue }: UploadTabProps) {
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisComplete, setAnalysisComplete] = useState(false)
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0])
-      setAnalysisComplete(false)
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0 && files[0].type === 'application/pdf') {
+      handleFileUpload(files[0])
     }
-  }
+  }, [])
 
-  const handleAnalyze = async () => {
-    if (!file) return
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      handleFileUpload(files[0])
+    }
+  }, [])
 
+  const handleFileUpload = (file: File) => {
+    setUploadedFile(file)
     setIsAnalyzing(true)
-
-    try {
-      // TODO: Replace with actual OpenAI API call
-      // For now, simulate analysis with mock data
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      // Mock recommended roles
-  const mockRoles = [
-  {
-    id: '1',
-    title: 'Technical Lead',
-    icLevel: 'IC5' as const,
-    quantity: 1,
-    isKeyPersonnel: true,
-    confidence: 'high' as const,
-    storyPoints: 45,
-    description: 'Lead technical architecture and mentor development team'
-  },
-  {
-    id: '2',
-    title: 'Senior Software Engineer',
-    icLevel: 'IC4' as const,
-    quantity: 3,
-    isKeyPersonnel: false,
-    confidence: 'high' as const,
-    storyPoints: 120,
-    description: 'Build core application features and APIs'
-  },
-  {
-    id: '3',
-    title: 'DevOps Engineer',
-    icLevel: 'IC4' as const,
-    quantity: 1,
-    isKeyPersonnel: false,
-    confidence: 'medium' as const,
-    storyPoints: 35,
-    description: 'Manage CI/CD pipelines and cloud infrastructure'
-  }
-]
-
-      setRecommendedRoles(mockRoles)
-      setRfpData({
-        fileName: file.name,
-        fileSize: file.size,
-        analysisComplete: true,
-        summary: 'RFP analysis complete. 3 roles recommended.'
-      })
-      setAnalysisComplete(true)
-    } catch (error) {
-      console.error('Analysis failed:', error)
-    } finally {
+    
+    // Simulate analysis
+    setTimeout(() => {
       setIsAnalyzing(false)
-    }
-  }
-
-  const handleContinue = () => {
-    setActiveTab('roles-pricing')
+      setAnalysisComplete(true)
+    }, 2000)
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="text-center">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Upload RFP Document</h2>
+        <p className="text-gray-600">
+          Upload your RFP PDF to automatically extract requirements and generate role recommendations
+        </p>
+      </div>
+
+      {/* Upload Area */}
       <Card>
-        <CardHeader>
-          <CardTitle>Upload RFP</CardTitle>
-          <CardDescription>
-            Upload your RFP document for AI-powered analysis and role recommendations
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Upload Area */}
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-gray-400 transition-colors">
-            <input
-              type="file"
-              accept=".pdf"
-              onChange={handleFileChange}
-              className="hidden"
-              id="rfp-upload"
-            />
-            <label htmlFor="rfp-upload" className="cursor-pointer">
-              <Upload className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-              <p className="text-sm text-gray-600 mb-2">
-                {file ? file.name : 'Click to upload or drag and drop'}
-              </p>
-              <p className="text-xs text-gray-500">PDF files only</p>
-            </label>
+        <CardContent className="p-8">
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`
+              border-2 border-dashed rounded-lg p-12 text-center transition-colors
+              ${isDragging 
+                ? 'border-blue-500 bg-blue-50' 
+                : uploadedFile 
+                  ? 'border-green-500 bg-green-50' 
+                  : 'border-gray-300 hover:border-gray-400'
+              }
+            `}
+          >
+            {!uploadedFile ? (
+              <div className="space-y-4">
+                <Upload className="w-16 h-16 text-gray-400 mx-auto" />
+                <div>
+                  <p className="text-lg font-medium text-gray-900 mb-1">
+                    Drop your RFP here, or click to browse
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Supports PDF files up to 50MB
+                  </p>
+                </div>
+                <div>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <label htmlFor="file-upload">
+                    <Button asChild>
+                      <span className="cursor-pointer">
+                        Select File
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+              </div>
+            ) : isAnalyzing ? (
+              <div className="space-y-4">
+                <Loader2 className="w-16 h-16 text-blue-600 mx-auto animate-spin" />
+                <div>
+                  <p className="text-lg font-medium text-gray-900 mb-1">
+                    Analyzing RFP...
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Extracting requirements and generating recommendations
+                  </p>
+                </div>
+              </div>
+            ) : analysisComplete ? (
+              <div className="space-y-4">
+                <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto" />
+                <div>
+                  <p className="text-lg font-medium text-gray-900 mb-1">
+                    Analysis Complete!
+                  </p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    {uploadedFile.name} has been processed successfully
+                  </p>
+                  {onContinue && (
+                    <Button onClick={onContinue} size="lg">
+                      Continue to Scoping →
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
+        </CardContent>
+      </Card>
 
-          {/* File Info */}
-          {file && (
-            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-              <FileText className="w-5 h-5 text-blue-500" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">{file.name}</p>
-                <p className="text-xs text-gray-500">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                </p>
-              </div>
+      {/* Info Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-6 text-center">
+            <FileText className="w-8 h-8 text-blue-600 mx-auto mb-3" />
+            <h3 className="font-medium text-gray-900 mb-1">Extract Requirements</h3>
+            <p className="text-sm text-gray-600">
+              AI analyzes your RFP to identify key requirements
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6 text-center">
+            <Upload className="w-8 h-8 text-blue-600 mx-auto mb-3" />
+            <h3 className="font-medium text-gray-900 mb-1">Generate Roles</h3>
+            <p className="text-sm text-gray-600">
+              Automatically recommend team composition
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6 text-center">
+            <CheckCircle2 className="w-8 h-8 text-blue-600 mx-auto mb-3" />
+            <h3 className="font-medium text-gray-900 mb-1">Calculate Costs</h3>
+            <p className="text-sm text-gray-600">
+              Build accurate pricing with rate justification
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Upload Tips */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-blue-900">
+              <p className="font-medium mb-1">Tips for best results:</p>
+              <ul className="space-y-1 list-disc list-inside">
+                <li>Upload the complete RFP document in PDF format</li>
+                <li>Ensure the document is text-based (not scanned images)</li>
+                <li>Include any amendments or modifications</li>
+              </ul>
             </div>
-          )}
-
-          {/* Analyze Button */}
-          {file && !analysisComplete && (
-            <Button
-              onClick={handleAnalyze}
-              disabled={isAnalyzing}
-              className="w-full"
-            >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Analyzing RFP...
-                </>
-              ) : (
-                'Analyze RFP'
-              )}
-            </Button>
-          )}
-
-          {/* Analysis Complete */}
-          {analysisComplete && (
-            <div className="space-y-4">
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm font-medium text-green-900">
-                  ✓ Analysis Complete
-                </p>
-                <p className="text-xs text-green-700 mt-1">
-                  3 roles recommended based on RFP requirements
-                </p>
-              </div>
-
-              <Button onClick={handleContinue} className="w-full">
-                Continue to Roles & Pricing →
-              </Button>
-            </div>
-          )}
+          </div>
         </CardContent>
       </Card>
     </div>

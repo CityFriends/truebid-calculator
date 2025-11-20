@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Plus, Calculator, Trash2, Users, DollarSign } from 'lucide-react'
+import { Plus, Calculator, Trash2, Users, DollarSign, Target } from 'lucide-react'
 
 interface RoleAllocation {
   fte: 0.25 | 0.5 | 0.75 | 1.0
@@ -21,12 +21,16 @@ interface RoleAllocation {
   optionYear2: boolean
 }
 
+interface RolesAndPricingTabProps {
+  onContinue?: () => void
+}
+
 // Currency formatter
 const formatCurrency = (amount: number): string => {
   return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-export function RolesAndPricingTab() {
+export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
   const {
     recommendedRoles,
     selectedRoles,
@@ -184,7 +188,11 @@ export function RolesAndPricingTab() {
             <span className="text-sm text-gray-500">%</span>
           </div>
 
-          <Button>Continue to Scoping →</Button>
+          {onContinue && (
+            <Button onClick={onContinue}>
+              Continue to Rate Justification →
+            </Button>
+          )}
         </div>
       </div>
 
@@ -777,15 +785,5 @@ function RateBreakdownModal({
         </div>
       </div>
     </div>
-  )
-}
-
-function Target({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="10" strokeWidth="2"/>
-      <circle cx="12" cy="12" r="6" strokeWidth="2"/>
-      <circle cx="12" cy="12" r="2" strokeWidth="2"/>
-    </svg>
   )
 }
