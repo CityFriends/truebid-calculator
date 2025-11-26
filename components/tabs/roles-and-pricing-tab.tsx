@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useApp } from '@/contexts/app-context'
+import { useAppContext } from '@/contexts/app-context'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Plus, Calculator, Trash2, Users, DollarSign, Target } from 'lucide-react'
+import { Plus, Calculator, Trash2, Users, DollarSign, Target, Plane, ShoppingBag, Coffee, MapPin } from 'lucide-react'
 
 interface RoleAllocation {
   fte: 0.25 | 0.5 | 0.75 | 1.0
@@ -32,6 +33,8 @@ const formatCurrency = (amount: number): string => {
 
 export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
   const {
+    contractType,          
+    setContractType,
     recommendedRoles,
     selectedRoles,
     addRole,
@@ -42,8 +45,15 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
     annualEscalation,
     setAnnualEscalation,
     calculateLoadedRate,
-    companyPolicy
-  } = useApp()
+    companyPolicy,
+    odcs,
+    addODC,
+    removeODC,
+    perDiem,
+    addPerDiem,
+    removePerDiem,
+    subcontractors
+  } = useAppContext()
 
   // FTE allocations per role (TODO: Move to context in Phase 8)
   const [roleAllocations, setRoleAllocations] = useState<Record<string, RoleAllocation>>({})
@@ -80,6 +90,7 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
 
     const newRole = {
       id: `custom-${Date.now()}`,
+      name: customRoleTitle,
       title: customRoleTitle,
       icLevel: customRoleIC,
       quantity: 1,
@@ -87,7 +98,13 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
       confidence: 'medium' as const,
       storyPoints: 0,
       description: `Custom ${customRoleTitle} position`,
-      isCustom: true
+      isCustom: true,
+      baseSalary: customRoleIC === 'IC5' ? 175000 : customRoleIC === 'IC4' ? 135000 : 105000,
+      fte: 1.0,
+      years: { base: true, option1: true, option2: true },
+      loadedRate: 0,
+      annualCost: 0,
+      billableHours: 2080
     }
 
     addRole(newRole)
@@ -123,7 +140,7 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
       const allocation = roleAllocations[role.id]
       if (allocation && allocation[year]) {
         const fte = allocation.fte
-        const cost = role.annualCost * fte
+        const cost = (role.annualCost || 0) * fte
         total += cost
       }
     })
@@ -134,6 +151,32 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
   const optionYear1Cost = calculateYearCost('optionYear1') * (1 + annualEscalation / 100)
   const optionYear2Cost = calculateYearCost('optionYear2') * Math.pow(1 + annualEscalation / 100, 2)
   const totalContract = baseYearCost + optionYear1Cost + optionYear2Cost
+
+  // Calculate total ODCs and Per Diem
+  const totalODCs = odcs.reduce((sum, item) => sum + item.totalCost, 0)
+  const totalPerDiem = perDiem.reduce((sum, pd) => sum + pd.totalCost, 0)
+  
+  // Calculate total Subcontractor costs
+  const calculateSubcontractorCosts = () => {
+    let baseYear = 0
+    let option1 = 0
+    let option2 = 0
+    
+    subcontractors.forEach(sub => {
+      const annualCost = sub.billedRate * 2080 * sub.fte
+      if (sub.years.base) baseYear += annualCost
+      if (sub.years.option1) option1 += annualCost
+      if (sub.years.option2) option2 += annualCost
+    })
+    
+    const option1WithEscalation = option1 * (1 + annualEscalation / 100)
+    const option2WithEscalation = option2 * Math.pow(1 + annualEscalation / 100, 2)
+    
+    return baseYear + option1WithEscalation + option2WithEscalation
+  }
+  
+  const totalSubcontractors = calculateSubcontractorCosts()
+  const grandTotal = totalContract + totalODCs + totalPerDiem + totalSubcontractors
 
   // Calculate total FTE
   const totalFTE = selectedRoles.reduce((sum, role) => {
@@ -159,6 +202,32 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
         </div>
         
         <div className="flex items-center gap-4">
+          {/* CONTRACT TYPE TOGGLE */}
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border">
+            <Label className="text-sm font-medium">Contract Type:</Label>
+            <ToggleGroup
+              type="single"
+              value={contractType}
+              onValueChange={(value) => {
+                if (value) setContractType(value as 'tm' | 'ffp');
+              }}
+              className="gap-0"
+            >
+              <ToggleGroupItem
+                value="tm"
+                className="px-4 data-[state=on]:bg-blue-600 data-[state=on]:text-white"
+              >
+                T&M
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="ffp"
+                className="px-4 data-[state=on]:bg-blue-600 data-[state=on]:text-white"
+              >
+                FFP
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+
           <div className="flex items-center gap-2">
             <Label htmlFor="profit-margin" className="text-sm">Profit Margin</Label>
             <Input
@@ -238,7 +307,7 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
                             {role.isKeyPersonnel && (
                              <span className="text-yellow-500">⭐</span>
                              )}
-                            <h4 className="font-medium text-sm">{role.title}</h4>
+                            <h4 className="font-medium text-sm">{role.title || role.name}</h4>
                             </div>
                             <p className="text-xs text-gray-600">{role.description}</p>
                           </div>
@@ -355,20 +424,20 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
                       <div key={role.id} className="p-4 border rounded-lg space-y-3">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                         {role.isKeyPersonnel && (
-                         <span className="text-yellow-500">⭐</span>
-                            )}
-                         <h4 className="font-medium text-sm">{role.title}</h4>
-                        </div>
-                         <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>
+                            <div className="flex items-center gap-2">
+                              {role.isKeyPersonnel && (
+                                <span className="text-yellow-500">⭐</span>
+                              )}
+                              <h4 className="font-medium text-sm">{role.title || role.name}</h4>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>
                             <div className="flex items-center gap-2 mt-1.5">
                               <Badge variant="outline" className="text-xs">{role.icLevel}</Badge>
                               <span className="text-xs text-gray-600">×{role.quantity}</span>
                               <span className="text-xs text-gray-600">•</span>
                               <span className="text-xs text-gray-600">{allocation.fte} FTE</span>
                               <span className="text-xs text-gray-600">•</span>
-                              <span className="text-xs font-medium">{formatCurrency(role.loadedRate)}/hr</span>
+                              <span className="text-xs font-medium">{formatCurrency(role.loadedRate || 0)}/hr</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
@@ -385,7 +454,7 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
                               </DialogTrigger>
                               <DialogContent className="max-w-xl">
                                 <DialogHeader>
-                                  <DialogTitle>{role.title} - Rate Breakdown</DialogTitle>
+                                  <DialogTitle>{role.title || role.name} - Rate Breakdown</DialogTitle>
                                   <DialogDescription>
                                     Detailed cost calculation and settings
                                   </DialogDescription>
@@ -453,16 +522,29 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
                 </div>
               </div>
 
-              <div className="pt-4 border-t">
-                <div className="flex justify-between">
-                  <span className="font-medium">Total Contract:</span>
+              <div className="pt-4 border-t space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Direct Labor (3 years):</span>
+                  <span className="font-medium">{formatCurrency(totalContract)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Subcontractors (3 years):</span>
+                  <span className="font-medium">{formatCurrency(totalSubcontractors)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">ODCs:</span>
+                  <span className="font-medium">{formatCurrency(totalODCs)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Per Diem:</span>
+                  <span className="font-medium">{formatCurrency(totalPerDiem)}</span>
+                </div>
+                <div className="pt-2 border-t flex justify-between">
+                  <span className="font-semibold">Grand Total:</span>
                   <span className="text-2xl font-bold text-blue-600">
-                    {formatCurrency(totalContract)}
+                    {formatCurrency(grandTotal)}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Based on individual role year allocations
-                </p>
               </div>
             </CardContent>
           </Card>
@@ -549,12 +631,12 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
                     <div className="space-y-2">
                       {selectedRoles.map(role => {
                         const allocation = roleAllocations[role.id] || { fte: 1.0, baseYear: true, optionYear1: true, optionYear2: true }
-                        const roleCost = allocation.baseYear ? role.annualCost * allocation.fte : 0
+                        const roleCost = allocation.baseYear ? (role.annualCost || 0) * allocation.fte : 0
                         
                         return (
                           <div key={role.id} className="flex justify-between text-sm">
                             <span className="text-gray-600 truncate flex-1">
-                            {role.title} ({(allocation.fte * role.quantity).toFixed(2)} FTE)
+                            {role.title || role.name} ({(allocation.fte * role.quantity).toFixed(2)} FTE)
                             </span>
                             <span className="font-medium ml-2">{formatCurrency(roleCost)}</span>
                           </div>
@@ -581,7 +663,7 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
                         <span className="text-gray-600">Avg Rate:</span>
                         <span className="font-medium">
                           {selectedRoles.length > 0 
-                            ? `${formatCurrency(selectedRoles.reduce((sum, r) => sum + r.loadedRate, 0) / selectedRoles.length)}/hr`
+                            ? `${formatCurrency(selectedRoles.reduce((sum, r) => sum + (r.loadedRate || 0), 0) / selectedRoles.length)}/hr`
                             : '$0.00/hr'}
                         </span>
                       </div>
@@ -625,6 +707,167 @@ export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
           </Card>
         </div>
       </div>
+
+      {/* ODCs & Per Diem Section - Full Width */}
+      <div className="space-y-6">
+        {/* ODCs Section */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Other Direct Costs (ODCs)</CardTitle>
+                <CardDescription>Travel, materials, equipment, and other project costs</CardDescription>
+              </div>
+              <Button size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                Add ODC Item
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {odcs.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">No ODC items added yet</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {odcs.map((item) => {
+                  const categoryIcons = {
+                    travel: Plane,
+                    materials: ShoppingBag,
+                    equipment: Coffee,
+                    other: DollarSign
+                  }
+                  const CategoryIcon = categoryIcons[item.category]
+                  const categoryColors = {
+                    travel: 'bg-blue-50 text-blue-600',
+                    materials: 'bg-purple-50 text-purple-600',
+                    equipment: 'bg-green-50 text-green-600',
+                    other: 'bg-gray-50 text-gray-600'
+                  }
+
+                  return (
+                    <Card key={item.id} className="border border-gray-200">
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${categoryColors[item.category]}`}>
+                            <CategoryIcon className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 mb-1 truncate">
+                              {item.description}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+                              <span>Qty: {item.quantity}</span>
+                              <span>•</span>
+                              <span>${item.unitCost.toFixed(2)} each</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-lg font-bold text-gray-900">
+                                {formatCurrency(item.totalCost)}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-red-600"
+                                onClick={() => removeODC(item.id)}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Total ODCs */}
+            {odcs.length > 0 && (
+              <div className="mt-4 pt-4 border-t flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Total ODCs:</span>
+                <span className="text-xl font-bold text-blue-600">{formatCurrency(totalODCs)}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Per Diem Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              GSA Per Diem Calculator
+            </CardTitle>
+            <CardDescription>Calculate travel per diem costs by location</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Location</Label>
+                <Input placeholder="Washington, DC" />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Number of Days</Label>
+                <Input type="number" placeholder="3" />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Number of People</Label>
+                <Input type="number" placeholder="2" />
+              </div>
+            </div>
+            <Button variant="outline" className="w-full md:w-auto">
+              <Calculator className="w-4 h-4 mr-2" />
+              Calculate Per Diem
+            </Button>
+
+            {/* Per Diem Results */}
+            {perDiem.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900">Calculated Per Diem</h4>
+                {perDiem.map((pd, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{pd.location}</p>
+                      <p className="text-xs text-gray-600">
+                        {pd.numberOfDays} days × {pd.numberOfPeople} people × ${pd.ratePerDay}/day
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-bold text-gray-900">
+                        {formatCurrency(pd.totalCost)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-red-600"
+                        onClick={() => removePerDiem(index)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-3 border-t flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Total Per Diem:</span>
+                  <span className="text-xl font-bold text-blue-600">{formatCurrency(totalPerDiem)}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 text-xs text-gray-600 text-center">
+              <a 
+                href="https://www.gsa.gov/travel/plan-book/per-diem-rates" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800"
+              >
+                View GSA Per Diem Rates →
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
@@ -641,12 +884,12 @@ function RateBreakdownModal({
   onUpdateRole: (roleId: string, updates: any) => void
   onUpdateAllocation: (roleId: string, updates: Partial<RoleAllocation>) => void
 }) {
-  const { costMultipliers, profitMargin } = useApp()
+  const { costMultipliers, profitMargin } = useAppContext()
 
   const baseRate = role.baseSalary / 2080
-  const afterFringe = baseRate * costMultipliers.fringe
-  const afterOverhead = afterFringe * costMultipliers.overhead
-  const afterGA = afterOverhead * costMultipliers.ga
+  const afterFringe = baseRate * (1 + costMultipliers.fringe)
+  const afterOverhead = afterFringe * (1 + costMultipliers.overhead)
+  const afterGA = afterOverhead * (1 + costMultipliers.ga)
   const loadedRate = afterGA * (1 + profitMargin / 100)
 
   return (
@@ -660,15 +903,15 @@ function RateBreakdownModal({
             <span className="font-mono">${baseRate.toFixed(2)}/hr</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-600">× Fringe (45%):</span>
+            <span className="text-gray-600">+ Fringe (45%):</span>
             <span className="font-mono">${afterFringe.toFixed(2)}/hr</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-600">× Overhead (30%):</span>
+            <span className="text-gray-600">+ Overhead (30%):</span>
             <span className="font-mono">${afterOverhead.toFixed(2)}/hr</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-600">× G&A (5%):</span>
+            <span className="text-gray-600">+ G&A (5%):</span>
             <span className="font-mono">${afterGA.toFixed(2)}/hr</span>
           </div>
           <div className="flex justify-between items-center pt-2 border-t border-gray-200">
@@ -713,7 +956,7 @@ function RateBreakdownModal({
               <Label className="text-sm font-medium">Hours/Year</Label>
               <Input
                 type="number"
-                value={role.billableHours}
+                value={role.billableHours || 2080}
                 onChange={(e) => onUpdateRole(role.id, { billableHours: parseFloat(e.target.value) })}
               />
             </div>

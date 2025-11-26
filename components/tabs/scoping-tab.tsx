@@ -109,6 +109,50 @@ interface EpicFormData {
   dependencies: string
 }
 
+// Technical Assessment interface
+interface TechnicalItem {
+  id: string
+  category: 'stack' | 'architecture' | 'compliance' | 'security' | 'infrastructure'
+  title: string
+  description: string
+  rationale: string
+  priority: 'critical' | 'high' | 'medium' | 'low'
+  relatedEpics: string[]
+}
+
+// BD Assumptions interface
+interface BDAssumption {
+  id: string
+  category: 'budget' | 'resource' | 'timeline' | 'technical' | 'client' | 'delivery'
+  title: string
+  description: string
+  impact: string
+  validationNeeded: boolean
+  owner: string
+  relatedEpics: string[]
+}
+
+// Form data for technical items
+interface TechnicalFormData {
+  category: 'stack' | 'architecture' | 'compliance' | 'security' | 'infrastructure'
+  title: string
+  description: string
+  rationale: string
+  priority: 'critical' | 'high' | 'medium' | 'low'
+  relatedEpics: string
+}
+
+// Form data for BD assumptions
+interface AssumptionFormData {
+  category: 'budget' | 'resource' | 'timeline' | 'technical' | 'client' | 'delivery'
+  title: string
+  description: string
+  impact: string
+  validationNeeded: boolean
+  owner: string
+  relatedEpics: string
+}
+
 // Enhanced mock data
 const mockEpics: Epic[] = [
   {
@@ -636,6 +680,166 @@ const mockRisks: Risk[] = [
   }
 ]
 
+// Mock technical assessment data
+const mockTechnicalItems: TechnicalItem[] = [
+  {
+    id: 't1',
+    category: 'stack',
+    title: 'React + Next.js Frontend',
+    description: 'Modern React framework with server-side rendering and static generation capabilities',
+    rationale: 'Government requires Section 508 compliance, fast load times, and SEO. Next.js provides SSR for performance and accessibility.',
+    priority: 'critical',
+    relatedEpics: ['3', '4']
+  },
+  {
+    id: 't2',
+    category: 'architecture',
+    title: 'Microservices Architecture',
+    description: 'Decompose application into independently deployable services',
+    rationale: 'Enables independent scaling, fault isolation, and team autonomy. Required for 99.9% uptime SLA.',
+    priority: 'critical',
+    relatedEpics: ['5']
+  },
+  {
+    id: 't3',
+    category: 'compliance',
+    title: 'FedRAMP Moderate Authorization',
+    description: 'Achieve FedRAMP Moderate baseline security controls',
+    rationale: 'Government contract requires FedRAMP authorization before production deployment. 18-month timeline for ATO.',
+    priority: 'critical',
+    relatedEpics: ['1', '8']
+  },
+  {
+    id: 't4',
+    category: 'security',
+    title: 'Zero Trust Security Model',
+    description: 'Implement zero trust architecture with continuous verification',
+    rationale: 'Government security requirements mandate least-privilege access and assume breach mentality.',
+    priority: 'high',
+    relatedEpics: ['1']
+  },
+  {
+    id: 't5',
+    category: 'infrastructure',
+    title: 'AWS GovCloud Deployment',
+    description: 'Deploy to AWS GovCloud (US) regions for compliance',
+    rationale: 'FedRAMP requires isolated infrastructure. GovCloud provides ITAR compliance and dedicated government regions.',
+    priority: 'critical',
+    relatedEpics: ['5']
+  },
+  {
+    id: 't6',
+    category: 'compliance',
+    title: 'NIST 800-53 Controls',
+    description: 'Implement all moderate baseline security controls',
+    rationale: 'FedRAMP authorization requires full implementation of 325+ NIST controls with continuous monitoring.',
+    priority: 'critical',
+    relatedEpics: ['8']
+  },
+  {
+    id: 't7',
+    category: 'architecture',
+    title: 'Event-Driven Communication',
+    description: 'Use Apache Kafka for service-to-service messaging',
+    rationale: 'Ensures loose coupling, supports async processing, and provides audit trail for all events.',
+    priority: 'high',
+    relatedEpics: ['5', '8']
+  },
+  {
+    id: 't8',
+    category: 'security',
+    title: 'PIV/CAC Card Authentication',
+    description: 'Support government PIV and CAC card authentication',
+    rationale: 'Required for government users. Must integrate with existing PKI infrastructure.',
+    priority: 'critical',
+    relatedEpics: ['1']
+  }
+]
+
+// Mock BD assumptions data
+const mockAssumptions: BDAssumption[] = [
+  {
+    id: 'a1',
+    category: 'budget',
+    title: '$2.5M Total Budget Ceiling',
+    description: 'Total contract value cannot exceed $2.5M across all years including options',
+    impact: 'If exceeded, requires re-approval and potential scope reduction. Could delay award by 3-6 months.',
+    validationNeeded: true,
+    owner: 'BD Lead',
+    relatedEpics: []
+  },
+  {
+    id: 'a2',
+    category: 'resource',
+    title: 'Senior Engineers Available Q1',
+    description: 'Assumed 3 senior engineers (IC4+) will be available for project start in Q1 2025',
+    impact: 'If unavailable, must hire externally (8-12 week delay) or use less experienced staff (quality risk).',
+    validationNeeded: true,
+    owner: 'Resource Manager',
+    relatedEpics: ['1', '2', '5']
+  },
+  {
+    id: 'a3',
+    category: 'timeline',
+    title: '18-Month Development Timeline',
+    description: 'Full system delivery expected within 18 months from contract award',
+    impact: 'Aggressive timeline assumes no major scope changes and immediate team ramp-up. Any delay compounds.',
+    validationNeeded: true,
+    owner: 'Technical Lead',
+    relatedEpics: []
+  },
+  {
+    id: 'a4',
+    category: 'technical',
+    title: 'Government Provides SSO Integration',
+    description: 'Assumed government will provide SSO endpoints, test credentials, and PKI certificates within 30 days',
+    impact: 'If delayed, authentication epic blocked. Cannot proceed with user testing. Could push timeline 2-3 months.',
+    validationNeeded: true,
+    owner: 'Technical Lead',
+    relatedEpics: ['1']
+  },
+  {
+    id: 'a5',
+    category: 'client',
+    title: 'Weekly Access to SMEs',
+    description: 'Assumed government SMEs available for weekly requirements clarification meetings',
+    impact: 'Without regular access, requirements ambiguity increases. Rework likely. Budget overrun risk.',
+    validationNeeded: false,
+    owner: 'Project Manager',
+    relatedEpics: []
+  },
+  {
+    id: 'a6',
+    category: 'delivery',
+    title: 'Agile Development Methodology Approved',
+    description: 'Assumed government accepts agile methodology with 2-week sprints and iterative delivery',
+    impact: 'If waterfall required instead, need complete upfront design. Adds 3-4 months and reduces flexibility.',
+    validationNeeded: true,
+    owner: 'Delivery Manager',
+    relatedEpics: []
+  },
+  {
+    id: 'a7',
+    category: 'budget',
+    title: 'No Travel Budget Required',
+    description: 'Assumed all work can be performed remotely with no on-site requirements',
+    impact: 'If on-site required, need additional $50K-100K/year travel budget. Not included in current pricing.',
+    validationNeeded: true,
+    owner: 'BD Lead',
+    relatedEpics: []
+  },
+  {
+    id: 'a8',
+    category: 'technical',
+    title: 'Legacy Data Quality Acceptable',
+    description: 'Assumed legacy system data is 90%+ clean and requires minimal transformation',
+    impact: 'If data quality poor, need 30-50% more time for cleansing. Could require additional data engineering resources.',
+    validationNeeded: true,
+    owner: 'Technical Lead',
+    relatedEpics: ['2']
+  }
+]
+
 export function ScopingTab({ onContinue }: ScopingTabProps) {
   const [activeSection, setActiveSection] = useState<SectionType>('epics')
   const [epics, setEpics] = useState<Epic[]>(mockEpics)
@@ -683,6 +887,41 @@ export function ScopingTab({ onContinue }: ScopingTabProps) {
     relatedEpics: ''
   })
   const [riskFormErrors, setRiskFormErrors] = useState<Partial<RiskFormData>>({})
+
+  // Technical Assessment State
+  const [technicalItems, setTechnicalItems] = useState<TechnicalItem[]>(mockTechnicalItems)
+  const [selectedTechnical, setSelectedTechnical] = useState<TechnicalItem | null>(null)
+  const [technicalSearchQuery, setTechnicalSearchQuery] = useState('')
+  const [technicalFilterCategory, setTechnicalFilterCategory] = useState<'all' | 'stack' | 'architecture' | 'compliance' | 'security' | 'infrastructure'>('all')
+  const [isTechnicalDialogOpen, setIsTechnicalDialogOpen] = useState(false)
+  const [editingTechnical, setEditingTechnical] = useState<TechnicalItem | null>(null)
+  const [technicalFormData, setTechnicalFormData] = useState<TechnicalFormData>({
+    category: 'stack',
+    title: '',
+    description: '',
+    rationale: '',
+    priority: 'medium',
+    relatedEpics: ''
+  })
+  const [technicalFormErrors, setTechnicalFormErrors] = useState<Partial<TechnicalFormData>>({})
+
+  // BD Assumptions State
+  const [assumptions, setAssumptions] = useState<BDAssumption[]>(mockAssumptions)
+  const [selectedAssumption, setSelectedAssumption] = useState<BDAssumption | null>(null)
+  const [assumptionSearchQuery, setAssumptionSearchQuery] = useState('')
+  const [assumptionFilterCategory, setAssumptionFilterCategory] = useState<'all' | 'budget' | 'resource' | 'timeline' | 'technical' | 'client' | 'delivery'>('all')
+  const [isAssumptionDialogOpen, setIsAssumptionDialogOpen] = useState(false)
+  const [editingAssumption, setEditingAssumption] = useState<BDAssumption | null>(null)
+  const [assumptionFormData, setAssumptionFormData] = useState<AssumptionFormData>({
+    category: 'budget',
+    title: '',
+    description: '',
+    impact: '',
+    validationNeeded: true,
+    owner: '',
+    relatedEpics: ''
+  })
+  const [assumptionFormErrors, setAssumptionFormErrors] = useState<Partial<AssumptionFormData>>({})
 
   const totalStoryPoints = epics.reduce((sum, epic) => sum + epic.storyPoints, 0)
 
@@ -1024,6 +1263,274 @@ export function ScopingTab({ onContinue }: ScopingTabProps) {
 
   const visibleRisks = showAllRisks ? filteredRisks : filteredRisks.slice(0, 6)
 
+  // ========== TECHNICAL ASSESSMENT HANDLER FUNCTIONS ==========
+
+  // Validate technical form
+  const validateTechnicalForm = (): boolean => {
+    const errors: Partial<TechnicalFormData> = {}
+    
+    if (!technicalFormData.title.trim()) {
+      errors.title = 'Title is required'
+    }
+    
+    if (!technicalFormData.description.trim()) {
+      errors.description = 'Description is required'
+    }
+    
+    if (!technicalFormData.rationale.trim()) {
+      errors.rationale = 'Rationale is required'
+    }
+    
+    setTechnicalFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  // Reset technical form
+  const resetTechnicalForm = () => {
+    setTechnicalFormData({
+      category: 'stack',
+      title: '',
+      description: '',
+      rationale: '',
+      priority: 'medium',
+      relatedEpics: ''
+    })
+    setTechnicalFormErrors({})
+    setEditingTechnical(null)
+  }
+
+  // Handle save technical (add or edit)
+  const handleSaveTechnical = () => {
+    if (!validateTechnicalForm()) {
+      return
+    }
+
+    const parseRelatedEpics = (text: string): string[] => {
+      return text
+        .split(',')
+        .map(id => id.trim())
+        .filter(id => id.length > 0)
+    }
+
+    if (editingTechnical) {
+      const updatedItem: TechnicalItem = {
+        ...editingTechnical,
+        category: technicalFormData.category,
+        title: technicalFormData.title.trim(),
+        description: technicalFormData.description.trim(),
+        rationale: technicalFormData.rationale.trim(),
+        priority: technicalFormData.priority,
+        relatedEpics: technicalFormData.relatedEpics ? parseRelatedEpics(technicalFormData.relatedEpics) : []
+      }
+
+      setTechnicalItems(technicalItems.map(item => item.id === editingTechnical.id ? updatedItem : item))
+      
+      if (selectedTechnical?.id === editingTechnical.id) {
+        setSelectedTechnical(updatedItem)
+      }
+    } else {
+      const newItem: TechnicalItem = {
+        id: 't' + Date.now().toString(),
+        category: technicalFormData.category,
+        title: technicalFormData.title.trim(),
+        description: technicalFormData.description.trim(),
+        rationale: technicalFormData.rationale.trim(),
+        priority: technicalFormData.priority,
+        relatedEpics: technicalFormData.relatedEpics ? parseRelatedEpics(technicalFormData.relatedEpics) : []
+      }
+
+      setTechnicalItems([...technicalItems, newItem])
+    }
+
+    setIsTechnicalDialogOpen(false)
+    resetTechnicalForm()
+  }
+
+  // Open edit dialog for technical
+  const openEditTechnicalDialog = (item: TechnicalItem) => {
+    setEditingTechnical(item)
+    setTechnicalFormData({
+      category: item.category,
+      title: item.title,
+      description: item.description,
+      rationale: item.rationale,
+      priority: item.priority,
+      relatedEpics: item.relatedEpics.join(', ')
+    })
+    setIsTechnicalDialogOpen(true)
+  }
+
+  // Delete technical
+  const handleDeleteTechnical = (id: string) => {
+    setTechnicalItems(technicalItems.filter(item => item.id !== id))
+    if (selectedTechnical?.id === id) {
+      setSelectedTechnical(null)
+    }
+  }
+
+  // ========== TECHNICAL ASSESSMENT FUNCTIONS ==========
+  
+  // Filter technical items
+  const filteredTechnicalItems = technicalItems.filter(item => {
+    const matchesSearch = item.title.toLowerCase().includes(technicalSearchQuery.toLowerCase()) ||
+                         item.description.toLowerCase().includes(technicalSearchQuery.toLowerCase())
+    const matchesCategory = technicalFilterCategory === 'all' || item.category === technicalFilterCategory
+    return matchesSearch && matchesCategory
+  })
+
+  // Get priority color for technical items
+  const getTechnicalPriorityColor = (priority: string): string => {
+    switch (priority) {
+      case 'critical': return 'bg-red-50 text-red-700 border-red-200'
+      case 'high': return 'bg-orange-50 text-orange-700 border-orange-200'
+      case 'medium': return 'bg-yellow-50 text-yellow-700 border-yellow-200'
+      case 'low': return 'bg-green-50 text-green-700 border-green-200'
+      default: return 'bg-gray-50 text-gray-700 border-gray-200'
+    }
+  }
+
+  // Get category color
+  const getCategoryColor = (category: string): string => {
+    switch (category) {
+      case 'stack': return 'bg-blue-100 text-blue-700'
+      case 'architecture': return 'bg-purple-100 text-purple-700'
+      case 'compliance': return 'bg-red-100 text-red-700'
+      case 'security': return 'bg-orange-100 text-orange-700'
+      case 'infrastructure': return 'bg-green-100 text-green-700'
+      default: return 'bg-gray-100 text-gray-700'
+    }
+  }
+// ========== BD ASSUMPTIONS HANDLER FUNCTIONS ==========
+
+  // Validate assumption form
+  const validateAssumptionForm = (): boolean => {
+    const errors: Partial<AssumptionFormData> = {}
+    
+    if (!assumptionFormData.title.trim()) {
+      errors.title = 'Title is required'
+    }
+    
+    if (!assumptionFormData.description.trim()) {
+      errors.description = 'Description is required'
+    }
+    
+    if (!assumptionFormData.impact.trim()) {
+      errors.impact = 'Impact assessment is required'
+    }
+    
+    setAssumptionFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  // Reset assumption form
+  const resetAssumptionForm = () => {
+    setAssumptionFormData({
+      category: 'budget',
+      title: '',
+      description: '',
+      impact: '',
+      validationNeeded: true,
+      owner: '',
+      relatedEpics: ''
+    })
+    setAssumptionFormErrors({})
+    setEditingAssumption(null)
+  }
+
+  // Handle save assumption (add or edit)
+  const handleSaveAssumption = () => {
+    if (!validateAssumptionForm()) {
+      return
+    }
+
+    const parseRelatedEpics = (text: string): string[] => {
+      return text
+        .split(',')
+        .map(id => id.trim())
+        .filter(id => id.length > 0)
+    }
+
+    if (editingAssumption) {
+      const updatedAssumption: BDAssumption = {
+        ...editingAssumption,
+        category: assumptionFormData.category,
+        title: assumptionFormData.title.trim(),
+        description: assumptionFormData.description.trim(),
+        impact: assumptionFormData.impact.trim(),
+        validationNeeded: assumptionFormData.validationNeeded,
+        owner: assumptionFormData.owner.trim(),
+        relatedEpics: assumptionFormData.relatedEpics ? parseRelatedEpics(assumptionFormData.relatedEpics) : []
+      }
+
+      setAssumptions(assumptions.map(assumption => assumption.id === editingAssumption.id ? updatedAssumption : assumption))
+      
+      if (selectedAssumption?.id === editingAssumption.id) {
+        setSelectedAssumption(updatedAssumption)
+      }
+    } else {
+      const newAssumption: BDAssumption = {
+        id: 'a' + Date.now().toString(),
+        category: assumptionFormData.category,
+        title: assumptionFormData.title.trim(),
+        description: assumptionFormData.description.trim(),
+        impact: assumptionFormData.impact.trim(),
+        validationNeeded: assumptionFormData.validationNeeded,
+        owner: assumptionFormData.owner.trim(),
+        relatedEpics: assumptionFormData.relatedEpics ? parseRelatedEpics(assumptionFormData.relatedEpics) : []
+      }
+
+      setAssumptions([...assumptions, newAssumption])
+    }
+
+    setIsAssumptionDialogOpen(false)
+    resetAssumptionForm()
+  }
+
+  // Open edit dialog for assumption
+  const openEditAssumptionDialog = (assumption: BDAssumption) => {
+    setEditingAssumption(assumption)
+    setAssumptionFormData({
+      category: assumption.category,
+      title: assumption.title,
+      description: assumption.description,
+      impact: assumption.impact,
+      validationNeeded: assumption.validationNeeded,
+      owner: assumption.owner,
+      relatedEpics: assumption.relatedEpics.join(', ')
+    })
+    setIsAssumptionDialogOpen(true)
+  }
+
+  // Delete assumption
+  const handleDeleteAssumption = (id: string) => {
+    setAssumptions(assumptions.filter(assumption => assumption.id !== id))
+    if (selectedAssumption?.id === id) {
+      setSelectedAssumption(null)
+    }
+  }
+  // ========== BD ASSUMPTIONS FUNCTIONS ==========
+  
+  // Filter assumptions
+  const filteredAssumptions = assumptions.filter(assumption => {
+    const matchesSearch = assumption.title.toLowerCase().includes(assumptionSearchQuery.toLowerCase()) ||
+                         assumption.description.toLowerCase().includes(assumptionSearchQuery.toLowerCase())
+    const matchesCategory = assumptionFilterCategory === 'all' || assumption.category === assumptionFilterCategory
+    return matchesSearch && matchesCategory
+  })
+
+  // Get assumption category color
+  const getAssumptionCategoryColor = (category: string): string => {
+    switch (category) {
+      case 'budget': return 'bg-green-100 text-green-700'
+      case 'resource': return 'bg-blue-100 text-blue-700'
+      case 'timeline': return 'bg-purple-100 text-purple-700'
+      case 'technical': return 'bg-orange-100 text-orange-700'
+      case 'client': return 'bg-pink-100 text-pink-700'
+      case 'delivery': return 'bg-indigo-100 text-indigo-700'
+      default: return 'bg-gray-100 text-gray-700'
+    }
+  }
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high': return 'bg-red-50 text-red-700 border-red-200'
@@ -1054,7 +1561,7 @@ export function ScopingTab({ onContinue }: ScopingTabProps) {
       id: 'technical' as SectionType,
       label: 'Technical Assessment',
       icon: Wrench,
-      count: 0,
+      count: technicalItems.length,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50'
     },
@@ -1062,7 +1569,7 @@ export function ScopingTab({ onContinue }: ScopingTabProps) {
       id: 'assumptions' as SectionType,
       label: 'BD Assumptions',
       icon: FileText,
-      count: 0,
+      count: assumptions.length,
       color: 'text-green-600',
       bgColor: 'bg-green-50'
     }
@@ -1753,26 +2260,208 @@ export function ScopingTab({ onContinue }: ScopingTabProps) {
           )}
 
           {activeSection === 'technical' && (
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">Technical Assessment</h3>
-              <div className="border border-gray-200 rounded-lg p-12 text-center bg-white">
-                <Wrench className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-600">
-                  Coming soon: Technology stack, architecture decisions, and compliance requirements.
-                </p>
+            <div className="space-y-4">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-1">Technical Assessment</h3>
+                  <p className="text-sm text-gray-600">
+                    {filteredTechnicalItems.length} technical decisions
+                  </p>
+                </div>
+                <Button size="sm" onClick={() => setIsTechnicalDialogOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Technical Decision
+                </Button>
               </div>
+
+              {/* Search and Filters */}
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      placeholder="Search technical decisions..."
+                      value={technicalSearchQuery}
+                      onChange={(e) => setTechnicalSearchQuery(e.target.value)}
+                      className="pl-9 h-9"
+                    />
+                  </div>
+                </div>
+
+                <Select value={technicalFilterCategory} onValueChange={(value: any) => setTechnicalFilterCategory(value)}>
+                  <SelectTrigger className="w-[150px] h-9">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="stack">Stack</SelectItem>
+                    <SelectItem value="architecture">Architecture</SelectItem>
+                    <SelectItem value="compliance">Compliance</SelectItem>
+                    <SelectItem value="security">Security</SelectItem>
+                    <SelectItem value="infrastructure">Infrastructure</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Technical Items Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                {filteredTechnicalItems.map(item => (
+                  <div
+                    key={item.id}
+                    className="group border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-all cursor-pointer bg-white"
+                    onClick={() => setSelectedTechnical(item)}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-sm text-gray-900 mb-1.5 leading-tight line-clamp-2">{item.title}</h3>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Badge className={`${getCategoryColor(item.category)} text-[10px] px-1.5 py-0 h-5`}>
+                            {item.category}
+                          </Badge>
+                          <Badge variant="outline" className={`${getTechnicalPriorityColor(item.priority)} text-[10px] px-1.5 py-0 h-5`}>
+                            {item.priority}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-gray-600 line-clamp-2 leading-snug mb-2">
+                      {item.description}
+                    </p>
+
+                    <div className="text-xs text-gray-500 pt-2 border-t border-gray-100">
+                      <span className="font-medium">Rationale:</span> <span className="line-clamp-1">{item.rationale}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {filteredTechnicalItems.length === 0 && (
+                <div className="text-center py-12">
+                  <Wrench className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-600">No technical decisions match your filters</p>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => {
+                      setTechnicalSearchQuery('')
+                      setTechnicalFilterCategory('all')
+                    }}
+                    className="mt-2 h-8 text-xs"
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
           {activeSection === 'assumptions' && (
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">BD Assumptions & Delivery Handoff</h3>
-              <div className="border border-gray-200 rounded-lg p-12 text-center bg-white">
-                <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-600">
-                  Coming soon: Capture BD assumptions, constraints, and key decisions for delivery validation.
-                </p>
+            <div className="space-y-4">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-1">BD Assumptions & Delivery Handoff</h3>
+                  <p className="text-sm text-gray-600">
+                    {filteredAssumptions.length} assumptions • {filteredAssumptions.filter(a => a.validationNeeded).length} need validation
+                  </p>
+                </div>
+                <Button size="sm" onClick={() => setIsAssumptionDialogOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Assumption
+                </Button>
               </div>
+
+              {/* Search and Filters */}
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      placeholder="Search assumptions..."
+                      value={assumptionSearchQuery}
+                      onChange={(e) => setAssumptionSearchQuery(e.target.value)}
+                      className="pl-9 h-9"
+                    />
+                  </div>
+                </div>
+
+                <Select value={assumptionFilterCategory} onValueChange={(value: any) => setAssumptionFilterCategory(value)}>
+                  <SelectTrigger className="w-[150px] h-9">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="budget">Budget</SelectItem>
+                    <SelectItem value="resource">Resource</SelectItem>
+                    <SelectItem value="timeline">Timeline</SelectItem>
+                    <SelectItem value="technical">Technical</SelectItem>
+                    <SelectItem value="client">Client</SelectItem>
+                    <SelectItem value="delivery">Delivery</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Assumptions Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {filteredAssumptions.map(assumption => (
+                  <div
+                    key={assumption.id}
+                    className="group border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-all cursor-pointer bg-white"
+                    onClick={() => setSelectedAssumption(assumption)}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <h3 className="font-medium text-sm text-gray-900 leading-tight line-clamp-1">{assumption.title}</h3>
+                          {assumption.validationNeeded && (
+                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-[10px] px-1.5 py-0 h-5">
+                              Needs Validation
+                            </Badge>
+                          )}
+                        </div>
+                        <Badge className={`${getAssumptionCategoryColor(assumption.category)} text-[10px] px-1.5 py-0 h-5 mb-2`}>
+                          {assumption.category}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-gray-600 line-clamp-2 leading-snug mb-2">
+                      {assumption.description}
+                    </p>
+
+                    <div className="space-y-1.5 text-xs pt-2 border-t border-gray-100">
+                      <div>
+                        <span className="font-medium text-gray-700">Impact:</span>
+                        <span className="text-gray-600 line-clamp-1 ml-1">{assumption.impact}</span>
+                      </div>
+                      {assumption.owner && (
+                        <div className="flex items-center gap-1 text-gray-600">
+                          <User className="w-3 h-3" />
+                          <span>{assumption.owner}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {filteredAssumptions.length === 0 && (
+                <div className="text-center py-12">
+                  <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-600">No assumptions match your filters</p>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => {
+                      setAssumptionSearchQuery('')
+                      setAssumptionFilterCategory('all')
+                    }}
+                    className="mt-2 h-8 text-xs"
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2560,14 +3249,168 @@ export function ScopingTab({ onContinue }: ScopingTabProps) {
       )}
 
       {/* Overlay when slide-out is open */}
-      {(selectedEpic || selectedRisk) && (
+      {(selectedEpic || selectedRisk || selectedTechnical || selectedAssumption) && (
         <div 
           className="fixed inset-0 bg-black/20 z-40"
           onClick={() => {
             setSelectedEpic(null)
             setSelectedRisk(null)
+            setSelectedTechnical(null)
+            setSelectedAssumption(null)
           }}
         />
+      )}
+
+      {/* Slide-out Panel for Technical Details */}
+      {selectedTechnical && (
+        <div className="fixed inset-y-0 right-0 w-[600px] bg-white shadow-2xl border-l border-gray-200 overflow-y-auto z-50 animate-in slide-in-from-right">
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">{selectedTechnical.title}</h3>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge className={`${getCategoryColor(selectedTechnical.category)} text-xs`}>
+                  {selectedTechnical.category}
+                </Badge>
+                <Badge variant="outline" className={`${getTechnicalPriorityColor(selectedTechnical.priority)} text-xs`}>
+                  {selectedTechnical.priority}
+                </Badge>
+              </div>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => setSelectedTechnical(null)}
+              className="text-2xl leading-none h-8 w-8 p-0"
+            >
+              ×
+            </Button>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-2">Description</h4>
+              <p className="text-sm text-gray-700">{selectedTechnical.description}</p>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-2">Rationale</h4>
+              <p className="text-sm text-gray-700">{selectedTechnical.rationale}</p>
+            </div>
+
+            {selectedTechnical.relatedEpics.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">Related Epics</h4>
+                <div className="space-y-2">
+                  {selectedTechnical.relatedEpics.map(epicId => {
+                    const epic = epics.find(e => e.id === epicId)
+                    if (!epic) return null
+                    return (
+                      <div
+                        key={epicId}
+                        onClick={() => {
+                          setSelectedTechnical(null)
+                          setSelectedEpic(epic)
+                        }}
+                        className="p-3 border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm transition-all cursor-pointer"
+                      >
+                        <div className="font-medium text-sm text-gray-900">{epic.title}</div>
+                        <div className="text-xs text-gray-600 mt-1">{epic.storyPoints} SP</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Slide-out Panel for Assumption Details */}
+      {selectedAssumption && (
+        <div className="fixed inset-y-0 right-0 w-[600px] bg-white shadow-2xl border-l border-gray-200 overflow-y-auto z-50 animate-in slide-in-from-right">
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">{selectedAssumption.title}</h3>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge className={`${getAssumptionCategoryColor(selectedAssumption.category)} text-xs`}>
+                  {selectedAssumption.category}
+                </Badge>
+                {selectedAssumption.validationNeeded && (
+                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs">
+                    Needs Validation
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => setSelectedAssumption(null)}
+              className="text-2xl leading-none h-8 w-8 p-0"
+            >
+              ×
+            </Button>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-2">Description</h4>
+              <p className="text-sm text-gray-700">{selectedAssumption.description}</p>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-red-900 mb-2 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                Impact if Wrong
+              </h4>
+              <p className="text-sm text-red-800">{selectedAssumption.impact}</p>
+            </div>
+
+            {selectedAssumption.owner && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Responsible Owner
+                </h4>
+                <p className="text-sm text-gray-700">{selectedAssumption.owner}</p>
+              </div>
+            )}
+
+            {selectedAssumption.validationNeeded && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-yellow-900 mb-2">⚠️ Validation Required</h4>
+                <p className="text-sm text-yellow-800">
+                  This assumption must be validated with the client before contract award. Failure to validate increases project risk.
+                </p>
+              </div>
+            )}
+
+            {selectedAssumption.relatedEpics.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">Affected Epics</h4>
+                <div className="space-y-2">
+                  {selectedAssumption.relatedEpics.map(epicId => {
+                    const epic = epics.find(e => e.id === epicId)
+                    if (!epic) return null
+                    return (
+                      <div
+                        key={epicId}
+                        onClick={() => {
+                          setSelectedAssumption(null)
+                          setSelectedEpic(epic)
+                        }}
+                        className="p-3 border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm transition-all cursor-pointer"
+                      >
+                        <div className="font-medium text-sm text-gray-900">{epic.title}</div>
+                        <div className="text-xs text-gray-600 mt-1">{epic.storyPoints} SP</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </TooltipProvider>
   )
