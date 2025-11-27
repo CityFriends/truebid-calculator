@@ -6,8 +6,147 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export type ContractType = 'tm' | 'ffp' | 'gsa';
 
+// ==================== SOLICITATION TYPES ====================
+// These types define the RFP/solicitation data that flows across all tabs
+
+export interface SolicitationInfo {
+  // Basic Info
+  solicitationNumber: string
+  title: string
+  clientAgency: string
+  subAgency?: string
+  
+  // Dates
+  releaseDate?: string
+  questionsDeadline?: string
+  proposalDueDate?: string
+  anticipatedAwardDate?: string
+  
+  // Contract Details
+  contractType: 'FFP' | 'T&M' | 'CPFF' | 'CPAF' | 'IDIQ' | 'BPA' | 'hybrid' | ''
+  contractVehicle?: string
+  naicsCode?: string
+  psc?: string
+  
+  // Period of Performance
+  periodOfPerformance: {
+    baseYear: boolean
+    optionYears: number
+    totalMonths?: number
+  }
+  
+  // Set-Aside & Compliance
+  setAside: 'full-open' | 'small-business' | '8a' | 'hubzone' | 'sdvosb' | 'wosb' | 'edwosb' | ''
+  requiresClearance: boolean
+  clearanceLevel?: 'public-trust' | 'secret' | 'top-secret' | 'ts-sci' | ''
+  
+  // Place of Performance
+  placeOfPerformance: {
+    type: 'remote' | 'on-site' | 'hybrid' | ''
+    locations: string[]
+    travelRequired: boolean
+    travelPercent?: number
+  }
+  
+  // Budget & Evaluation
+  budgetRange?: {
+    min?: number
+    max?: number
+    ceiling?: number
+  }
+  evaluationCriteria?: EvaluationCriterion[]
+  
+  // Key Contacts
+  contractingOfficer?: ContactInfo
+  contractingOfficerRep?: ContactInfo
+  
+  // Source Selection
+  evaluationMethod?: 'LPTA' | 'best-value' | 'tradeoff' | ''
+  
+  // Extracted Requirements (from AI analysis)
+  keyRequirements?: string[]
+  technicalRequirements?: string[]
+  
+  // Internal Tracking
+  internalBidNumber?: string
+  bidDecision?: 'go' | 'no-go' | 'pending' | ''
+  bidDecisionDate?: string
+  bidDecisionRationale?: string
+  
+  // Metadata
+  createdAt: string
+  updatedAt: string
+  analyzedFromDocument?: string
+}
+
+export interface EvaluationCriterion {
+  id: string
+  factor: string
+  weight?: number
+  description?: string
+  subfactors?: string[]
+}
+
+export interface ContactInfo {
+  name: string
+  email?: string
+  phone?: string
+  organization?: string
+}
+
+// Default empty solicitation
+export const emptySolicitation: SolicitationInfo = {
+  solicitationNumber: '',
+  title: '',
+  clientAgency: '',
+  contractType: '',
+  periodOfPerformance: {
+    baseYear: true,
+    optionYears: 2
+  },
+  setAside: '',
+  requiresClearance: false,
+  placeOfPerformance: {
+    type: '',
+    locations: [],
+    travelRequired: false
+  },
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
+}
+
+// Helper functions for solicitation
+export const hasSolicitationData = (sol: SolicitationInfo): boolean => {
+  return Boolean(sol.solicitationNumber || sol.title || sol.clientAgency)
+}
+
+export const getSolicitationDisplayName = (sol: SolicitationInfo): string => {
+  if (sol.title) return sol.title
+  if (sol.solicitationNumber) return sol.solicitationNumber
+  return 'Untitled Solicitation'
+}
+
+export const contractTypeLabels: Record<string, string> = {
+  'FFP': 'Firm Fixed Price',
+  'T&M': 'Time & Materials',
+  'CPFF': 'Cost Plus Fixed Fee',
+  'CPAF': 'Cost Plus Award Fee',
+  'IDIQ': 'Indefinite Delivery/Indefinite Quantity',
+  'BPA': 'Blanket Purchase Agreement',
+  'hybrid': 'Hybrid'
+}
+
+export const setAsideLabels: Record<string, string> = {
+  'full-open': 'Full & Open Competition',
+  'small-business': 'Small Business Set-Aside',
+  '8a': '8(a) Set-Aside',
+  'hubzone': 'HUBZone Set-Aside',
+  'sdvosb': 'SDVOSB Set-Aside',
+  'wosb': 'WOSB Set-Aside',
+  'edwosb': 'EDWOSB Set-Aside'
+}
+
 // ==================== COMPANY PROFILE (SaaS-Ready) ====================
-// Each company using TrueBid will have their own profile
 
 export interface CompanyProfile {
   id: string;
@@ -17,64 +156,49 @@ export interface CompanyProfile {
   cageCode: string;
   businessSize: 'small' | 'other-than-small';
   naicsCodes: string[];
-  // GSA Contract Info (if applicable)
   gsaContractNumber?: string;
   gsaMasSchedule?: boolean;
 }
 
 // ==================== INDIRECT RATES (Audit-Ready) ====================
-// These rates come from your accountant/DCAA-approved rates
 
 export interface IndirectRates {
-  // Core rates (from accountant)
-  fringe: number;      // Benefits, payroll taxes, PTO value
-  overhead: number;    // Facilities, tools, management
-  ga: number;          // G&A - executive, legal, BD costs
-  
-  // Rate basis
+  fringe: number;
+  overhead: number;
+  ga: number;
   effectiveDate: string;
   fiscalYear: number;
   rateType: 'provisional' | 'final' | 'billing' | 'forward-pricing';
-  
-  // Audit trail
-  source: string;      // e.g., "DCAA Approved" or "CPA Prepared"
+  source: string;
   lastUpdated: string;
 }
 
 // ==================== PROFIT TARGETS ====================
 
 export interface ProfitTargets {
-  tmDefault: number;       // T&M contracts (typically 8-12%)
-  ffpLowRisk: number;      // FFP - low risk (12-15%)
-  ffpMediumRisk: number;   // FFP - medium risk (15-18%)
-  ffpHighRisk: number;     // FFP - high risk (18-25%)
-  gsaDefault: number;      // GSA task orders (margin from ceiling)
+  tmDefault: number;
+  ffpLowRisk: number;
+  ffpMediumRisk: number;
+  ffpHighRisk: number;
+  gsaDefault: number;
 }
 
 // ==================== ESCALATION RATES ====================
 
 export interface EscalationRates {
-  laborDefault: number;    // Annual labor escalation (typically 2-4%)
-  odcDefault: number;      // ODC escalation
-  source: string;          // e.g., "BLS Employment Cost Index"
+  laborDefault: number;
+  odcDefault: number;
+  source: string;
 }
 
 // ==================== COMPANY POLICY ====================
 
 export interface CompanyPolicy {
-  // Hours basis
-  standardHours: number;   // 2080 (52 weeks × 40 hours)
-  
-  // Leave policy (used in fringe calculation, NOT subtracted from billable)
-  ptoHours: number;        // Paid time off
-  holidayHours: number;    // Federal holidays
-  sickHours: number;       // Sick leave
-  
-  // Billable hours (for project planning, NOT rate calculation)
-  // Rate calculation always uses 2080; billable hours affect project cost
+  standardHours: number;
+  ptoHours: number;
+  holidayHours: number;
+  sickHours: number;
   targetBillableHours: number;
-  
-  // Other
   overtimeMultiplier: number;
 }
 
@@ -87,12 +211,12 @@ export interface CompanyRoleStep {
 }
 
 export interface CompanyRoleLevel {
-  level: string;           // "IC1", "IC2", "IC3", "IC4", "IC5", "IC6"
-  levelName: string;       // "Entry", "Junior", "Intermediate", "Senior", "Staff", "Principal"
+  level: string;
+  levelName: string;
   steps: CompanyRoleStep[];
   monthsBeforePromotionReady: number | null;
   isTerminal: boolean;
-  yearsExperience: string; // e.g., "0-1", "2-4", "5-8"
+  yearsExperience: string;
 }
 
 export interface CompanyRole {
@@ -101,13 +225,10 @@ export interface CompanyRole {
   laborCategory: string;
   description: string;
   levels: CompanyRoleLevel[];
-  // BLS mapping for rate justification
   blsOccCode?: string;
   blsOccTitle?: string;
-  // GSA mapping
   gsaLaborCategory?: string;
   gsaSin?: string;
-  // SCA mapping (for service contracts)
   scaCode?: string;
   scaOccupation?: string;
 }
@@ -158,8 +279,7 @@ export interface Subcontractor {
     option3: boolean;
     option4: boolean;
   };
-  // For audit trail
-  rateSource?: string;      // "Quote", "Prior Agreement", "Market Research"
+  rateSource?: string;
   quoteDate?: string;
   quoteReference?: string;
 }
@@ -180,7 +300,6 @@ export interface ODCItem {
     option3: boolean;
     option4: boolean;
   };
-  // For audit trail
   costSource?: string;
   quoteReference?: string;
 }
@@ -230,7 +349,7 @@ export interface GSAContractInfo {
   };
   maxOrder: number;
   minOrder: number;
-  iffRate: number;          // Industrial Funding Fee (0.75%)
+  iffRate: number;
   sins: {
     sin: string;
     name: string;
@@ -241,6 +360,12 @@ export interface GSAContractInfo {
 // ==================== CONTEXT INTERFACE ====================
 
 interface AppContextType {
+  // Solicitation (RFP Details)
+  solicitation: SolicitationInfo;
+  setSolicitation: (sol: SolicitationInfo) => void;
+  updateSolicitation: (updates: Partial<SolicitationInfo>) => void;
+  resetSolicitation: () => void;
+  
   // Company Profile (SaaS)
   companyProfile: CompanyProfile;
   setCompanyProfile: (profile: CompanyProfile) => void;
@@ -308,33 +433,16 @@ interface AppContextType {
   
   // ==================== CALCULATION FUNCTIONS (Audit-Ready) ====================
   
-  /**
-   * Calculate fully burdened rate from base salary
-   * Formula: (Salary / 2080) × (1 + Fringe) × (1 + OH) × (1 + G&A) × (1 + Profit)
-   * 
-   * @param baseSalary - Annual base salary
-   * @param includeProfit - Whether to include profit margin (T&M yes, FFP no, GSA no)
-   * @param profitOverride - Override default profit margin
-   */
   calculateFullyBurdenedRate: (
     baseSalary: number, 
     includeProfit?: boolean,
     profitOverride?: number
   ) => number;
   
-  /**
-   * Calculate loaded cost (no profit) for margin analysis
-   */
   calculateLoadedCost: (baseSalary: number) => number;
   
-  /**
-   * Calculate rate with escalation for multi-year contracts
-   */
   calculateEscalatedRate: (baseRate: number, year: number) => number;
   
-  /**
-   * Get rate breakdown for audit documentation
-   */
   getRateBreakdown: (baseSalary: number, includeProfit?: boolean) => {
     baseRate: number;
     fringeAmount: number;
@@ -347,15 +455,20 @@ interface AppContextType {
     fullyBurdenedRate: number;
   };
   
-  /**
-   * Calculate year-by-year salaries with step progression
-   */
   calculateYearSalaries: (
     role: CompanyRole,
     levelIndex: number,
     startingStepIndex: number,
     contractYears: number
   ) => number[];
+  
+  // ==================== DERIVED VALUES ====================
+  
+  // Get total contract years from solicitation
+  getTotalContractYears: () => number;
+  
+  // Get years array for iteration
+  getContractYearsArray: () => { key: string; label: string; enabled: boolean }[];
   
   // Legacy compatibility
   costMultipliers: { fringe: number; overhead: number; ga: number };
@@ -374,6 +487,25 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   
+  // ==================== SOLICITATION STATE ====================
+  const [solicitation, setSolicitation] = useState<SolicitationInfo>(emptySolicitation);
+
+  const updateSolicitation = (updates: Partial<SolicitationInfo>) => {
+    setSolicitation(prev => ({
+      ...prev,
+      ...updates,
+      updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const resetSolicitation = () => {
+    setSolicitation({
+      ...emptySolicitation,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  };
+
   // ==================== COMPANY PROFILE (SaaS) ====================
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({
     id: 'fftc-001',
@@ -389,11 +521,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ==================== INDIRECT RATES (From Accountant) ====================
   const [indirectRates, setIndirectRates] = useState<IndirectRates>({
-    // Actual rates from FFTC Rate Model (202511)
-    fringe: 0.211562,      // 21.1562%
-    overhead: 0.342588,    // 34.2588%
-    ga: 0.19831,           // 19.831%
-    
+    fringe: 0.211562,
+    overhead: 0.342588,
+    ga: 0.19831,
     effectiveDate: '2025-01-01',
     fiscalYear: 2026,
     rateType: 'forward-pricing',
@@ -403,27 +533,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ==================== PROFIT TARGETS ====================
   const [profitTargets, setProfitTargets] = useState<ProfitTargets>({
-    tmDefault: 0.10,        // 10% for T&M
-    ffpLowRisk: 0.12,       // 12% for low-risk FFP
-    ffpMediumRisk: 0.15,    // 15% for medium-risk FFP
-    ffpHighRisk: 0.20,      // 20% for high-risk FFP
-    gsaDefault: 0.10,       // GSA ceiling includes ~10% profit
+    tmDefault: 0.10,
+    ffpLowRisk: 0.12,
+    ffpMediumRisk: 0.15,
+    ffpHighRisk: 0.20,
+    gsaDefault: 0.10,
   });
 
   // ==================== ESCALATION ====================
   const [escalationRates, setEscalationRates] = useState<EscalationRates>({
-    laborDefault: 0.03,     // 3% per BLS Employment Cost Index
-    odcDefault: 0.02,       // 2% for ODCs
+    laborDefault: 0.03,
+    odcDefault: 0.02,
     source: 'BLS Employment Cost Index - Professional and Technical Services',
   });
 
   // ==================== COMPANY POLICY ====================
   const [companyPolicy, setCompanyPolicy] = useState<CompanyPolicy>({
-    standardHours: 2080,    // Always 2080 for rate calculation
-    ptoHours: 144,          // 18 days
-    holidayHours: 88,       // 11 federal holidays
-    sickHours: 40,          // 5 days
-    targetBillableHours: 1808,  // For project planning
+    standardHours: 2080,
+    ptoHours: 144,
+    holidayHours: 88,
+    sickHours: 40,
+    targetBillableHours: 1808,
     overtimeMultiplier: 1.5,
   });
 
@@ -513,539 +643,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       ]
     },
-    {
-      id: 'cr-2',
-      title: 'Backend Engineer',
-      laborCategory: 'Developer',
-      description: 'Backend software development',
-      blsOccCode: '15-1252',
-      blsOccTitle: 'Software Developers',
-      gsaLaborCategory: 'Developer',
-      gsaSin: '54151S',
-      levels: [
-        {
-          level: 'IC2',
-          levelName: 'Junior',
-          yearsExperience: '0-2',
-          monthsBeforePromotionReady: 18,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 79850, monthsToNextStep: 12 },
-            { step: 2, salary: 82246, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC3',
-          levelName: 'Intermediate',
-          yearsExperience: '2-4',
-          monthsBeforePromotionReady: 24,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 103100, monthsToNextStep: 12 },
-            { step: 2, salary: 106193, monthsToNextStep: 12 },
-            { step: 3, salary: 109379, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC4',
-          levelName: 'Senior',
-          yearsExperience: '4-7',
-          monthsBeforePromotionReady: 30,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 133100, monthsToNextStep: 15 },
-            { step: 2, salary: 137093, monthsToNextStep: 15 },
-            { step: 3, salary: 141206, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC5',
-          levelName: 'Staff',
-          yearsExperience: '7-10',
-          monthsBeforePromotionReady: 36,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 169000, monthsToNextStep: 18 },
-            { step: 2, salary: 174070, monthsToNextStep: 18 },
-            { step: 3, salary: 179292, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC6',
-          levelName: 'Principal',
-          yearsExperience: '10+',
-          monthsBeforePromotionReady: null,
-          isTerminal: true,
-          steps: [
-            { step: 1, salary: 211400, monthsToNextStep: 24 },
-            { step: 2, salary: 217742, monthsToNextStep: 24 },
-            { step: 3, salary: 224274, monthsToNextStep: null },
-          ]
-        }
-      ]
-    },
-    {
-      id: 'cr-3',
-      title: 'Full Stack Engineer',
-      laborCategory: 'Developer',
-      description: 'Full-stack software development',
-      blsOccCode: '15-1252',
-      blsOccTitle: 'Software Developers',
-      gsaLaborCategory: 'Developer',
-      gsaSin: '54151S',
-      levels: [
-        {
-          level: 'IC2',
-          levelName: 'Junior',
-          yearsExperience: '0-2',
-          monthsBeforePromotionReady: 18,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 79850, monthsToNextStep: 12 },
-            { step: 2, salary: 82246, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC3',
-          levelName: 'Intermediate',
-          yearsExperience: '2-4',
-          monthsBeforePromotionReady: 24,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 103100, monthsToNextStep: 12 },
-            { step: 2, salary: 106193, monthsToNextStep: 12 },
-            { step: 3, salary: 109379, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC4',
-          levelName: 'Senior',
-          yearsExperience: '4-7',
-          monthsBeforePromotionReady: 30,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 133100, monthsToNextStep: 15 },
-            { step: 2, salary: 137093, monthsToNextStep: 15 },
-            { step: 3, salary: 141206, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC5',
-          levelName: 'Staff',
-          yearsExperience: '7-10',
-          monthsBeforePromotionReady: 36,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 169000, monthsToNextStep: 18 },
-            { step: 2, salary: 174070, monthsToNextStep: 18 },
-            { step: 3, salary: 179292, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC6',
-          levelName: 'Principal',
-          yearsExperience: '10+',
-          monthsBeforePromotionReady: null,
-          isTerminal: true,
-          steps: [
-            { step: 1, salary: 211400, monthsToNextStep: 24 },
-            { step: 2, salary: 217742, monthsToNextStep: 24 },
-            { step: 3, salary: 224274, monthsToNextStep: null },
-          ]
-        }
-      ]
-    },
-    {
-      id: 'cr-4',
-      title: 'Frontend Engineer',
-      laborCategory: 'Developer',
-      description: 'Frontend software development',
-      blsOccCode: '15-1252',
-      blsOccTitle: 'Software Developers',
-      gsaLaborCategory: 'Developer',
-      gsaSin: '54151S',
-      levels: [
-        {
-          level: 'IC2',
-          levelName: 'Junior',
-          yearsExperience: '0-2',
-          monthsBeforePromotionReady: 18,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 79850, monthsToNextStep: 12 },
-            { step: 2, salary: 82246, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC3',
-          levelName: 'Intermediate',
-          yearsExperience: '2-4',
-          monthsBeforePromotionReady: 24,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 103100, monthsToNextStep: 12 },
-            { step: 2, salary: 106193, monthsToNextStep: 12 },
-            { step: 3, salary: 109379, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC4',
-          levelName: 'Senior',
-          yearsExperience: '4-7',
-          monthsBeforePromotionReady: 30,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 133100, monthsToNextStep: 15 },
-            { step: 2, salary: 137093, monthsToNextStep: 15 },
-            { step: 3, salary: 141206, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC5',
-          levelName: 'Staff',
-          yearsExperience: '7-10',
-          monthsBeforePromotionReady: 36,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 169000, monthsToNextStep: 18 },
-            { step: 2, salary: 174070, monthsToNextStep: 18 },
-            { step: 3, salary: 179292, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC6',
-          levelName: 'Principal',
-          yearsExperience: '10+',
-          monthsBeforePromotionReady: null,
-          isTerminal: true,
-          steps: [
-            { step: 1, salary: 211400, monthsToNextStep: 24 },
-            { step: 2, salary: 217742, monthsToNextStep: 24 },
-            { step: 3, salary: 224274, monthsToNextStep: null },
-          ]
-        }
-      ]
-    },
-    {
-      id: 'cr-5',
-      title: 'Content Writer',
-      laborCategory: 'Content Strategy',
-      description: 'Content strategy and writing',
-      blsOccCode: '15-1299',
-      blsOccTitle: 'Computer Occupations, All Other',
-      gsaLaborCategory: 'Content Strategy',
-      gsaSin: '54151S',
-      levels: [
-        {
-          level: 'IC2',
-          levelName: 'Junior',
-          yearsExperience: '0-2',
-          monthsBeforePromotionReady: 18,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 52660, monthsToNextStep: 12 },
-            { step: 2, salary: 54240, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC3',
-          levelName: 'Intermediate',
-          yearsExperience: '2-4',
-          monthsBeforePromotionReady: 24,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 76357, monthsToNextStep: 12 },
-            { step: 2, salary: 78648, monthsToNextStep: 12 },
-            { step: 3, salary: 81007, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC4',
-          levelName: 'Senior',
-          yearsExperience: '4-7',
-          monthsBeforePromotionReady: 30,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 108971, monthsToNextStep: 15 },
-            { step: 2, salary: 112240, monthsToNextStep: 15 },
-            { step: 3, salary: 115607, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC5',
-          levelName: 'Staff',
-          yearsExperience: '7-10',
-          monthsBeforePromotionReady: 36,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 147534, monthsToNextStep: 18 },
-            { step: 2, salary: 151960, monthsToNextStep: 18 },
-            { step: 3, salary: 156519, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC6',
-          levelName: 'Principal',
-          yearsExperience: '10+',
-          monthsBeforePromotionReady: null,
-          isTerminal: true,
-          steps: [
-            { step: 1, salary: 176800, monthsToNextStep: 24 },
-            { step: 2, salary: 182104, monthsToNextStep: 24 },
-            { step: 3, salary: 187567, monthsToNextStep: null },
-          ]
-        }
-      ]
-    },
-    {
-      id: 'cr-6',
-      title: 'DevOps Engineer',
-      laborCategory: 'Digital Transformer',
-      description: 'DevOps and cloud infrastructure',
-      blsOccCode: '15-1253',
-      blsOccTitle: 'Software Quality Assurance Analysts and Testers',
-      gsaLaborCategory: 'Digital Transformer',
-      gsaSin: '54151S',
-      levels: [
-        {
-          level: 'IC2',
-          levelName: 'Junior',
-          yearsExperience: '0-2',
-          monthsBeforePromotionReady: 18,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 79850, monthsToNextStep: 12 },
-            { step: 2, salary: 82246, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC3',
-          levelName: 'Intermediate',
-          yearsExperience: '2-4',
-          monthsBeforePromotionReady: 24,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 103100, monthsToNextStep: 12 },
-            { step: 2, salary: 106193, monthsToNextStep: 12 },
-            { step: 3, salary: 109379, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC4',
-          levelName: 'Senior',
-          yearsExperience: '4-7',
-          monthsBeforePromotionReady: 30,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 133100, monthsToNextStep: 15 },
-            { step: 2, salary: 137093, monthsToNextStep: 15 },
-            { step: 3, salary: 141206, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC5',
-          levelName: 'Staff',
-          yearsExperience: '7-10',
-          monthsBeforePromotionReady: 36,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 169000, monthsToNextStep: 18 },
-            { step: 2, salary: 174070, monthsToNextStep: 18 },
-            { step: 3, salary: 179292, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC6',
-          levelName: 'Principal',
-          yearsExperience: '10+',
-          monthsBeforePromotionReady: null,
-          isTerminal: true,
-          steps: [
-            { step: 1, salary: 211400, monthsToNextStep: 24 },
-            { step: 2, salary: 217742, monthsToNextStep: 24 },
-            { step: 3, salary: 224274, monthsToNextStep: null },
-          ]
-        }
-      ]
-    },
-    {
-      id: 'cr-7',
-      title: 'UX Researcher',
-      laborCategory: 'Subject Matter Expert',
-      description: 'User experience research',
-      blsOccCode: '15-1220',
-      blsOccTitle: 'Computer and Information Research Scientists',
-      gsaLaborCategory: 'Subject Matter Expert I',
-      gsaSin: '541910',
-      levels: [
-        {
-          level: 'IC2',
-          levelName: 'Junior',
-          yearsExperience: '0-2',
-          monthsBeforePromotionReady: 18,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 79850, monthsToNextStep: 12 },
-            { step: 2, salary: 82246, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC3',
-          levelName: 'Intermediate',
-          yearsExperience: '2-4',
-          monthsBeforePromotionReady: 24,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 103100, monthsToNextStep: 12 },
-            { step: 2, salary: 106193, monthsToNextStep: 12 },
-            { step: 3, salary: 109379, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC4',
-          levelName: 'Senior',
-          yearsExperience: '4-7',
-          monthsBeforePromotionReady: 30,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 133100, monthsToNextStep: 15 },
-            { step: 2, salary: 137093, monthsToNextStep: 15 },
-            { step: 3, salary: 141206, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC5',
-          levelName: 'Staff',
-          yearsExperience: '7-10',
-          monthsBeforePromotionReady: 36,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 169000, monthsToNextStep: 18 },
-            { step: 2, salary: 174070, monthsToNextStep: 18 },
-            { step: 3, salary: 179292, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC6',
-          levelName: 'Principal',
-          yearsExperience: '10+',
-          monthsBeforePromotionReady: null,
-          isTerminal: true,
-          steps: [
-            { step: 1, salary: 211400, monthsToNextStep: 24 },
-            { step: 2, salary: 217742, monthsToNextStep: 24 },
-            { step: 3, salary: 224274, monthsToNextStep: null },
-          ]
-        }
-      ]
-    },
-    {
-      id: 'cr-8',
-      title: 'Product Manager',
-      laborCategory: 'Product / Program Manager',
-      description: 'Product management and strategy',
-      blsOccCode: '11-1021',
-      blsOccTitle: 'General and Operations Managers',
-      gsaLaborCategory: 'Product / Program Manager',
-      gsaSin: '54151S',
-      levels: [
-        {
-          level: 'IC2',
-          levelName: 'Junior',
-          yearsExperience: '0-2',
-          monthsBeforePromotionReady: 18,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 79850, monthsToNextStep: 12 },
-            { step: 2, salary: 82246, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC3',
-          levelName: 'Intermediate',
-          yearsExperience: '2-4',
-          monthsBeforePromotionReady: 24,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 103100, monthsToNextStep: 12 },
-            { step: 2, salary: 106193, monthsToNextStep: 12 },
-            { step: 3, salary: 109379, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC4',
-          levelName: 'Senior',
-          yearsExperience: '4-7',
-          monthsBeforePromotionReady: 30,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 133100, monthsToNextStep: 15 },
-            { step: 2, salary: 137093, monthsToNextStep: 15 },
-            { step: 3, salary: 141206, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC5',
-          levelName: 'Staff',
-          yearsExperience: '7-10',
-          monthsBeforePromotionReady: 36,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 169000, monthsToNextStep: 18 },
-            { step: 2, salary: 174070, monthsToNextStep: 18 },
-            { step: 3, salary: 179292, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC6',
-          levelName: 'Principal',
-          yearsExperience: '10+',
-          monthsBeforePromotionReady: null,
-          isTerminal: true,
-          steps: [
-            { step: 1, salary: 211400, monthsToNextStep: 24 },
-            { step: 2, salary: 217742, monthsToNextStep: 24 },
-            { step: 3, salary: 224274, monthsToNextStep: null },
-          ]
-        }
-      ]
-    },
-    {
-      id: 'cr-9',
-      title: 'Delivery Manager',
-      laborCategory: 'IT Training',
-      description: 'Delivery and project management',
-      blsOccCode: '15-1220',
-      blsOccTitle: 'Computer and Information Research Scientists',
-      gsaLaborCategory: 'IT Training',
-      gsaSin: '54151S',
-      levels: [
-        {
-          level: 'IC4',
-          levelName: 'Delivery Manager',
-          yearsExperience: '6-8',
-          monthsBeforePromotionReady: 30,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 123000, monthsToNextStep: 15 },
-            { step: 2, salary: 126690, monthsToNextStep: 15 },
-            { step: 3, salary: 130491, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC5',
-          levelName: 'Sr. Delivery Manager',
-          yearsExperience: '8+',
-          monthsBeforePromotionReady: null,
-          isTerminal: true,
-          steps: [
-            { step: 1, salary: 135000, monthsToNextStep: 18 },
-            { step: 2, salary: 139050, monthsToNextStep: 18 },
-            { step: 3, salary: 143222, monthsToNextStep: null },
-          ]
-        }
-      ]
-    },
   ]);
 
   // ==================== BID-SPECIFIC DATA ====================
@@ -1091,10 +688,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ==================== CALCULATION FUNCTIONS ====================
 
-  /**
-   * Calculate fully burdened rate from base salary
-   * This is the audit-ready calculation matching the accountant's model
-   */
   const calculateFullyBurdenedRate = (
     baseSalary: number,
     includeProfit: boolean = true,
@@ -1112,24 +705,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return afterGA;
   };
 
-  /**
-   * Calculate loaded cost (no profit) for margin analysis
-   */
   const calculateLoadedCost = (baseSalary: number): number => {
     return calculateFullyBurdenedRate(baseSalary, false);
   };
 
-  /**
-   * Calculate rate with escalation for multi-year contracts
-   */
   const calculateEscalatedRate = (baseRate: number, year: number): number => {
     if (year <= 1) return baseRate;
     return baseRate * Math.pow(1 + escalationRates.laborDefault, year - 1);
   };
 
-  /**
-   * Get rate breakdown for audit documentation
-   */
   const getRateBreakdown = (baseSalary: number, includeProfit: boolean = true) => {
     const baseRate = baseSalary / companyPolicy.standardHours;
     const fringeAmount = baseRate * indirectRates.fringe;
@@ -1154,9 +738,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   };
 
-  /**
-   * Calculate year-by-year salaries with step progression
-   */
   const calculateYearSalaries = (
     role: CompanyRole,
     levelIndex: number,
@@ -1190,6 +771,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     
     return salaries;
+  };
+
+  // ==================== DERIVED VALUES FROM SOLICITATION ====================
+
+  const getTotalContractYears = (): number => {
+    const baseYears = solicitation.periodOfPerformance.baseYear ? 1 : 0;
+    return baseYears + solicitation.periodOfPerformance.optionYears;
+  };
+
+  const getContractYearsArray = (): { key: string; label: string; enabled: boolean }[] => {
+    const years: { key: string; label: string; enabled: boolean }[] = [];
+    
+    if (solicitation.periodOfPerformance.baseYear) {
+      years.push({ key: 'base', label: 'Base Year', enabled: true });
+    }
+    
+    for (let i = 1; i <= solicitation.periodOfPerformance.optionYears; i++) {
+      years.push({ 
+        key: `option${i}`, 
+        label: `Option Year ${i}`, 
+        enabled: true 
+      });
+    }
+    
+    return years;
   };
 
   // ==================== ROLE MANAGEMENT ====================
@@ -1261,7 +867,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // ==================== LEGACY COMPATIBILITY ====================
-  // These maintain backwards compatibility with existing components
 
   const costMultipliers = {
     fringe: indirectRates.fringe,
@@ -1294,14 +899,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Legacy calculateLoadedRate for backwards compatibility
-  const calculateLoadedRate = (baseSalary: number, includeProfit: boolean = true): number => {
-    return calculateFullyBurdenedRate(baseSalary, includeProfit);
-  };
-
   // ==================== CONTEXT VALUE ====================
 
   const value: AppContextType = {
+    // Solicitation
+    solicitation,
+    setSolicitation,
+    updateSolicitation,
+    resetSolicitation,
+    
     // Company Profile
     companyProfile,
     setCompanyProfile,
@@ -1373,6 +979,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     calculateEscalatedRate,
     getRateBreakdown,
     calculateYearSalaries,
+    
+    // Derived values
+    getTotalContractYears,
+    getContractYearsArray,
     
     // Legacy compatibility
     costMultipliers,

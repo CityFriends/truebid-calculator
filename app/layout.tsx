@@ -1,10 +1,9 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { GeistSans } from 'geist/font/sans'
 import './globals.css'
 import { AppProvider } from '@/contexts/app-context'
 import { Header } from '@/components/shared/header'
-
-const inter = Inter({ subsets: ['latin'] })
+import { SolicitationPill } from '@/components/shared/solicitation-pill'
 
 export const metadata: Metadata = {
   title: 'TrueBid - Government Contracting Calculator',
@@ -18,7 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={GeistSans.className}>
         <AppProvider>
           <Header />
           {children}

@@ -1,1032 +1,1823 @@
 'use client'
 
-import { useState } from 'react'
-import { useAppContext } from '@/contexts/app-context'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useMemo } from 'react'
+import { useAppContext, Subcontractor, ODCItem, PerDiemCalculation, Role } from '@/contexts/app-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Plus, Calculator, Trash2, Users, DollarSign, Target, Plane, ShoppingBag, Coffee, MapPin } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from '@/components/ui/tooltip'
+import {
+  Users,
+  Plus,
+  Check,
+  Trash2,
+  Calculator,
+  Sparkles,
+  DollarSign,
+  TrendingUp,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Settings2,
+  Plane,
+  Package,
+  Pencil,
+  MapPin,
+  CheckCircle2,
+  HelpCircle,
+  Building2,
+} from 'lucide-react'
 
-interface RoleAllocation {
-  fte: 0.25 | 0.5 | 0.75 | 1.0
-  baseYear: boolean
-  optionYear1: boolean
-  optionYear2: boolean
+// ==================== LOCAL TYPES ====================
+
+interface RecommendedRole {
+  id: string
+  title: string
+  description: string
+  icLevel: string
+  quantity: number
+  storyPoints: number
+  priority: 'high' | 'medium' | 'low'
+  isKey?: boolean
 }
 
-interface RolesAndPricingTabProps {
-  onContinue?: () => void
+interface TeamRole {
+  id: string
+  title: string
+  icLevel: string
+  quantity: number
+  ftePerPerson: number
+  baseSalary: number
+  hourlyRate: number
+  hoursPerYear: number
+  years: string[]
 }
 
-// Currency formatter
-const formatCurrency = (amount: number): string => {
-  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+interface RateBreakdown {
+  baseSalary: number
+  directRate: number
+  fringeAmount: number
+  overheadAmount: number
+  gaAmount: number
+  fullyLoadedRate: number
+  profitAmount: number
+  billedRate: number
 }
 
-export function RolesAndPricingTab({ onContinue }: RolesAndPricingTabProps) {
+// ==================== HELPER FUNCTIONS ====================
+
+// Convert AppContext year object to string array
+const yearsObjectToArray = (years: { base: boolean; option1: boolean; option2: boolean; option3: boolean; option4: boolean }): string[] => {
+  const result: string[] = []
+  if (years.base) result.push('base')
+  if (years.option1) result.push('option1')
+  if (years.option2) result.push('option2')
+  if (years.option3) result.push('option3')
+  if (years.option4) result.push('option4')
+  return result
+}
+
+// Convert string array to AppContext year object
+const yearsArrayToObject = (years: string[]): { base: boolean; option1: boolean; option2: boolean; option3: boolean; option4: boolean } => ({
+  base: years.includes('base'),
+  option1: years.includes('option1'),
+  option2: years.includes('option2'),
+  option3: years.includes('option3'),
+  option4: years.includes('option4'),
+})
+
+// ODC Category labels
+const odcCategoryLabels: Record<string, string> = {
+  'travel': 'Travel',
+  'materials': 'Materials',
+  'equipment': 'Equipment',
+  'software': 'Software',
+  'other': 'Other',
+}
+
+// IC Level to base salary mapping
+const icLevelRates: Record<string, number> = {
+  'IC2': 75000,
+  'IC3': 95000,
+  'IC4': 120000,
+  'IC5': 150000,
+  'IC6': 180000,
+}
+
+const icLevelOptions = ['IC2', 'IC3', 'IC4', 'IC5', 'IC6']
+const fteOptions = [0.25, 0.5, 0.75, 1.0]
+
+// Mock recommended roles from AI analysis
+const mockRecommendedRoles: RecommendedRole[] = [
+  { id: 'rec-1', title: 'Technical Lead', description: 'Technical Lead position', icLevel: 'IC5', quantity: 1, storyPoints: 45, priority: 'high', isKey: true },
+  { id: 'rec-2', title: 'Senior Software Engineer', description: 'Senior Software Engineer position', icLevel: 'IC4', quantity: 3, storyPoints: 120, priority: 'high' },
+  { id: 'rec-3', title: 'DevOps Engineer', description: 'DevOps Engineer position', icLevel: 'IC4', quantity: 1, storyPoints: 35, priority: 'medium' },
+  { id: 'rec-4', title: 'UX Designer', description: 'User Experience Designer', icLevel: 'IC3', quantity: 1, storyPoints: 25, priority: 'medium' },
+  { id: 'rec-5', title: 'Business Analyst', description: 'Business Analyst position', icLevel: 'IC3', quantity: 1, storyPoints: 20, priority: 'low' },
+]
+
+// ==================== MAIN COMPONENT ====================
+
+export function RolesAndPricingTab() {
   const {
-    contractType,          
-    setContractType,
-    recommendedRoles,
-    selectedRoles,
-    addRole,
-    removeRole,
-    updateRole,
-    profitMargin,
-    setProfitMargin,
-    annualEscalation,
-    setAnnualEscalation,
-    calculateLoadedRate,
+    solicitation,
     companyPolicy,
+    indirectRates,
+    escalationRates,
+    profitTargets,
+    // Subcontractors from context
+    subcontractors,
+    addSubcontractor,
+    updateSubcontractor,
+    removeSubcontractor,
+    // ODCs from context
     odcs,
     addODC,
+    updateODC,
     removeODC,
+    // Per Diem from context
     perDiem,
     addPerDiem,
+    updatePerDiem,
     removePerDiem,
-    subcontractors
+    // Selected Roles from context
+    selectedRoles,
+    setSelectedRoles,
+    addRole,
+    updateRole,
+    removeRole,
   } = useAppContext()
 
-  // FTE allocations per role (TODO: Move to context in Phase 8)
-  const [roleAllocations, setRoleAllocations] = useState<Record<string, RoleAllocation>>({})
+  // ==================== DERIVED VALUES (needed early) ====================
 
-  // Budget tracking
-  const [targetBudget, setTargetBudget] = useState<number>(0)
-  const [showBudgetInput, setShowBudgetInput] = useState(false)
-
-  // Custom role dialog
-  const [isCustomRoleOpen, setIsCustomRoleOpen] = useState(false)
-  const [customRoleTitle, setCustomRoleTitle] = useState('')
-  const [customRoleIC, setCustomRoleIC] = useState<'IC3' | 'IC4' | 'IC5'>('IC4')
-
-  // Rate breakdown modal state
-  const [selectedRoleForBreakdown, setSelectedRoleForBreakdown] = useState<string | null>(null)
-
-  const handleAddRole = (role: typeof recommendedRoles[0]) => {
-    addRole(role)
-    
-    // Initialize allocation for this role
-    setRoleAllocations(prev => ({
-      ...prev,
-      [role.id]: {
-        fte: 1.0,
-        baseYear: true,
-        optionYear1: true,
-        optionYear2: true
-      }
-    }))
+  // Normalize indirect rates (handle decimal vs percentage)
+  const normalizeRate = (rate: number | undefined, defaultVal: number): number => {
+    if (rate === undefined) return defaultVal
+    return rate < 1 ? rate * 100 : rate
+  }
+  
+  const rates = {
+    fringe: normalizeRate(indirectRates?.fringe, 21.16),
+    overhead: normalizeRate(indirectRates?.overhead, 34.26),
+    gAndA: normalizeRate(indirectRates?.ga, 19.83),
   }
 
-  const handleAddCustomRole = () => {
-    if (!customRoleTitle.trim()) return
+  // ==================== LOCAL STATE ====================
+  
+  // Profit & Escalation controls (initialize from context)
+  const [profitMargin, setProfitMargin] = useState(() => 
+    profitTargets?.tmDefault ? profitTargets.tmDefault * 100 : 8
+  )
+  const [laborEscalation, setLaborEscalation] = useState(() => 
+    escalationRates?.laborDefault ? escalationRates.laborDefault * 100 : 3
+  )
+  const [odcEscalation, setOdcEscalation] = useState(() => 
+    escalationRates?.odcDefault ? escalationRates.odcDefault * 100 : 2
+  )
+  const [showEscalation, setShowEscalation] = useState(true)
+  
+  // Panel states
+  const [selectedRoleForBreakdown, setSelectedRoleForBreakdown] = useState<TeamRole | null>(null)
+  const [showSubsExpanded, setShowSubsExpanded] = useState(false)
+  const [showOdcExpanded, setShowOdcExpanded] = useState(false)
+  const [showTravelExpanded, setShowTravelExpanded] = useState(false)
+  
+  // Role edit dialog
+  const [editRoleDialogOpen, setEditRoleDialogOpen] = useState(false)
+  const [editingRole, setEditingRole] = useState<TeamRole | null>(null)
+  const [roleFormData, setRoleFormData] = useState({
+    title: '',
+    icLevel: 'IC4',
+    quantity: 1,
+    ftePerPerson: 1,
+    baseSalary: 120000,
+    hoursPerYear: 1920,
+    years: [] as string[],
+  })
+  
+  // ODC dialog
+  const [odcDialogOpen, setOdcDialogOpen] = useState(false)
+  const [editingOdc, setEditingOdc] = useState<ODCItem | null>(null)
+  const [odcFormData, setOdcFormData] = useState({
+    description: '',
+    category: 'software' as ODCItem['category'],
+    quantity: 1,
+    unitCost: 0,
+    years: [] as string[],
+  })
+  
+  // Per Diem (Travel) dialog
+  const [travelDialogOpen, setTravelDialogOpen] = useState(false)
+  const [editingTravel, setEditingTravel] = useState<PerDiemCalculation | null>(null)
+  const [travelFormData, setTravelFormData] = useState({
+    location: '',
+    ratePerDay: 0,
+    numberOfDays: 1,
+    numberOfPeople: 1,
+    years: [] as string[],
+  })
+  
+  // Subcontractor dialog
+  const [subDialogOpen, setSubDialogOpen] = useState(false)
+  const [editingSub, setEditingSub] = useState<Subcontractor | null>(null)
+  const [subFormData, setSubFormData] = useState({
+    companyName: '',
+    role: '',
+    laborCategory: '',
+    theirRate: 0,
+    markupPercent: 10,
+    fte: 1,
+    years: [] as string[],
+  })
 
-    const newRole = {
-      id: `custom-${Date.now()}`,
-      name: customRoleTitle,
-      title: customRoleTitle,
-      icLevel: customRoleIC,
-      quantity: 1,
-      isKeyPersonnel: false,
-      confidence: 'medium' as const,
-      storyPoints: 0,
-      description: `Custom ${customRoleTitle} position`,
-      isCustom: true,
-      baseSalary: customRoleIC === 'IC5' ? 175000 : customRoleIC === 'IC4' ? 135000 : 105000,
-      fte: 1.0,
-      years: { base: true, option1: true, option2: true },
-      loadedRate: 0,
-      annualCost: 0,
-      billableHours: 2080
+  // ==================== DERIVED VALUES ====================
+  
+  // Static rate calculation (doesn't depend on state) - defined first so useMemo can use it
+  const calculateRateBreakdownStatic = (
+    baseSalary: number, 
+    ratesObj: { fringe: number; overhead: number; gAndA: number },
+    profit: number
+  ): RateBreakdown => {
+    const standardHours = 2080
+    const directRate = baseSalary / standardHours
+    const fringeAmount = directRate * (ratesObj.fringe / 100)
+    const withFringe = directRate + fringeAmount
+    const overheadAmount = withFringe * (ratesObj.overhead / 100)
+    const withOverhead = withFringe + overheadAmount
+    const gaAmount = withOverhead * (ratesObj.gAndA / 100)
+    const fullyLoadedRate = withOverhead + gaAmount
+    const profitAmount = fullyLoadedRate * (profit / 100)
+    const billedRate = fullyLoadedRate + profitAmount
+    return { baseSalary, directRate, fringeAmount, overheadAmount, gaAmount, fullyLoadedRate, profitAmount, billedRate }
+  }
+  
+  // Convert AppContext Role to local TeamRole format for display
+  const teamRoles: TeamRole[] = useMemo(() => {
+    return selectedRoles.map(role => {
+      const baseSalary = role.baseSalary || icLevelRates[role.icLevel] || 100000
+      const breakdown = calculateRateBreakdownStatic(baseSalary, rates, profitMargin)
+      return {
+        id: role.id,
+        title: role.name,
+        icLevel: role.icLevel,
+        quantity: role.quantity,
+        ftePerPerson: role.fte,
+        baseSalary,
+        hourlyRate: breakdown.billedRate,
+        hoursPerYear: role.billableHours || 1920,
+        years: yearsObjectToArray(role.years),
+      }
+    })
+  }, [selectedRoles, rates, profitMargin])
+
+  // ==================== DERIVED VALUES ====================
+
+  // Contract years from solicitation
+  const contractYears = useMemo(() => {
+    const years: { id: string; label: string; index: number }[] = []
+    if (solicitation?.periodOfPerformance?.baseYear !== false) {
+      years.push({ id: 'base', label: 'Base', index: 0 })
     }
+    const optionYears = solicitation?.periodOfPerformance?.optionYears || 2
+    for (let i = 1; i <= optionYears; i++) {
+      years.push({ id: `option${i}`, label: `Opt ${i}`, index: i })
+    }
+    return years
+  }, [solicitation])
 
-    addRole(newRole)
+  // ==================== CALCULATION FUNCTIONS ====================
+
+  const calculateRateBreakdown = (baseSalary: number): RateBreakdown => {
+    const standardHours = 2080 // Always use 2080 for rate calculation
+    const directRate = baseSalary / standardHours
     
-    setRoleAllocations(prev => ({
-      ...prev,
-      [newRole.id]: {
-        fte: 1.0,
-        baseYear: true,
-        optionYear1: true,
-        optionYear2: true
-      }
-    }))
-
-    setCustomRoleTitle('')
-    setIsCustomRoleOpen(false)
+    const fringeAmount = directRate * (rates.fringe / 100)
+    const withFringe = directRate + fringeAmount
+    
+    const overheadAmount = withFringe * (rates.overhead / 100)
+    const withOverhead = withFringe + overheadAmount
+    
+    const gaAmount = withOverhead * (rates.gAndA / 100)
+    const fullyLoadedRate = withOverhead + gaAmount
+    
+    const profitAmount = fullyLoadedRate * (profitMargin / 100)
+    const billedRate = fullyLoadedRate + profitAmount
+    
+    return { baseSalary, directRate, fringeAmount, overheadAmount, gaAmount, fullyLoadedRate, profitAmount, billedRate }
   }
 
-  const handleUpdateAllocation = (roleId: string, updates: Partial<RoleAllocation>) => {
-    setRoleAllocations(prev => ({
-      ...prev,
-      [roleId]: {
-        ...prev[roleId],
-        ...updates
-      }
-    }))
+  const calculateHourlyRate = (icLevel: string, customSalary?: number): number => {
+    const baseSalary = customSalary || icLevelRates[icLevel] || 100000
+    return calculateRateBreakdown(baseSalary).billedRate
   }
 
-  // Calculate contract values by year
-  const calculateYearCost = (year: 'baseYear' | 'optionYear1' | 'optionYear2') => {
-    let total = 0
-    selectedRoles.forEach(role => {
-      const allocation = roleAllocations[role.id]
-      if (allocation && allocation[year]) {
-        const fte = allocation.fte
-        const cost = (role.annualCost || 0) * fte
-        total += cost
+  // Apply escalation multiplier for a given year index
+  const getEscalationMultiplier = (yearIndex: number, escalationRate: number): number => {
+    if (!showEscalation || yearIndex === 0) return 1
+    return Math.pow(1 + escalationRate / 100, yearIndex)
+  }
+
+  // ==================== COST CALCULATIONS WITH ESCALATION ====================
+
+  // Calculate subcontractor cost for a specific year
+  const calculateSubYearCost = (sub: Subcontractor, yearIndex: number): number => {
+    const baseCost = sub.theirRate * sub.fte * 1920 // Assuming 1920 billable hours
+    const withMarkup = baseCost * (1 + sub.markupPercent / 100)
+    const escalated = withMarkup * getEscalationMultiplier(yearIndex, laborEscalation)
+    return escalated
+  }
+
+  // Calculate ODC cost for a specific year
+  const calculateOdcYearCost = (odc: ODCItem, yearIndex: number): number => {
+    // Use totalCost if available, otherwise calculate from quantity * unitCost
+    const baseCost = odc.totalCost || (odc.quantity || 1) * (odc.unitCost || 0)
+    const escalated = baseCost * getEscalationMultiplier(yearIndex, odcEscalation)
+    return escalated
+  }
+
+  // Calculate per diem cost for a specific year
+  const calculatePerDiemYearCost = (pd: PerDiemCalculation, yearIndex: number): number => {
+    const baseCost = pd.ratePerDay * pd.numberOfDays * pd.numberOfPeople
+    const escalated = baseCost * getEscalationMultiplier(yearIndex, odcEscalation)
+    return escalated
+  }
+
+  // ==================== AGGREGATE CALCULATIONS ====================
+
+  const calculations = useMemo(() => {
+    const yearCosts: Record<string, { labor: number; subs: number; odcs: number; travel: number; total: number }> = {}
+    
+    // Helper function inside useMemo to ensure fresh closure
+    const getEscMult = (yearIndex: number, rate: number): number => {
+      if (!showEscalation || yearIndex === 0) return 1
+      return Math.pow(1 + rate / 100, yearIndex)
+    }
+    
+    contractYears.forEach((year) => {
+      const laborEscMult = getEscMult(year.index, laborEscalation)
+      const odcEscMult = getEscMult(year.index, odcEscalation)
+      
+      // Labor costs
+      let laborTotal = 0
+      teamRoles.forEach(role => {
+        if (role.years.includes(year.id)) {
+          const escalatedRate = role.hourlyRate * laborEscMult
+          const annualCost = escalatedRate * role.hoursPerYear * role.quantity * role.ftePerPerson
+          laborTotal += annualCost
+        }
+      })
+      
+      // Subcontractor costs
+      let subsTotal = 0
+      subcontractors.forEach(sub => {
+        const subYears = yearsObjectToArray(sub.years)
+        if (subYears.includes(year.id)) {
+          const baseCost = sub.theirRate * sub.fte * 1920
+          const withMarkup = baseCost * (1 + sub.markupPercent / 100)
+          subsTotal += withMarkup * laborEscMult
+        }
+      })
+      
+      // ODC costs - calculate directly here
+      let odcsTotal = 0
+      odcs.forEach(odc => {
+        const odcYears = yearsObjectToArray(odc.years)
+        if (odcYears.includes(year.id)) {
+          const baseCost = odc.totalCost || (odc.quantity || 1) * (odc.unitCost || 0)
+          odcsTotal += baseCost * odcEscMult
+        }
+      })
+      
+      // Per Diem (Travel) costs - calculate directly here
+      let travelTotal = 0
+      perDiem.forEach(pd => {
+        const pdYears = yearsObjectToArray(pd.years)
+        if (pdYears.includes(year.id)) {
+          const baseCost = pd.totalCost || pd.ratePerDay * pd.numberOfDays * pd.numberOfPeople
+          travelTotal += baseCost * odcEscMult
+        }
+      })
+      
+      yearCosts[year.id] = {
+        labor: laborTotal,
+        subs: subsTotal,
+        odcs: odcsTotal,
+        travel: travelTotal,
+        total: laborTotal + subsTotal + odcsTotal + travelTotal,
       }
     })
-    return total
+    
+    const laborTotal = Object.values(yearCosts).reduce((sum, y) => sum + y.labor, 0)
+    const subsTotal = Object.values(yearCosts).reduce((sum, y) => sum + y.subs, 0)
+    const odcsTotal = Object.values(yearCosts).reduce((sum, y) => sum + y.odcs, 0)
+    const travelTotal = Object.values(yearCosts).reduce((sum, y) => sum + y.travel, 0)
+    const totalContract = laborTotal + subsTotal + odcsTotal + travelTotal
+    
+    const totalFTE = teamRoles.reduce((sum, r) => sum + (r.quantity * r.ftePerPerson), 0)
+    const avgRate = teamRoles.length > 0
+      ? teamRoles.reduce((sum, r) => sum + r.hourlyRate, 0) / teamRoles.length
+      : 0
+    
+    return {
+      yearCosts,
+      laborTotal,
+      subsTotal,
+      odcsTotal,
+      travelTotal,
+      totalContract,
+      totalFTE,
+      avgRate,
+      roleCount: teamRoles.length,
+    }
+  }, [teamRoles, contractYears, laborEscalation, odcEscalation, showEscalation, subcontractors, odcs, perDiem])
+
+  // ==================== ROLE HANDLERS ====================
+
+  const handleAddToTeam = (recRole: RecommendedRole) => {
+    const baseSalary = icLevelRates[recRole.icLevel] || 100000
+    const defaultYears = contractYears.length > 0 
+      ? contractYears.map(y => y.id) 
+      : ['base', 'option1', 'option2']
+    
+    addRole({
+      id: `role-${Date.now()}`,
+      name: recRole.title,
+      description: recRole.description,
+      icLevel: recRole.icLevel as 'IC1' | 'IC2' | 'IC3' | 'IC4' | 'IC5' | 'IC6',
+      baseSalary,
+      quantity: recRole.quantity,
+      fte: 1,
+      storyPoints: recRole.storyPoints,
+      years: yearsArrayToObject(defaultYears),
+      billableHours: 1920,
+      isKeyPersonnel: recRole.isKey,
+    })
   }
 
-  const baseYearCost = calculateYearCost('baseYear')
-  const optionYear1Cost = calculateYearCost('optionYear1') * (1 + annualEscalation / 100)
-  const optionYear2Cost = calculateYearCost('optionYear2') * Math.pow(1 + annualEscalation / 100, 2)
-  const totalContract = baseYearCost + optionYear1Cost + optionYear2Cost
+  const handleRemoveFromTeam = (roleId: string) => {
+    removeRole(roleId)
+    if (selectedRoleForBreakdown?.id === roleId) {
+      setSelectedRoleForBreakdown(null)
+    }
+  }
 
-  // Calculate total ODCs and Per Diem
-  const totalODCs = odcs.reduce((sum, item) => sum + item.totalCost, 0)
-  const totalPerDiem = perDiem.reduce((sum, pd) => sum + pd.totalCost, 0)
-  
-  // Calculate total Subcontractor costs
-  const calculateSubcontractorCosts = () => {
-    let baseYear = 0
-    let option1 = 0
-    let option2 = 0
+  const handleEditRole = (role: TeamRole) => {
+    setEditingRole(role)
+    setRoleFormData({
+      title: role.title,
+      icLevel: role.icLevel,
+      quantity: role.quantity,
+      ftePerPerson: role.ftePerPerson,
+      baseSalary: role.baseSalary,
+      hoursPerYear: role.hoursPerYear,
+      years: [...role.years],
+    })
+    setEditRoleDialogOpen(true)
+  }
+
+  const handleSaveRole = () => {
+    if (!editingRole) return
     
-    subcontractors.forEach(sub => {
-      const annualCost = sub.billedRate * 2080 * sub.fte
-      if (sub.years.base) baseYear += annualCost
-      if (sub.years.option1) option1 += annualCost
-      if (sub.years.option2) option2 += annualCost
+    updateRole(editingRole.id, {
+      name: roleFormData.title,
+      icLevel: roleFormData.icLevel as 'IC1' | 'IC2' | 'IC3' | 'IC4' | 'IC5' | 'IC6',
+      baseSalary: roleFormData.baseSalary,
+      quantity: roleFormData.quantity,
+      fte: roleFormData.ftePerPerson,
+      years: yearsArrayToObject(roleFormData.years),
+      billableHours: roleFormData.hoursPerYear,
     })
     
-    const option1WithEscalation = option1 * (1 + annualEscalation / 100)
-    const option2WithEscalation = option2 * Math.pow(1 + annualEscalation / 100, 2)
-    
-    return baseYear + option1WithEscalation + option2WithEscalation
+    setEditRoleDialogOpen(false)
+    setEditingRole(null)
   }
-  
-  const totalSubcontractors = calculateSubcontractorCosts()
-  const grandTotal = totalContract + totalODCs + totalPerDiem + totalSubcontractors
 
-  // Calculate total FTE
-  const totalFTE = selectedRoles.reduce((sum, role) => {
-    const allocation = roleAllocations[role.id]
-    return sum + (allocation ? allocation.fte * role.quantity : 0)
-  }, 0)
+  const toggleRoleFormYear = (yearId: string) => {
+    setRoleFormData(prev => ({
+      ...prev,
+      years: prev.years.includes(yearId)
+        ? prev.years.filter(y => y !== yearId)
+        : [...prev.years, yearId]
+    }))
+  }
 
-  // Scenario calculations
-  const scenarios = [
-    { name: 'Base', hours: 1808, description: 'Full PTO (18 days)' },
-    { name: 'Standard+', hours: 1880, description: 'Less PTO (10 days)' },
-    { name: 'High', hours: 1912, description: 'Key Personnel (5 days)' },
-    { name: 'Maximum', hours: 1920, description: 'Minimum PTO (2 weeks)' }
-  ]
+  const isRoleAdded = (title: string) => teamRoles.some(r => r.title === title)
+
+  const toggleRoleYear = (roleId: string, yearId: string) => {
+    const role = teamRoles.find(r => r.id === roleId)
+    if (!role) return
+    
+    const newYears = role.years.includes(yearId)
+      ? role.years.filter(y => y !== yearId)
+      : [...role.years, yearId]
+    
+    updateRole(roleId, {
+      years: yearsArrayToObject(newYears),
+    })
+  }
+
+  // ==================== ODC HANDLERS (using AppContext) ====================
+
+  const handleAddOdc = () => {
+    setEditingOdc(null)
+    // Ensure we have years - default to base + 2 options if contractYears is empty
+    const defaultYears = contractYears.length > 0 
+      ? contractYears.map(y => y.id) 
+      : ['base', 'option1', 'option2']
+    setOdcFormData({
+      description: '',
+      category: 'software',
+      quantity: 1,
+      unitCost: 0,
+      years: defaultYears,
+    })
+    setOdcDialogOpen(true)
+  }
+
+  const handleEditOdc = (odc: ODCItem) => {
+    setEditingOdc(odc)
+    setOdcFormData({
+      description: odc.description,
+      category: odc.category,
+      quantity: odc.quantity,
+      unitCost: odc.unitCost,
+      years: yearsObjectToArray(odc.years),
+    })
+    setOdcDialogOpen(true)
+  }
+
+  const handleSaveOdc = () => {
+    const totalCost = odcFormData.quantity * odcFormData.unitCost
+    if (editingOdc) {
+      updateODC(editingOdc.id, {
+        description: odcFormData.description,
+        category: odcFormData.category,
+        quantity: odcFormData.quantity,
+        unitCost: odcFormData.unitCost,
+        totalCost,
+        years: yearsArrayToObject(odcFormData.years),
+      })
+    } else {
+      addODC({
+        id: `odc-${Date.now()}`,
+        description: odcFormData.description,
+        category: odcFormData.category,
+        quantity: odcFormData.quantity,
+        unitCost: odcFormData.unitCost,
+        totalCost,
+        years: yearsArrayToObject(odcFormData.years),
+      })
+    }
+    setOdcDialogOpen(false)
+    setEditingOdc(null)
+  }
+
+  const handleDeleteOdc = (odcId: string) => removeODC(odcId)
+
+  const toggleOdcFormYear = (yearId: string) => {
+    setOdcFormData(prev => ({
+      ...prev,
+      years: prev.years.includes(yearId)
+        ? prev.years.filter(y => y !== yearId)
+        : [...prev.years, yearId]
+    }))
+  }
+
+  // ==================== PER DIEM (TRAVEL) HANDLERS (using AppContext) ====================
+
+  const handleAddTravel = () => {
+    setEditingTravel(null)
+    const defaultYears = contractYears.length > 0 
+      ? contractYears.map(y => y.id) 
+      : ['base', 'option1', 'option2']
+    setTravelFormData({
+      location: '',
+      ratePerDay: 0,
+      numberOfDays: 1,
+      numberOfPeople: 1,
+      years: defaultYears,
+    })
+    setTravelDialogOpen(true)
+  }
+
+  const handleEditTravel = (pd: PerDiemCalculation) => {
+    setEditingTravel(pd)
+    setTravelFormData({
+      location: pd.location,
+      ratePerDay: pd.ratePerDay,
+      numberOfDays: pd.numberOfDays,
+      numberOfPeople: pd.numberOfPeople,
+      years: yearsObjectToArray(pd.years),
+    })
+    setTravelDialogOpen(true)
+  }
+
+  const handleSaveTravel = () => {
+    const totalCost = travelFormData.ratePerDay * travelFormData.numberOfDays * travelFormData.numberOfPeople
+    if (editingTravel) {
+      updatePerDiem(editingTravel.id, {
+        location: travelFormData.location,
+        ratePerDay: travelFormData.ratePerDay,
+        numberOfDays: travelFormData.numberOfDays,
+        numberOfPeople: travelFormData.numberOfPeople,
+        totalCost,
+        years: yearsArrayToObject(travelFormData.years),
+      })
+    } else {
+      addPerDiem({
+        id: `pd-${Date.now()}`,
+        location: travelFormData.location,
+        ratePerDay: travelFormData.ratePerDay,
+        numberOfDays: travelFormData.numberOfDays,
+        numberOfPeople: travelFormData.numberOfPeople,
+        totalCost,
+        years: yearsArrayToObject(travelFormData.years),
+      })
+    }
+    setTravelDialogOpen(false)
+    setEditingTravel(null)
+  }
+
+  const handleDeleteTravel = (pdId: string) => removePerDiem(pdId)
+
+  const toggleTravelFormYear = (yearId: string) => {
+    setTravelFormData(prev => ({
+      ...prev,
+      years: prev.years.includes(yearId)
+        ? prev.years.filter(y => y !== yearId)
+        : [...prev.years, yearId]
+    }))
+  }
+
+  // ==================== SUBCONTRACTOR HANDLERS (using AppContext) ====================
+
+  const handleAddSub = () => {
+    setEditingSub(null)
+    const defaultYears = contractYears.length > 0 
+      ? contractYears.map(y => y.id) 
+      : ['base', 'option1', 'option2']
+    setSubFormData({
+      companyName: '',
+      role: '',
+      laborCategory: '',
+      theirRate: 0,
+      markupPercent: 10,
+      fte: 1,
+      years: defaultYears,
+    })
+    setSubDialogOpen(true)
+  }
+
+  const handleEditSub = (sub: Subcontractor) => {
+    setEditingSub(sub)
+    setSubFormData({
+      companyName: sub.companyName,
+      role: sub.role,
+      laborCategory: sub.laborCategory || '',
+      theirRate: sub.theirRate,
+      markupPercent: sub.markupPercent,
+      fte: sub.fte,
+      years: yearsObjectToArray(sub.years),
+    })
+    setSubDialogOpen(true)
+  }
+
+  const handleSaveSub = () => {
+    const billedRate = subFormData.theirRate * (1 + subFormData.markupPercent / 100)
+    if (editingSub) {
+      updateSubcontractor(editingSub.id, {
+        companyName: subFormData.companyName,
+        role: subFormData.role,
+        laborCategory: subFormData.laborCategory,
+        theirRate: subFormData.theirRate,
+        markupPercent: subFormData.markupPercent,
+        billedRate,
+        fte: subFormData.fte,
+        years: yearsArrayToObject(subFormData.years),
+      })
+    } else {
+      addSubcontractor({
+        id: `sub-${Date.now()}`,
+        companyName: subFormData.companyName,
+        role: subFormData.role,
+        laborCategory: subFormData.laborCategory,
+        theirRate: subFormData.theirRate,
+        markupPercent: subFormData.markupPercent,
+        billedRate,
+        fte: subFormData.fte,
+        years: yearsArrayToObject(subFormData.years),
+      })
+    }
+    setSubDialogOpen(false)
+    setEditingSub(null)
+  }
+
+  const handleDeleteSub = (subId: string) => removeSubcontractor(subId)
+
+  const toggleSubFormYear = (yearId: string) => {
+    setSubFormData(prev => ({
+      ...prev,
+      years: prev.years.includes(yearId)
+        ? prev.years.filter(y => y !== yearId)
+        : [...prev.years, yearId]
+    }))
+  }
+
+  // ==================== UTILITY FUNCTIONS ====================
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount)
+  }
+
+  const totalStoryPoints = mockRecommendedRoles.reduce((sum, r) => sum + r.storyPoints, 0)
+  const totalRecommendedFTE = mockRecommendedRoles.reduce((sum, r) => sum + r.quantity, 0)
+  const contractType = solicitation?.contractType || 'T&M'
+
+  // ==================== RENDER ====================
 
   return (
-    <div className="space-y-6">
-      {/* Top Controls */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Roles & Pricing</h2>
-          <p className="text-gray-600">Build your team and analyze project costs</p>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          {/* CONTRACT TYPE TOGGLE */}
-          <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border">
-            <Label className="text-sm font-medium">Contract Type:</Label>
-            <ToggleGroup
-              type="single"
-              value={contractType}
-              onValueChange={(value) => {
-                if (value) setContractType(value as 'tm' | 'ffp');
-              }}
-              className="gap-0"
-            >
-              <ToggleGroupItem
-                value="tm"
-                className="px-4 data-[state=on]:bg-blue-600 data-[state=on]:text-white"
-              >
-                T&M
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="ffp"
-                className="px-4 data-[state=on]:bg-blue-600 data-[state=on]:text-white"
-              >
-                FFP
-              </ToggleGroupItem>
-            </ToggleGroup>
+    <TooltipProvider>
+      <div className="space-y-6">
+        {/* Header with controls */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold text-gray-900">Roles & Pricing</h1>
+            <Badge variant="outline" className="text-xs">{contractType}</Badge>
           </div>
-
-          <div className="flex items-center gap-2">
-            <Label htmlFor="profit-margin" className="text-sm">Profit Margin</Label>
-            <Input
-              id="profit-margin"
-              type="number"
-              step="0.1"
-              value={profitMargin}
-              onChange={(e) => setProfitMargin(parseFloat(e.target.value))}
-              className="w-20"
-            />
-            <span className="text-sm text-gray-500">%</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="annual-escalation"
-              checked={true}
-            />
-            <Label htmlFor="annual-escalation" className="text-sm">Annual Escalation</Label>
-            <Input
-              type="number"
-              step="0.1"
-              value={annualEscalation}
-              onChange={(e) => setAnnualEscalation(parseFloat(e.target.value))}
-              className="w-20"
-            />
-            <span className="text-sm text-gray-500">%</span>
-          </div>
-
-          {onContinue && (
-            <Button onClick={onContinue}>
-              Continue to Rate Justification →
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Three Column Layout */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* LEFT: Recommended Roles (30%) */}
-        <div className="col-span-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Recommended Roles</CardTitle>
-              <CardDescription>AI-generated from RFP analysis</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {/* Summary */}
-                <div className="flex items-center justify-between text-sm pb-3 border-b">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-gray-400" />
-                    <span className="font-medium">{recommendedRoles.length} FTE</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Target className="w-4 h-4 text-gray-400" />
-                    <span className="text-gray-600">
-                      {recommendedRoles.reduce((sum, r) => sum + r.storyPoints, 0)} Story Points
-                    </span>
-                  </div>
-                </div>
-
-                {/* Roles List */}
-                {recommendedRoles.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-8">
-                    Upload an RFP to see recommended roles
-                  </p>
-                ) : (
-                  recommendedRoles.map(role => {
-                    const isAdded = selectedRoles.some(r => r.id === role.id)
-                    
-                    return (
-                      <div key={role.id} className="p-4 border rounded-lg space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                            {role.isKeyPersonnel && (
-                             <span className="text-yellow-500">⭐</span>
-                             )}
-                            <h4 className="font-medium text-sm">{role.title || role.name}</h4>
-                            </div>
-                            <p className="text-xs text-gray-600">{role.description}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-4 text-xs">
-                          <div>
-                            <span className="text-gray-500">IC Level:</span>
-                            <Badge variant="outline" className="ml-1">{role.icLevel}</Badge>
-                          </div>
-                          <div>
-                            <span className="text-gray-500">Qty:</span>
-                            <span className="ml-1 font-medium">{role.quantity}</span>
-                          </div>
-                          <div>
-                            <Badge 
-                              variant={role.confidence === 'high' ? 'default' : 'secondary'}
-                              className="text-xs"
-                            >
-                              {role.confidence === 'high' ? 'High' : role.confidence === 'medium' ? 'Medium' : 'Low'}
-                            </Badge>
-                          </div>
-                          <div>
-                            <span className="text-gray-500">{role.storyPoints} SP</span>
-                          </div>
-                        </div>
-
-                        <Button
-                          onClick={() => handleAddRole(role)}
-                          disabled={isAdded}
-                          size="sm"
-                          className={`w-full ${isAdded ? 'bg-blue-500 text-white hover:bg-blue-600' : ''}`}
-                          variant={isAdded ? "default" : "default"}
-                        >
-                          {isAdded ? '✓ Added' : 'Add to Team'}
-                        </Button>
-                      </div>
-                    )
-                  })
-                )}
-
-                {/* Add Custom Role */}
-                <Dialog open={isCustomRoleOpen} onOpenChange={setIsCustomRoleOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" className="w-full" size="sm">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Custom Role
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add Custom Role</DialogTitle>
-                      <DialogDescription>
-                        Create a custom role for your team
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="role-title">Role Title</Label>
-                        <Input
-                          id="role-title"
-                          value={customRoleTitle}
-                          onChange={(e) => setCustomRoleTitle(e.target.value)}
-                          placeholder="e.g. Product Manager"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="ic-level">IC Level</Label>
-                        <Select value={customRoleIC} onValueChange={(v: any) => setCustomRoleIC(v)}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="IC3">IC3</SelectItem>
-                            <SelectItem value="IC4">IC4</SelectItem>
-                            <SelectItem value="IC5">IC5</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button onClick={handleAddCustomRole} className="w-full">
-                        Add Role
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+          
+          <div className="flex items-center gap-4">
+            {/* Profit Margin */}
+            <div className="flex items-center gap-2">
+              <Label htmlFor="profit" className="text-sm text-gray-600">Profit</Label>
+              <div className="flex items-center">
+                <Input
+                  id="profit"
+                  type="number"
+                  value={profitMargin}
+                  onChange={(e) => setProfitMargin(Number(e.target.value))}
+                  className="w-16 h-8 text-sm"
+                />
+                <span className="text-sm text-gray-500 ml-1">%</span>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* MIDDLE: Team Summary (35%) */}
-        <div className="col-span-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Team Summary
-              </CardTitle>
-              <CardDescription>
-                {totalFTE.toFixed(2)} FTE • {selectedRoles.length} roles
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {selectedRoles.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">
-                  Add roles from the left to build your team
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {selectedRoles.map(role => {
-                    const allocation = roleAllocations[role.id] || { fte: 1.0, baseYear: true, optionYear1: true, optionYear2: true }
-                    
-                    return (
-                      <div key={role.id} className="p-4 border rounded-lg space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              {role.isKeyPersonnel && (
-                                <span className="text-yellow-500">⭐</span>
-                              )}
-                              <h4 className="font-medium text-sm">{role.title || role.name}</h4>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <Badge variant="outline" className="text-xs">{role.icLevel}</Badge>
-                              <span className="text-xs text-gray-600">×{role.quantity}</span>
-                              <span className="text-xs text-gray-600">•</span>
-                              <span className="text-xs text-gray-600">{allocation.fte} FTE</span>
-                              <span className="text-xs text-gray-600">•</span>
-                              <span className="text-xs font-medium">{formatCurrency(role.loadedRate || 0)}/hr</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => setSelectedRoleForBreakdown(role.id)}
-                                >
-                                  <Calculator className="w-4 h-4" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-xl">
-                                <DialogHeader>
-                                  <DialogTitle>{role.title || role.name} - Rate Breakdown</DialogTitle>
-                                  <DialogDescription>
-                                    Detailed cost calculation and settings
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <RateBreakdownModal 
-                                  role={role} 
-                                  allocation={allocation}
-                                  onUpdateRole={updateRole}
-                                  onUpdateAllocation={handleUpdateAllocation}
-                                />
-                              </DialogContent>
-                            </Dialog>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => removeRole(role.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Year Badges */}
-                        <div className="flex items-center gap-2">
-                          {allocation.baseYear && <Badge variant="secondary" className="text-xs">Base</Badge>}
-                          {allocation.optionYear1 && <Badge variant="secondary" className="text-xs">Opt 1</Badge>}
-                          {allocation.optionYear2 && <Badge variant="secondary" className="text-xs">Opt 2</Badge>}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* RIGHT: Contract Value (35%) */}
-        <div className="col-span-4 space-y-6">
-          {/* Contract Value Card */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
-                Contract Value
-              </CardTitle>
-              <CardDescription>
-                Multi-year pricing with {annualEscalation}% annual escalation
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Base Year:</span>
-                  <span className="font-medium">{formatCurrency(baseYearCost)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Option Year 1: (+{annualEscalation}%)</span>
-                  <span className="font-medium">{formatCurrency(optionYear1Cost)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Option Year 2: (+{(annualEscalation * 2).toFixed(1)}%)</span>
-                  <span className="font-medium">{formatCurrency(optionYear2Cost)}</span>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Direct Labor (3 years):</span>
-                  <span className="font-medium">{formatCurrency(totalContract)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subcontractors (3 years):</span>
-                  <span className="font-medium">{formatCurrency(totalSubcontractors)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">ODCs:</span>
-                  <span className="font-medium">{formatCurrency(totalODCs)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Per Diem:</span>
-                  <span className="font-medium">{formatCurrency(totalPerDiem)}</span>
-                </div>
-                <div className="pt-2 border-t flex justify-between">
-                  <span className="font-semibold">Grand Total:</span>
-                  <span className="text-2xl font-bold text-blue-600">
-                    {formatCurrency(grandTotal)}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Budget & Scenarios Card */}
-          <Card>
-            <Tabs defaultValue="budget">
-              <CardHeader className="pb-3">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="budget">Budget</TabsTrigger>
-                  <TabsTrigger value="scenarios">Scenarios</TabsTrigger>
-                </TabsList>
-              </CardHeader>
-              <CardContent>
-                <TabsContent value="budget" className="mt-0 space-y-4">
-                  {/* Budget Target */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium">Budget Target</h4>
-                      {!showBudgetInput && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowBudgetInput(true)}
-                          className="h-7 text-xs"
-                        >
-                          {targetBudget > 0 ? 'Edit' : 'Set Budget'}
-                        </Button>
-                      )}
-                    </div>
-                    
-                    {showBudgetInput ? (
-                      <div className="flex gap-2">
+            </div>
+            
+            {/* Escalation Toggle */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="escalation"
+                checked={showEscalation}
+                onChange={(e) => setShowEscalation(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="escalation" className="text-sm text-gray-600">Escalation</Label>
+              {showEscalation && (
+                <div className="flex items-center gap-3 ml-2 pl-3 border-l border-gray-200">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1.5 cursor-help">
+                        <span className="text-xs text-gray-500">Labor</span>
                         <Input
                           type="number"
-                          placeholder="Enter budget"
-                          value={targetBudget || ''}
-                          onChange={(e) => setTargetBudget(parseFloat(e.target.value) || 0)}
-                          className="h-9"
+                          value={laborEscalation}
+                          onChange={(e) => setLaborEscalation(Number(e.target.value))}
+                          className="w-14 h-8 text-sm"
                         />
-                        <Button
-                          size="sm"
-                          onClick={() => setShowBudgetInput(false)}
-                          className="h-9"
-                        >
-                          Save
-                        </Button>
+                        <span className="text-xs text-gray-500">%</span>
                       </div>
-                    ) : targetBudget > 0 ? (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Target:</span>
-                          <span className="font-medium">{formatCurrency(targetBudget)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Current:</span>
-                          <span className="font-medium">{formatCurrency(baseYearCost)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className={baseYearCost > targetBudget ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
-                            {baseYearCost > targetBudget ? 'Over Budget:' : 'Remaining:'}
-                          </span>
-                          <span className={baseYearCost > targetBudget ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
-                            {formatCurrency(Math.abs(targetBudget - baseYearCost))}
-                          </span>
-                        </div>
-                        {/* Progress bar */}
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full transition-all ${
-                              baseYearCost > targetBudget ? 'bg-red-500' : 'bg-blue-500'
-                            }`}
-                            style={{ width: `${Math.min((baseYearCost / targetBudget) * 100, 100)}%` }}
-                          />
-                        </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Annual escalation for prime labor rates</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1.5 cursor-help">
+                        <span className="text-xs text-gray-500">Other</span>
+                        <Input
+                          type="number"
+                          value={odcEscalation}
+                          onChange={(e) => setOdcEscalation(Number(e.target.value))}
+                          className="w-14 h-8 text-sm"
+                        />
+                        <span className="text-xs text-gray-500">%</span>
                       </div>
-                    ) : (
-                      <p className="text-sm text-gray-500">No budget set</p>
-                    )}
-                  </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Annual escalation for ODCs, Travel, and Subcontractors</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
+            </div>
 
-                  <div className="pt-4 border-t">
-                    <h4 className="text-sm font-medium mb-3">Team Breakdown</h4>
-                    <div className="space-y-2">
-                      {selectedRoles.map(role => {
-                        const allocation = roleAllocations[role.id] || { fte: 1.0, baseYear: true, optionYear1: true, optionYear2: true }
-                        const roleCost = allocation.baseYear ? (role.annualCost || 0) * allocation.fte : 0
-                        
-                        return (
-                          <div key={role.id} className="flex justify-between text-sm">
-                            <span className="text-gray-600 truncate flex-1">
-                            {role.title || role.name} ({(allocation.fte * role.quantity).toFixed(2)} FTE)
-                            </span>
-                            <span className="font-medium ml-2">{formatCurrency(roleCost)}</span>
+            <Button className="h-9">
+              Continue to Rate Justification
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Three column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Column 1: Recommended Roles */}
+          <div className="border border-gray-100 rounded-lg p-4 bg-white">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-gray-400" />
+                  <h2 className="font-medium text-gray-900">Recommended Roles</h2>
+                </div>
+                <span className="text-xs text-gray-500">AI-generated</span>
+              </div>
+
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-gray-400" />
+                  <span className="font-medium text-gray-900">{totalRecommendedFTE}</span>
+                  <span className="text-gray-500">FTE</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Settings2 className="w-4 h-4 text-gray-400" />
+                  <span className="font-medium text-gray-900">{totalStoryPoints}</span>
+                  <span className="text-gray-500">Story Points</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {mockRecommendedRoles.map((role) => {
+                  const added = isRoleAdded(role.title)
+                  return (
+                    <div
+                      key={role.id}
+                      className={`border rounded-lg p-3 transition-all ${
+                        added ? 'border-gray-100 bg-gray-50' : 'border-gray-100 bg-white hover:border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-gray-900">{role.title}</span>
+                            {role.isKey && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-0">
+                                Key
+                              </Badge>
+                            )}
                           </div>
-                        )
-                      })}
-                      {selectedRoles.length === 0 && (
-                        <p className="text-sm text-gray-500">No roles added yet</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-xs text-gray-600 mb-3">
+                        <span>IC: <span className="font-medium text-gray-900">{role.icLevel}</span></span>
+                        <span>Qty: <span className="font-medium text-gray-900">{role.quantity}</span></span>
+                        <Badge 
+                          variant="outline" 
+                          className={`text-[10px] px-1.5 py-0 h-4 ${
+                            role.priority === 'high' ? 'bg-red-50 text-red-700 border-red-200' 
+                            : role.priority === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                            : 'bg-gray-50 text-gray-600 border-gray-200'
+                          }`}
+                        >
+                          {role.priority}
+                        </Badge>
+                        <span className="text-gray-400">{role.storyPoints} SP</span>
+                      </div>
+
+                      {added ? (
+                        <div className="flex items-center justify-center gap-2 py-1.5 text-sm text-gray-500 bg-gray-100 rounded-md">
+                          <Check className="w-4 h-4" />
+                          Added
+                        </div>
+                      ) : (
+                        <Button onClick={() => handleAddToTeam(role)} className="w-full h-8 text-sm">
+                          Add to Team
+                        </Button>
                       )}
                     </div>
-                  </div>
-
-                  <div className="pt-4 border-t space-y-2">
-                    <h4 className="text-sm font-medium">Summary</h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Total FTE:</span>
-                        <span className="font-medium">{totalFTE.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Base Year:</span>
-                        <span className="font-medium">{formatCurrency(baseYearCost)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Avg Rate:</span>
-                        <span className="font-medium">
-                          {selectedRoles.length > 0 
-                            ? `${formatCurrency(selectedRoles.reduce((sum, r) => sum + (r.loadedRate || 0), 0) / selectedRoles.length)}/hr`
-                            : '$0.00/hr'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="scenarios" className="mt-0 space-y-2">
-                  <TooltipProvider>
-                    {scenarios.map(scenario => {
-                      const scenarioCost = selectedRoles.reduce((sum, role) => {
-                        const allocation = roleAllocations[role.id]
-                        if (!allocation || !allocation.baseYear) return sum
-                        
-                        const loadedRate = calculateLoadedRate(role.baseSalary, scenario.hours)
-                        const cost = loadedRate * scenario.hours * role.quantity * allocation.fte
-                        return sum + cost
-                      }, 0)
-
-                      return (
-                        <Tooltip key={scenario.name}>
-                          <TooltipTrigger asChild>
-                            <div className="flex justify-between items-center p-3 border rounded-lg hover:bg-gray-50 cursor-help">
-                              <div>
-                                <p className="text-sm font-medium">{scenario.name}</p>
-                                <p className="text-xs text-gray-500">{scenario.hours} hrs</p>
-                              </div>
-                              <span className="text-sm font-medium">{formatCurrency(scenarioCost)}</span>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{scenario.description}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )
-                    })}
-                  </TooltipProvider>
-                </TabsContent>
-              </CardContent>
-            </Tabs>
-          </Card>
-        </div>
-      </div>
-
-      {/* ODCs & Per Diem Section - Full Width */}
-      <div className="space-y-6">
-        {/* ODCs Section */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg">Other Direct Costs (ODCs)</CardTitle>
-                <CardDescription>Travel, materials, equipment, and other project costs</CardDescription>
+                  )
+                })}
               </div>
-              <Button size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                Add ODC Item
-              </Button>
             </div>
-          </CardHeader>
-          <CardContent>
-            {odcs.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-8">No ODC items added yet</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {odcs.map((item) => {
-                  const categoryIcons = {
-                    travel: Plane,
-                    materials: ShoppingBag,
-                    equipment: Coffee,
-                    other: DollarSign
-                  }
-                  const CategoryIcon = categoryIcons[item.category]
-                  const categoryColors = {
-                    travel: 'bg-blue-50 text-blue-600',
-                    materials: 'bg-purple-50 text-purple-600',
-                    equipment: 'bg-green-50 text-green-600',
-                    other: 'bg-gray-50 text-gray-600'
-                  }
+          </div>
 
-                  return (
-                    <Card key={item.id} className="border border-gray-200">
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${categoryColors[item.category]}`}>
-                            <CategoryIcon className="w-5 h-5" />
+          {/* Column 2: Team Summary */}
+          <div className="border border-gray-100 rounded-lg p-4 bg-white">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-gray-400" />
+                <h2 className="font-medium text-gray-900">Team Summary</h2>
+              </div>
+
+              <div className="text-sm text-gray-500">
+                {calculations.totalFTE.toFixed(2)} FTE · {calculations.roleCount} roles
+              </div>
+
+              {teamRoles.length === 0 ? (
+                <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center">
+                  <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">No roles added yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Add roles from recommendations</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {teamRoles.map((role) => (
+                    <div
+                      key={role.id}
+                      className="group border border-gray-100 rounded-lg p-3 bg-gray-50 hover:border-gray-200 transition-all"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <span className="font-medium text-sm text-gray-900">{role.title}</span>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{role.icLevel}</Badge>
+                            <span>×{role.quantity}</span>
+                            <span>·</span>
+                            <span>{role.ftePerPerson} FTE</span>
+                            <span>·</span>
+                            <span>{role.hoursPerYear.toLocaleString()} hrs</span>
+                            <span>·</span>
+                            <span className="font-medium text-gray-700">{formatCurrency(role.hourlyRate)}/hr</span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 mb-1 truncate">
-                              {item.description}
-                            </p>
-                            <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
-                              <span>Qty: {item.quantity}</span>
-                              <span>•</span>
-                              <span>${item.unitCost.toFixed(2)} each</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-lg font-bold text-gray-900">
-                                {formatCurrency(item.totalCost)}
-                              </span>
+                        </div>
+                        
+                        <div className="flex gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0 text-red-600"
-                                onClick={() => removeODC(item.id)}
+                                onClick={() => handleEditRole(role)}
+                                className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p className="text-xs">Edit role</p></TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedRoleForBreakdown(role)}
+                                className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                              >
+                                <Calculator className="w-3.5 h-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p className="text-xs">View rate breakdown</p></TooltipContent>
+                          </Tooltip>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveFromTeam(role.id)}
+                            className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {contractYears.map((year) => {
+                          const isActive = role.years.includes(year.id)
+                          return (
+                            <button
+                              key={year.id}
+                              onClick={() => toggleRoleYear(role.id, year.id)}
+                              className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
+                                isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                              }`}
+                            >
+                              {year.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Column 3: Contract Value */}
+          <div className="border border-gray-100 rounded-lg p-4 bg-white">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-gray-400" />
+                <h2 className="font-medium text-gray-900">Contract Value</h2>
+              </div>
+
+              <p className="text-sm text-gray-500">
+                {showEscalation 
+                  ? `With escalation: ${laborEscalation}% labor, ${odcEscalation}% ODC/Travel`
+                  : 'Fixed pricing across all years'
+                }
+              </p>
+
+              {/* Year breakdown */}
+              <div className="space-y-1">
+                {contractYears.map((year) => {
+                  const yearData = calculations.yearCosts[year.id] || { total: 0 }
+                  const laborEsc = showEscalation && year.index > 0 ? `+${(laborEscalation * year.index).toFixed(1)}%` : ''
+                  return (
+                    <div key={year.id} className="flex items-center justify-between py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">
+                          {year.id === 'base' ? 'Base Year' : `Option Year ${year.id.replace('option', '')}`}:
+                        </span>
+                        {laborEsc && <span className="text-xs text-gray-400">({laborEsc})</span>}
+                      </div>
+                      <span className="font-medium text-gray-900">{formatCurrency(yearData.total)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Labor Subtotal */}
+              <div className="flex items-center justify-between py-2 border-t border-gray-100">
+                <span className="text-sm text-gray-600">Labor Subtotal:</span>
+                <span className="font-medium text-gray-900">{formatCurrency(calculations.laborTotal)}</span>
+              </div>
+
+              {/* Subcontractors - Collapsible */}
+              <div className="border-t border-gray-100 pt-3">
+                <button
+                  onClick={() => setShowSubsExpanded(!showSubsExpanded)}
+                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="text-sm text-gray-600">+ Subcontractors</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900">{formatCurrency(calculations.subsTotal)}</span>
+                    {showSubsExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                  </div>
+                </button>
+                
+                {showSubsExpanded && (
+                  <div className="mt-2 ml-5 space-y-2">
+                    {subcontractors.map((sub) => (
+                      <div key={sub.id} className="group text-xs">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-700 font-medium">{sub.companyName}</span>
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">+{sub.markupPercent}%</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-900 font-medium">{formatCurrency(sub.billedRate * sub.fte * 1920)}/yr</span>
+                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="sm" onClick={() => handleEditSub(sub)} className="h-5 w-5 p-0 text-gray-400 hover:text-blue-600">
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteSub(sub.id)} className="h-5 w-5 p-0 text-gray-400 hover:text-red-600">
+                                <Trash2 className="w-3 h-3" />
                               </Button>
                             </div>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Total ODCs */}
-            {odcs.length > 0 && (
-              <div className="mt-4 pt-4 border-t flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Total ODCs:</span>
-                <span className="text-xl font-bold text-blue-600">{formatCurrency(totalODCs)}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Per Diem Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MapPin className="w-5 h-5" />
-              GSA Per Diem Calculator
-            </CardTitle>
-            <CardDescription>Calculate travel per diem costs by location</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Location</Label>
-                <Input placeholder="Washington, DC" />
-              </div>
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Number of Days</Label>
-                <Input type="number" placeholder="3" />
-              </div>
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Number of People</Label>
-                <Input type="number" placeholder="2" />
-              </div>
-            </div>
-            <Button variant="outline" className="w-full md:w-auto">
-              <Calculator className="w-4 h-4 mr-2" />
-              Calculate Per Diem
-            </Button>
-
-            {/* Per Diem Results */}
-            {perDiem.length > 0 && (
-              <div className="mt-6 space-y-3">
-                <h4 className="text-sm font-semibold text-gray-900">Calculated Per Diem</h4>
-                {perDiem.map((pd, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{pd.location}</p>
-                      <p className="text-xs text-gray-600">
-                        {pd.numberOfDays} days × {pd.numberOfPeople} people × ${pd.ratePerDay}/day
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg font-bold text-gray-900">
-                        {formatCurrency(pd.totalCost)}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 text-red-600"
-                        onClick={() => removePerDiem(index)}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
+                        <div className="text-gray-500 mt-0.5">{sub.role} · {sub.fte} FTE · {formatCurrency(sub.theirRate)}/hr</div>
+                      </div>
+                    ))}
+                    <button onClick={handleAddSub} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 mt-2">
+                      <Plus className="w-3 h-3" />
+                      Add Subcontractor
+                    </button>
                   </div>
-                ))}
-                <div className="pt-3 border-t flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">Total Per Diem:</span>
-                  <span className="text-xl font-bold text-blue-600">{formatCurrency(totalPerDiem)}</span>
+                )}
+              </div>
+
+              {/* ODCs - Collapsible */}
+              <div className="border-t border-gray-100 pt-3">
+                <button
+                  onClick={() => setShowOdcExpanded(!showOdcExpanded)}
+                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
+                >
+                  <div className="flex items-center gap-2">
+                    <Package className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="text-sm text-gray-600">+ ODCs</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900">{formatCurrency(calculations.odcsTotal)}</span>
+                    {showOdcExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                  </div>
+                </button>
+                
+                {showOdcExpanded && (
+                  <div className="mt-2 ml-5 space-y-1.5">
+                    {odcs.map((odc) => (
+                      <div key={odc.id} className="group flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">{odc.description}</span>
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">{odcCategoryLabels[odc.category]}</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-700">
+                            {odc.quantity > 1 ? `${odc.quantity} × ` : ''}{formatCurrency(odc.unitCost)}/yr
+                          </span>
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="sm" onClick={() => handleEditOdc(odc)} className="h-5 w-5 p-0 text-gray-400 hover:text-blue-600">
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteOdc(odc.id)} className="h-5 w-5 p-0 text-gray-400 hover:text-red-600">
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <button onClick={handleAddOdc} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 mt-2">
+                      <Plus className="w-3 h-3" />
+                      Add ODC
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Travel (Per Diem) - Collapsible */}
+              <div className="border-t border-gray-100 pt-3">
+                <button
+                  onClick={() => setShowTravelExpanded(!showTravelExpanded)}
+                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
+                >
+                  <div className="flex items-center gap-2">
+                    <Plane className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="text-sm text-gray-600">+ Travel</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900">{formatCurrency(calculations.travelTotal)}</span>
+                    {showTravelExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                  </div>
+                </button>
+                
+                {showTravelExpanded && (
+                  <div className="mt-2 ml-5 space-y-2">
+                    {perDiem.map((pd) => (
+                      <div key={pd.id} className="group text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-700 font-medium">{pd.location}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-900 font-medium">{formatCurrency(pd.totalCost)}/yr</span>
+                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="sm" onClick={() => handleEditTravel(pd)} className="h-5 w-5 p-0 text-gray-400 hover:text-blue-600">
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteTravel(pd.id)} className="h-5 w-5 p-0 text-gray-400 hover:text-red-600">
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-gray-500 mt-0.5">
+                          {pd.numberOfPeople} people × {pd.numberOfDays} days × {formatCurrency(pd.ratePerDay)}/day
+                        </div>
+                      </div>
+                    ))}
+                    <button onClick={handleAddTravel} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 mt-2">
+                      <Plus className="w-3 h-3" />
+                      Add Travel
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Total */}
+              <div className="pt-3 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-600">Total Contract:</span>
+                  <span className="text-2xl font-semibold text-green-600">{formatCurrency(calculations.totalContract)}</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Labor + Subs + ODCs + Travel (with escalation)</p>
+              </div>
+
+              {/* Summary */}
+              <div className="pt-4 border-t border-gray-100">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">Summary</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Total FTE:</span>
+                    <span className="font-medium text-gray-900">{calculations.totalFTE.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Avg Rate:</span>
+                    <span className="font-medium text-gray-900">{formatCurrency(calculations.avgRate)}/hr</span>
+                  </div>
                 </div>
               </div>
-            )}
 
-            <div className="mt-4 text-xs text-gray-600 text-center">
-              <a 
-                href="https://www.gsa.gov/travel/plan-book/per-diem-rates" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800"
-              >
-                View GSA Per Diem Rates →
-              </a>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
-}
-
-// Rate Breakdown Modal Component
-function RateBreakdownModal({ 
-  role, 
-  allocation,
-  onUpdateRole,
-  onUpdateAllocation 
-}: { 
-  role: any
-  allocation: RoleAllocation
-  onUpdateRole: (roleId: string, updates: any) => void
-  onUpdateAllocation: (roleId: string, updates: Partial<RoleAllocation>) => void
-}) {
-  const { costMultipliers, profitMargin } = useAppContext()
-
-  const baseRate = role.baseSalary / 2080
-  const afterFringe = baseRate * (1 + costMultipliers.fringe)
-  const afterOverhead = afterFringe * (1 + costMultipliers.overhead)
-  const afterGA = afterOverhead * (1 + costMultipliers.ga)
-  const loadedRate = afterGA * (1 + profitMargin / 100)
-
-  return (
-    <div className="space-y-6">
-      {/* Rate Calculation Breakdown */}
-      <div className="space-y-3">
-        <h4 className="font-medium text-sm">Rate Calculation</h4>
-        <div className="space-y-2 bg-gray-50 p-4 rounded-lg text-sm">
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600">Base Salary ÷ 2080 hours:</span>
-            <span className="font-mono">${baseRate.toFixed(2)}/hr</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600">+ Fringe (45%):</span>
-            <span className="font-mono">${afterFringe.toFixed(2)}/hr</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600">+ Overhead (30%):</span>
-            <span className="font-mono">${afterOverhead.toFixed(2)}/hr</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600">+ G&A (5%):</span>
-            <span className="font-mono">${afterGA.toFixed(2)}/hr</span>
-          </div>
-          <div className="flex justify-between items-center pt-2 border-t border-gray-200">
-            <span className="font-medium">Loaded Rate (with {profitMargin}% profit):</span>
-            <span className="font-mono font-bold text-blue-600">${loadedRate.toFixed(2)}/hr</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Edit Controls */}
-      <div className="space-y-4 pt-4 border-t">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">IC Level</Label>
-            <Select 
-              value={role.icLevel} 
-              onValueChange={(v) => onUpdateRole(role.id, { icLevel: v })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="IC3">IC3 - Junior Level</SelectItem>
-                <SelectItem value="IC4">IC4 - Senior Level</SelectItem>
-                <SelectItem value="IC5">IC5 - Principal Level</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Quantity</Label>
-              <Input
-                type="number"
-                min="1"
-                value={role.quantity}
-                onChange={(e) => onUpdateRole(role.id, { quantity: parseInt(e.target.value) })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Hours/Year</Label>
-              <Input
-                type="number"
-                value={role.billableHours || 2080}
-                onChange={(e) => onUpdateRole(role.id, { billableHours: parseFloat(e.target.value) })}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Base Salary</Label>
-            <Input
-              type="number"
-              value={role.baseSalary}
-              onChange={(e) => onUpdateRole(role.id, { baseSalary: parseFloat(e.target.value) })}
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">FTE Allocation</Label>
-            <Select 
-              value={allocation.fte.toString()} 
-              onValueChange={(v) => onUpdateAllocation(role.id, { fte: parseFloat(v) as any })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0.25">0.25 FTE (Quarter Time)</SelectItem>
-                <SelectItem value="0.5">0.5 FTE (Half Time)</SelectItem>
-                <SelectItem value="0.75">0.75 FTE (Three Quarter Time)</SelectItem>
-                <SelectItem value="1">1.0 FTE (Full Time)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Active Years</Label>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id={`${role.id}-base`}
-                  checked={allocation.baseYear}
-                  onCheckedChange={(checked) => onUpdateAllocation(role.id, { baseYear: checked as boolean })}
-                />
-                <Label htmlFor={`${role.id}-base`} className="text-sm font-normal cursor-pointer">
-                  Base Year
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id={`${role.id}-opt1`}
-                  checked={allocation.optionYear1}
-                  onCheckedChange={(checked) => onUpdateAllocation(role.id, { optionYear1: checked as boolean })}
-                />
-                <Label htmlFor={`${role.id}-opt1`} className="text-sm font-normal cursor-pointer">
-                  Option Year 1
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id={`${role.id}-opt2`}
-                  checked={allocation.optionYear2}
-                  onCheckedChange={(checked) => onUpdateAllocation(role.id, { optionYear2: checked as boolean })}
-                />
-                <Label htmlFor={`${role.id}-opt2`} className="text-sm font-normal cursor-pointer">
-                  Option Year 2
-                </Label>
-              </div>
+              {/* Profit insight */}
+              {calculations.totalContract > 0 && (
+                <div className="p-3 bg-green-50 border-l-2 border-l-green-500 rounded-r-lg">
+                  <div className="flex items-start gap-2">
+                    <TrendingUp className="w-4 h-4 text-green-600 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-medium text-green-800">Estimated Profit at {profitMargin}%</p>
+                      <p className="text-sm font-semibold text-green-700 mt-0.5">
+                        {formatCurrency(calculations.laborTotal * (profitMargin / 100) / (1 + profitMargin / 100))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {/* ==================== DIALOGS ==================== */}
+
+        {/* Edit Role Dialog */}
+        <Dialog open={editRoleDialogOpen} onOpenChange={setEditRoleDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Edit Role</DialogTitle>
+              <DialogDescription>Modify role details and year allocations</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="role-title">Role Name</Label>
+                <Input
+                  id="role-title"
+                  value={roleFormData.title}
+                  onChange={(e) => setRoleFormData(prev => ({ ...prev, title: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="role-ic-level">IC Level</Label>
+                  <select
+                    id="role-ic-level"
+                    value={roleFormData.icLevel}
+                    onChange={(e) => {
+                      const newLevel = e.target.value
+                      setRoleFormData(prev => ({
+                        ...prev,
+                        icLevel: newLevel,
+                        baseSalary: icLevelRates[newLevel] || prev.baseSalary,
+                      }))
+                    }}
+                    className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {icLevelOptions.map(level => (
+                      <option key={level} value={level}>{level}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="role-salary">Base Salary</Label>
+                  <Input
+                    id="role-salary"
+                    type="number"
+                    value={roleFormData.baseSalary}
+                    onChange={(e) => setRoleFormData(prev => ({ ...prev, baseSalary: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="role-quantity">Quantity</Label>
+                  <Input
+                    id="role-quantity"
+                    type="number"
+                    min={1}
+                    value={roleFormData.quantity}
+                    onChange={(e) => setRoleFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="role-fte">FTE per Person</Label>
+                  <select
+                    id="role-fte"
+                    value={roleFormData.ftePerPerson}
+                    onChange={(e) => setRoleFormData(prev => ({ ...prev, ftePerPerson: Number(e.target.value) }))}
+                    className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {fteOptions.map(fte => (
+                      <option key={fte} value={fte}>{fte}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-1">
+                  <Label htmlFor="role-hours">Billable Hours Per Year</Label>
+                  <Tooltip>
+                    <TooltipTrigger><HelpCircle className="w-3.5 h-3.5 text-gray-400" /></TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-xs">Standard full-time is 1,920 (2,080 minus holidays/PTO). Adjust for partial allocations.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  id="role-hours"
+                  type="number"
+                  min={0}
+                  max={2080}
+                  value={roleFormData.hoursPerYear}
+                  onChange={(e) => setRoleFormData(prev => ({ ...prev, hoursPerYear: Number(e.target.value) }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Year Allocations</Label>
+                <div className="flex flex-wrap gap-2">
+                  {contractYears.map((year) => {
+                    const isActive = roleFormData.years.includes(year.id)
+                    return (
+                      <button
+                        key={year.id}
+                        type="button"
+                        onClick={() => toggleRoleFormYear(year.id)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                          isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        {year.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-blue-900">Calculated Billed Rate:</span>
+                  <span className="text-lg font-semibold text-blue-600">
+                    {formatCurrency(calculateHourlyRate(roleFormData.icLevel, roleFormData.baseSalary))}/hr
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditRoleDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveRole}>
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ODC Dialog */}
+        <Dialog open={odcDialogOpen} onOpenChange={setOdcDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{editingOdc ? 'Edit ODC' : 'Add ODC'}</DialogTitle>
+              <DialogDescription>Other Direct Costs directly attributable to the contract</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="odc-desc">Description <span className="text-red-500">*</span></Label>
+                <Input
+                  id="odc-desc"
+                  placeholder="e.g., AWS Cloud Services"
+                  value={odcFormData.description}
+                  onChange={(e) => setOdcFormData(prev => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="odc-category">Category</Label>
+                  <select
+                    id="odc-category"
+                    value={odcFormData.category}
+                    onChange={(e) => setOdcFormData(prev => ({ ...prev, category: e.target.value as ODCItem['category'] }))}
+                    className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {Object.entries(odcCategoryLabels).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="odc-qty">Quantity</Label>
+                  <Input
+                    id="odc-qty"
+                    type="number"
+                    min={1}
+                    value={odcFormData.quantity}
+                    onChange={(e) => setOdcFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="odc-cost">Unit Cost (per year) <span className="text-red-500">*</span></Label>
+                <Input
+                  id="odc-cost"
+                  type="number"
+                  min={0}
+                  placeholder="0.00"
+                  value={odcFormData.unitCost || ''}
+                  onChange={(e) => setOdcFormData(prev => ({ ...prev, unitCost: Number(e.target.value) }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Applicable Years</Label>
+                <div className="flex flex-wrap gap-2">
+                  {contractYears.map((year) => {
+                    const isActive = odcFormData.years.includes(year.id)
+                    return (
+                      <button
+                        key={year.id}
+                        type="button"
+                        onClick={() => toggleOdcFormYear(year.id)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                          isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        {year.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {odcFormData.unitCost > 0 && odcFormData.years.length > 0 && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">Total: {odcFormData.quantity} × {formatCurrency(odcFormData.unitCost)} × {odcFormData.years.length} years</span>
+                    <span className="font-semibold text-gray-900">{formatCurrency(odcFormData.quantity * odcFormData.unitCost * odcFormData.years.length)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOdcDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveOdc} disabled={!odcFormData.description || odcFormData.unitCost <= 0}>
+                {editingOdc ? <><CheckCircle2 className="w-4 h-4 mr-2" />Save Changes</> : <><Plus className="w-4 h-4 mr-2" />Add ODC</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Travel (Per Diem) Dialog */}
+        <Dialog open={travelDialogOpen} onOpenChange={setTravelDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{editingTravel ? 'Edit Travel' : 'Add Travel'}</DialogTitle>
+              <DialogDescription>Per diem travel costs per FAR 31.205-46</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="travel-location">Location <span className="text-red-500">*</span></Label>
+                <Input
+                  id="travel-location"
+                  placeholder="e.g., Washington, DC"
+                  value={travelFormData.location}
+                  onChange={(e) => setTravelFormData(prev => ({ ...prev, location: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="travel-rate">Rate/Day</Label>
+                  <Input
+                    id="travel-rate"
+                    type="number"
+                    min={0}
+                    placeholder="0.00"
+                    value={travelFormData.ratePerDay || ''}
+                    onChange={(e) => setTravelFormData(prev => ({ ...prev, ratePerDay: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="travel-days">Days</Label>
+                  <Input
+                    id="travel-days"
+                    type="number"
+                    min={1}
+                    value={travelFormData.numberOfDays}
+                    onChange={(e) => setTravelFormData(prev => ({ ...prev, numberOfDays: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="travel-people">People</Label>
+                  <Input
+                    id="travel-people"
+                    type="number"
+                    min={1}
+                    value={travelFormData.numberOfPeople}
+                    onChange={(e) => setTravelFormData(prev => ({ ...prev, numberOfPeople: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Applicable Years</Label>
+                <div className="flex flex-wrap gap-2">
+                  {contractYears.map((year) => {
+                    const isActive = travelFormData.years.includes(year.id)
+                    return (
+                      <button
+                        key={year.id}
+                        type="button"
+                        onClick={() => toggleTravelFormYear(year.id)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                          isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        {year.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {travelFormData.ratePerDay > 0 && travelFormData.years.length > 0 && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">
+                      {travelFormData.numberOfPeople} × {travelFormData.numberOfDays}d × {formatCurrency(travelFormData.ratePerDay)} × {travelFormData.years.length}yr
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      {formatCurrency(travelFormData.ratePerDay * travelFormData.numberOfDays * travelFormData.numberOfPeople * travelFormData.years.length)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTravelDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveTravel} disabled={!travelFormData.location || travelFormData.ratePerDay <= 0}>
+                {editingTravel ? <><CheckCircle2 className="w-4 h-4 mr-2" />Save Changes</> : <><Plus className="w-4 h-4 mr-2" />Add Travel</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Subcontractor Dialog */}
+        <Dialog open={subDialogOpen} onOpenChange={setSubDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{editingSub ? 'Edit Subcontractor' : 'Add Subcontractor'}</DialogTitle>
+              <DialogDescription>Subcontractor labor with pass-through markup</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="sub-company">Company Name <span className="text-red-500">*</span></Label>
+                <Input
+                  id="sub-company"
+                  placeholder="e.g., TechPartners LLC"
+                  value={subFormData.companyName}
+                  onChange={(e) => setSubFormData(prev => ({ ...prev, companyName: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sub-role">Role <span className="text-red-500">*</span></Label>
+                <Input
+                  id="sub-role"
+                  placeholder="e.g., Senior Cloud Architect"
+                  value={subFormData.role}
+                  onChange={(e) => setSubFormData(prev => ({ ...prev, role: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sub-lcat">Labor Category (Optional)</Label>
+                <Input
+                  id="sub-lcat"
+                  placeholder="e.g., Subject Matter Expert III"
+                  value={subFormData.laborCategory}
+                  onChange={(e) => setSubFormData(prev => ({ ...prev, laborCategory: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="sub-rate">Their Rate/hr <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="sub-rate"
+                    type="number"
+                    min={0}
+                    placeholder="0.00"
+                    value={subFormData.theirRate || ''}
+                    onChange={(e) => setSubFormData(prev => ({ ...prev, theirRate: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sub-markup">Markup %</Label>
+                  <Input
+                    id="sub-markup"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={subFormData.markupPercent}
+                    onChange={(e) => setSubFormData(prev => ({ ...prev, markupPercent: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sub-fte">FTE</Label>
+                  <Input
+                    id="sub-fte"
+                    type="number"
+                    min={0.25}
+                    max={10}
+                    step={0.25}
+                    value={subFormData.fte}
+                    onChange={(e) => setSubFormData(prev => ({ ...prev, fte: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Applicable Years</Label>
+                <div className="flex flex-wrap gap-2">
+                  {contractYears.map((year) => {
+                    const isActive = subFormData.years.includes(year.id)
+                    return (
+                      <button
+                        key={year.id}
+                        type="button"
+                        onClick={() => toggleSubFormYear(year.id)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                          isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        {year.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {subFormData.theirRate > 0 && subFormData.years.length > 0 && (
+                <div className="p-3 bg-gray-50 rounded-lg space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Billed Rate:</span>
+                    <span className="text-gray-900">{formatCurrency(subFormData.theirRate * (1 + subFormData.markupPercent / 100))}/hr</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Annual ({subFormData.fte} FTE × 1,920 hrs):</span>
+                    <span className="font-semibold text-gray-900">
+                      {formatCurrency(subFormData.theirRate * (1 + subFormData.markupPercent / 100) * subFormData.fte * 1920)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSubDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveSub} disabled={!subFormData.companyName || !subFormData.role || subFormData.theirRate <= 0}>
+                {editingSub ? <><CheckCircle2 className="w-4 h-4 mr-2" />Save Changes</> : <><Plus className="w-4 h-4 mr-2" />Add Sub</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Rate Breakdown Slide-out Panel */}
+        {selectedRoleForBreakdown && (
+          <>
+            <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setSelectedRoleForBreakdown(null)} />
+            <div className="fixed inset-y-0 right-0 w-[400px] bg-white shadow-2xl border-l border-gray-200 overflow-y-auto z-50 animate-in slide-in-from-right">
+              <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Rate Breakdown</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{selectedRoleForBreakdown.title}</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedRoleForBreakdown(null)} className="h-8 w-8 p-0">
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {(() => {
+                  const breakdown = calculateRateBreakdown(selectedRoleForBreakdown.baseSalary)
+                  return (
+                    <>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Base Salary:</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(breakdown.baseSalary)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">÷ Standard Hours:</span>
+                          <span className="font-medium text-gray-900">2,080</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                          <span className="text-sm font-medium text-gray-900">Direct Rate:</span>
+                          <span className="font-semibold text-gray-900">{formatCurrency(breakdown.directRate)}/hr</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Indirect Rates</h4>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">+ Fringe ({rates.fringe.toFixed(2)}%):</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(breakdown.fringeAmount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">+ Overhead ({rates.overhead.toFixed(2)}%):</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(breakdown.overheadAmount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">+ G&A ({rates.gAndA.toFixed(2)}%):</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(breakdown.gaAmount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                          <span className="text-sm font-medium text-gray-900">Fully Loaded Rate:</span>
+                          <span className="font-semibold text-gray-900">{formatCurrency(breakdown.fullyLoadedRate)}/hr</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Profit</h4>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">+ Profit ({profitMargin}%):</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(breakdown.profitAmount)}</span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-blue-900">Billed Rate:</span>
+                          <span className="text-xl font-bold text-blue-600">{formatCurrency(breakdown.billedRate)}/hr</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 pt-4 border-t border-gray-100">
+                        <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Annual Cost (Base Year)</h4>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Billable Hours:</span>
+                          <span className="font-medium text-gray-900">{selectedRoleForBreakdown.hoursPerYear.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">× Quantity:</span>
+                          <span className="font-medium text-gray-900">{selectedRoleForBreakdown.quantity}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">× FTE:</span>
+                          <span className="font-medium text-gray-900">{selectedRoleForBreakdown.ftePerPerson}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                          <span className="text-sm font-medium text-gray-900">Annual Cost:</span>
+                          <span className="font-semibold text-green-600">
+                            {formatCurrency(
+                              breakdown.billedRate * 
+                              selectedRoleForBreakdown.hoursPerYear * 
+                              selectedRoleForBreakdown.quantity * 
+                              selectedRoleForBreakdown.ftePerPerson
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-600">
+                          {contractType === 'T&M' ? (
+                            <><span className="font-medium">T&M Contract:</span> This billed rate is what you charge the government per hour.</>
+                          ) : contractType === 'FFP' ? (
+                            <><span className="font-medium">FFP Contract:</span> This rate is for internal cost estimation. The government pays a fixed total price.</>
+                          ) : (
+                            <><span className="font-medium">Tip:</span> Use this rate to estimate labor costs and ensure profitability.</>
+                          )}
+                        </p>
+                      </div>
+                    </>
+                  )
+                })()}
+              </div>
+            </div>
+          </>
+        )}
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
