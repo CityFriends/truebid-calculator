@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useAppContext, Subcontractor, ODCItem, PerDiemCalculation, Role } from '@/contexts/app-context'
+import { useAppContext, Subcontractor, ODCItem, PerDiemCalculation, Role, TeamingPartner } from '@/contexts/app-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,13 @@ import {
   TooltipProvider,
 } from '@/components/ui/tooltip'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Users,
   Plus,
   Check,
@@ -37,24 +44,13 @@ import {
   Plane,
   Package,
   Pencil,
-  MapPin,
   CheckCircle2,
   HelpCircle,
   Building2,
+  AlertTriangle,
 } from 'lucide-react'
 
 // ==================== LOCAL TYPES ====================
-
-interface RecommendedRole {
-  id: string
-  title: string
-  description: string
-  icLevel: string
-  quantity: number
-  storyPoints: number
-  priority: 'high' | 'medium' | 'low'
-  isKey?: boolean
-}
 
 interface TeamRole {
   id: string
@@ -66,6 +62,7 @@ interface TeamRole {
   hourlyRate: number
   hoursPerYear: number
   years: string[]
+  storyPoints?: number
 }
 
 interface RateBreakdown {
@@ -80,6 +77,11 @@ interface RateBreakdown {
 }
 
 // ==================== HELPER FUNCTIONS ====================
+
+// Helper to derive priority from confidence
+const getPriorityFromConfidence = (confidence?: 'high' | 'medium' | 'low'): 'high' | 'medium' | 'low' => {
+  return confidence || 'medium'
+}
 
 // Convert AppContext year object to string array
 const yearsObjectToArray = (years: { base: boolean; option1: boolean; option2: boolean; option3: boolean; option4: boolean }): string[] => {
@@ -122,15 +124,6 @@ const icLevelRates: Record<string, number> = {
 const icLevelOptions = ['IC2', 'IC3', 'IC4', 'IC5', 'IC6']
 const fteOptions = [0.25, 0.5, 0.75, 1.0]
 
-// Mock recommended roles from AI analysis
-const mockRecommendedRoles: RecommendedRole[] = [
-  { id: 'rec-1', title: 'Technical Lead', description: 'Technical Lead position', icLevel: 'IC5', quantity: 1, storyPoints: 45, priority: 'high', isKey: true },
-  { id: 'rec-2', title: 'Senior Software Engineer', description: 'Senior Software Engineer position', icLevel: 'IC4', quantity: 3, storyPoints: 120, priority: 'high' },
-  { id: 'rec-3', title: 'DevOps Engineer', description: 'DevOps Engineer position', icLevel: 'IC4', quantity: 1, storyPoints: 35, priority: 'medium' },
-  { id: 'rec-4', title: 'UX Designer', description: 'User Experience Designer', icLevel: 'IC3', quantity: 1, storyPoints: 25, priority: 'medium' },
-  { id: 'rec-5', title: 'Business Analyst', description: 'Business Analyst position', icLevel: 'IC3', quantity: 1, storyPoints: 20, priority: 'low' },
-]
-
 // ==================== MAIN COMPONENT ====================
 
 export function RolesAndPricingTab() {
@@ -145,6 +138,10 @@ export function RolesAndPricingTab() {
     addSubcontractor,
     updateSubcontractor,
     removeSubcontractor,
+    // Teaming Partners from context
+    teamingPartners,
+    addTeamingPartner,
+    getOrCreatePartnerByName,
     // ODCs from context
     odcs,
     addODC,
@@ -161,7 +158,32 @@ export function RolesAndPricingTab() {
     addRole,
     updateRole,
     removeRole,
+    // Recommended Roles from context
+    recommendedRoles,
+       // UI-specific settings from context
+    uiLaborEscalation,
+    uiOdcEscalation,
+    uiShowEscalation,
+    setUiLaborEscalation,
+    setUiOdcEscalation,
+    setUiShowEscalation,
+    uiProfitMargin,
+    setUiProfitMargin,
+    uiBillableHours,
+    setUiBillableHours,
   } = useAppContext()
+    const billableHours = uiBillableHours
+    const setBillableHours = setUiBillableHours
+
+    // Alias context values for compatibility with existing code
+  const profitMargin = uiProfitMargin
+  const setProfitMargin = setUiProfitMargin
+  const laborEscalation = uiLaborEscalation
+  const setLaborEscalation = setUiLaborEscalation
+  const odcEscalation = uiOdcEscalation
+  const setOdcEscalation = setUiOdcEscalation
+  const showEscalation = uiShowEscalation
+  const setShowEscalation = setUiShowEscalation
 
   // ==================== DERIVED VALUES (needed early) ====================
 
@@ -176,20 +198,6 @@ export function RolesAndPricingTab() {
     overhead: normalizeRate(indirectRates?.overhead, 34.26),
     gAndA: normalizeRate(indirectRates?.ga, 19.83),
   }
-
-  // ==================== LOCAL STATE ====================
-  
-  // Profit & Escalation controls (initialize from context)
-  const [profitMargin, setProfitMargin] = useState(() => 
-    profitTargets?.tmDefault ? profitTargets.tmDefault * 100 : 8
-  )
-  const [laborEscalation, setLaborEscalation] = useState(() => 
-    escalationRates?.laborDefault ? escalationRates.laborDefault * 100 : 3
-  )
-  const [odcEscalation, setOdcEscalation] = useState(() => 
-    escalationRates?.odcDefault ? escalationRates.odcDefault * 100 : 2
-  )
-  const [showEscalation, setShowEscalation] = useState(true)
   
   // Panel states
   const [selectedRoleForBreakdown, setSelectedRoleForBreakdown] = useState<TeamRole | null>(null)
@@ -206,7 +214,7 @@ export function RolesAndPricingTab() {
     quantity: 1,
     ftePerPerson: 1,
     baseSalary: 120000,
-    hoursPerYear: 1920,
+    hoursPerYear:  billableHours,
     years: [] as string[],
   })
   
@@ -235,13 +243,53 @@ export function RolesAndPricingTab() {
   // Subcontractor dialog
   const [subDialogOpen, setSubDialogOpen] = useState(false)
   const [editingSub, setEditingSub] = useState<Subcontractor | null>(null)
-  const [subFormData, setSubFormData] = useState({
-    companyName: '',
-    role: '',
-    laborCategory: '',
+const [subFormData, setSubFormData] = useState({
+  partnerId: '',
+  newPartnerName: '',
+  companyName: '',
+  role: '',
+  laborCategory: '',
+  theirRate: 0,
+  markupPercent: 10,
+  // Per-period allocations
+allocations: {
+  base: { enabled: true, fte: 1, hours:  billableHours },
+  option1: { enabled: true, fte: 1, hours:  billableHours },
+  option2: { enabled: true, fte: 1, hours:  billableHours },
+  option3: { enabled: false, fte: 0, hours: 0 },
+  option4: { enabled: false, fte: 0, hours: 0 },
+} as Record<string, { enabled: boolean; fte: number }>,
+})
+  
+  // Assign Role to Sub dialog (for recommended roles)
+  const [assignSubDialogOpen, setAssignSubDialogOpen] = useState(false)
+  const [assigningRole, setAssigningRole] = useState<Role | null>(null)
+  const [assignSubFormData, setAssignSubFormData] = useState({
+    partnerId: '' as string,
+    newPartnerName: '',
     theirRate: 0,
     markupPercent: 10,
-    fte: 1,
+    quantity: 1,
+    ftePerPerson: 1,
+    years: [] as string[],
+  })
+  
+  // Manual Add Role dialog (with destination choice)
+  const [addRoleDialogOpen, setAddRoleDialogOpen] = useState(false)
+  const [addRoleDestination, setAddRoleDestination] = useState<'prime' | 'sub'>('prime')
+  const [addRoleFormData, setAddRoleFormData] = useState({
+    title: '',
+    icLevel: 'IC4' as Role['icLevel'],
+    quantity: 1,
+    storyPoints: 20,
+    ftePerPerson: 1,
+    // Prime-specific
+    baseSalary: 120000,
+    // Sub-specific
+    partnerId: '',
+    newPartnerName: '',
+    theirRate: 0,
+    markupPercent: 10,
     years: [] as string[],
   })
 
@@ -279,7 +327,7 @@ export function RolesAndPricingTab() {
         ftePerPerson: role.fte,
         baseSalary,
         hourlyRate: breakdown.billedRate,
-        hoursPerYear: role.billableHours || 1920,
+        hoursPerYear: role.billableHours ||  billableHours,
         years: yearsObjectToArray(role.years),
       }
     })
@@ -326,37 +374,6 @@ export function RolesAndPricingTab() {
     return calculateRateBreakdown(baseSalary).billedRate
   }
 
-  // Apply escalation multiplier for a given year index
-  const getEscalationMultiplier = (yearIndex: number, escalationRate: number): number => {
-    if (!showEscalation || yearIndex === 0) return 1
-    return Math.pow(1 + escalationRate / 100, yearIndex)
-  }
-
-  // ==================== COST CALCULATIONS WITH ESCALATION ====================
-
-  // Calculate subcontractor cost for a specific year
-  const calculateSubYearCost = (sub: Subcontractor, yearIndex: number): number => {
-    const baseCost = sub.theirRate * sub.fte * 1920 // Assuming 1920 billable hours
-    const withMarkup = baseCost * (1 + sub.markupPercent / 100)
-    const escalated = withMarkup * getEscalationMultiplier(yearIndex, laborEscalation)
-    return escalated
-  }
-
-  // Calculate ODC cost for a specific year
-  const calculateOdcYearCost = (odc: ODCItem, yearIndex: number): number => {
-    // Use totalCost if available, otherwise calculate from quantity * unitCost
-    const baseCost = odc.totalCost || (odc.quantity || 1) * (odc.unitCost || 0)
-    const escalated = baseCost * getEscalationMultiplier(yearIndex, odcEscalation)
-    return escalated
-  }
-
-  // Calculate per diem cost for a specific year
-  const calculatePerDiemYearCost = (pd: PerDiemCalculation, yearIndex: number): number => {
-    const baseCost = pd.ratePerDay * pd.numberOfDays * pd.numberOfPeople
-    const escalated = baseCost * getEscalationMultiplier(yearIndex, odcEscalation)
-    return escalated
-  }
-
   // ==================== AGGREGATE CALCULATIONS ====================
 
   const calculations = useMemo(() => {
@@ -383,15 +400,27 @@ export function RolesAndPricingTab() {
       })
       
       // Subcontractor costs
-      let subsTotal = 0
-      subcontractors.forEach(sub => {
-        const subYears = yearsObjectToArray(sub.years)
-        if (subYears.includes(year.id)) {
-          const baseCost = sub.theirRate * sub.fte * 1920
-          const withMarkup = baseCost * (1 + sub.markupPercent / 100)
-          subsTotal += withMarkup * laborEscMult
-        }
-      })
+      // We bill the government: billedRate (theirRate + markup) × FTE × hours
+      // The "cost to us" is theirRate × FTE × hours, but for contract value we show billed amount
+let subsTotal = 0
+subcontractors.forEach(sub => {
+  // Check if sub has new allocations structure or legacy years
+  if (sub.allocations) {
+    // New per-period allocation structure
+    const allocation = sub.allocations[year.id as keyof typeof sub.allocations]
+    if (allocation?.enabled && allocation.fte > 0) {
+      const annualBilled = sub.billedRate * allocation.fte *  billableHours
+      subsTotal += annualBilled * laborEscMult
+    }
+  } else {
+    // Legacy: single FTE with year toggles
+    const subYears = yearsObjectToArray(sub.years)
+    if (subYears.includes(year.id)) {
+      const annualBilled = sub.billedRate * sub.fte *  billableHours
+      subsTotal += annualBilled * laborEscMult
+    }
+  }
+})  
       
       // ODC costs - calculate directly here
       let odcsTotal = 0
@@ -446,17 +475,69 @@ export function RolesAndPricingTab() {
     }
   }, [teamRoles, contractYears, laborEscalation, odcEscalation, showEscalation, subcontractors, odcs, perDiem])
 
+  // Group subcontractors by partner for cleaner display
+  const groupedSubcontractors = useMemo(() => {
+    const groups: Record<string, { 
+      partnerId: string;
+      companyName: string; 
+      roles: Subcontractor[]; 
+      totalAnnual: number;
+      totalFte: number;
+      avgMarkup: number;
+    }> = {}
+    
+    subcontractors.forEach(sub => {
+      const key = sub.partnerId || sub.companyName.toLowerCase()
+      if (!groups[key]) {
+        groups[key] = {
+          partnerId: sub.partnerId || '',
+          companyName: sub.companyName,
+          roles: [],
+          totalAnnual: 0,
+          totalFte: 0,
+          avgMarkup: 0,
+        }
+      }
+      groups[key].roles.push(sub)
+     // Calculate total FTE across all enabled periods
+const subTotalFte = sub.allocations 
+  ? Object.values(sub.allocations).reduce((sum, alloc) => sum + (alloc.enabled ? alloc.fte : 0), 0) / Object.values(sub.allocations).filter(a => a.enabled).length || 0
+  : sub.fte
+
+// Base year cost (no escalation) - use billedRate for what we charge gov
+const baseYearCost = sub.billedRate * subTotalFte *  billableHours
+groups[key].totalAnnual += baseYearCost
+groups[key].totalFte += subTotalFte
+    })
+    
+    // Calculate average markup for each group
+    Object.values(groups).forEach(group => {
+      if (group.roles.length > 0) {
+        group.avgMarkup = group.roles.reduce((sum, r) => sum + r.markupPercent, 0) / group.roles.length
+      }
+    })
+    
+    return Object.values(groups)
+  }, [subcontractors])
+
+  // State for expanded partner groups in contract value section
+  const [expandedPartnerGroups, setExpandedPartnerGroups] = useState<Record<string, boolean>>({})
+
+  const togglePartnerGroup = (partnerId: string) => {
+    setExpandedPartnerGroups(prev => ({ ...prev, [partnerId]: !prev[partnerId] }))
+  }
+
   // ==================== ROLE HANDLERS ====================
 
-  const handleAddToTeam = (recRole: RecommendedRole) => {
-    const baseSalary = icLevelRates[recRole.icLevel] || 100000
+  const handleAddToTeam = (recRole: Role) => {
+    const baseSalary = recRole.baseSalary || icLevelRates[recRole.icLevel] || 100000
     const defaultYears = contractYears.length > 0 
       ? contractYears.map(y => y.id) 
       : ['base', 'option1', 'option2']
     
     addRole({
       id: `role-${Date.now()}`,
-      name: recRole.title,
+      name: recRole.name,
       description: recRole.description,
       icLevel: recRole.icLevel as 'IC1' | 'IC2' | 'IC3' | 'IC4' | 'IC5' | 'IC6',
       baseSalary,
@@ -464,8 +545,8 @@ export function RolesAndPricingTab() {
       fte: 1,
       storyPoints: recRole.storyPoints,
       years: yearsArrayToObject(defaultYears),
-      billableHours: 1920,
-      isKeyPersonnel: recRole.isKey,
+      billableHours:  billableHours,
+      isKeyPersonnel: recRole.isKeyPersonnel,
     })
   }
 
@@ -516,7 +597,13 @@ export function RolesAndPricingTab() {
     }))
   }
 
-  const isRoleAdded = (title: string) => teamRoles.some(r => r.title === title)
+  const isRoleAdded = (name: string) => teamRoles.some(r => r.title === name)
+  const isRoleAssignedToSub = (name: string) => subcontractors.some(s => s.role === name)
+  const getRoleAssignment = (name: string): 'prime' | 'sub' | null => {
+    if (teamRoles.some(r => r.title === name)) return 'prime'
+    if (subcontractors.some(s => s.role === name)) return 'sub'
+    return null
+  }
 
   const toggleRoleYear = (roleId: string, yearId: string) => {
     const role = teamRoles.find(r => r.id === roleId)
@@ -535,7 +622,6 @@ export function RolesAndPricingTab() {
 
   const handleAddOdc = () => {
     setEditingOdc(null)
-    // Ensure we have years - default to base + 2 options if contractYears is empty
     const defaultYears = contractYears.length > 0 
       ? contractYears.map(y => y.id) 
       : ['base', 'option1', 'option2']
@@ -666,63 +752,133 @@ export function RolesAndPricingTab() {
 
   // ==================== SUBCONTRACTOR HANDLERS (using AppContext) ====================
 
-  const handleAddSub = () => {
-    setEditingSub(null)
-    const defaultYears = contractYears.length > 0 
-      ? contractYears.map(y => y.id) 
-      : ['base', 'option1', 'option2']
-    setSubFormData({
-      companyName: '',
-      role: '',
-      laborCategory: '',
-      theirRate: 0,
-      markupPercent: 10,
-      fte: 1,
-      years: defaultYears,
-    })
-    setSubDialogOpen(true)
+ const handleAddSub = () => {
+  setEditingSub(null)
+  
+  // Build allocations based on contract years
+  const allocations: Record<string, { enabled: boolean; fte: number }> = {
+    base: { enabled: false, fte: 1 },
+    option1: { enabled: false, fte: 1 },
+    option2: { enabled: false, fte: 1 },
+    option3: { enabled: false, fte: 0 },
+    option4: { enabled: false, fte: 0 },
   }
+  
+  // Enable years that exist in contract
+  contractYears.forEach(y => {
+    allocations[y.id] = { enabled: true, fte: 1 }
+  })
+  
+  setSubFormData({
+    partnerId: '',
+    newPartnerName: '',
+    companyName: '',
+    role: '',
+    laborCategory: '',
+    theirRate: 0,
+    markupPercent: 10,
+    allocations,
+  })
+  setSubDialogOpen(true)
+}
 
-  const handleEditSub = (sub: Subcontractor) => {
-    setEditingSub(sub)
-    setSubFormData({
-      companyName: sub.companyName,
-      role: sub.role,
-      laborCategory: sub.laborCategory || '',
-      theirRate: sub.theirRate,
-      markupPercent: sub.markupPercent,
-      fte: sub.fte,
-      years: yearsObjectToArray(sub.years),
-    })
-    setSubDialogOpen(true)
+ const handleEditSub = (sub: Subcontractor) => {
+  setEditingSub(sub)
+  const existingPartner = teamingPartners.find(p => 
+    p.id === sub.partnerId || p.companyName.toLowerCase() === sub.companyName.toLowerCase()
+  )
+  
+  // Convert legacy years to allocations if needed
+  let allocations: Record<string, { enabled: boolean; fte: number }>
+  if (sub.allocations) {
+    allocations = { ...sub.allocations }
+  } else {
+    // Legacy conversion
+    const subYears = yearsObjectToArray(sub.years)
+    allocations = {
+      base: { enabled: subYears.includes('base'), fte: sub.fte },
+      option1: { enabled: subYears.includes('option1'), fte: sub.fte },
+      option2: { enabled: subYears.includes('option2'), fte: sub.fte },
+      option3: { enabled: subYears.includes('option3'), fte: sub.fte },
+      option4: { enabled: subYears.includes('option4'), fte: sub.fte },
+    }
   }
+  
+  setSubFormData({
+    partnerId: existingPartner?.id || '',
+    newPartnerName: '',
+    companyName: sub.companyName,
+    role: sub.role,
+    laborCategory: sub.laborCategory || '',
+    theirRate: sub.theirRate,
+    markupPercent: sub.markupPercent,
+    allocations,
+  })
+  setSubDialogOpen(true)
+}
 
   const handleSaveSub = () => {
-    const billedRate = subFormData.theirRate * (1 + subFormData.markupPercent / 100)
-    if (editingSub) {
-      updateSubcontractor(editingSub.id, {
-        companyName: subFormData.companyName,
-        role: subFormData.role,
-        laborCategory: subFormData.laborCategory,
-        theirRate: subFormData.theirRate,
-        markupPercent: subFormData.markupPercent,
-        billedRate,
-        fte: subFormData.fte,
-        years: yearsArrayToObject(subFormData.years),
-      })
-    } else {
-      addSubcontractor({
-        id: `sub-${Date.now()}`,
-        companyName: subFormData.companyName,
-        role: subFormData.role,
-        laborCategory: subFormData.laborCategory,
-        theirRate: subFormData.theirRate,
-        markupPercent: subFormData.markupPercent,
-        billedRate,
-        fte: subFormData.fte,
-        years: yearsArrayToObject(subFormData.years),
-      })
+    // Determine company name and partnerId from selection
+    let companyName = subFormData.companyName
+    let partnerId = subFormData.partnerId
+    
+    if (subFormData.partnerId === 'new' && subFormData.newPartnerName) {
+      const newPartner = getOrCreatePartnerByName(subFormData.newPartnerName)
+      companyName = subFormData.newPartnerName
+      partnerId = newPartner.id
+    } else if (subFormData.partnerId && subFormData.partnerId !== 'new') {
+      const existingPartner = teamingPartners.find(p => p.id === subFormData.partnerId)
+      if (existingPartner) {
+        companyName = existingPartner.companyName
+        partnerId = existingPartner.id
+      }
     }
+    
+ const billedRate = subFormData.theirRate * (1 + subFormData.markupPercent / 100)
+
+// Calculate legacy fte (average of enabled periods) for backward compatibility
+const enabledAllocations = Object.values(subFormData.allocations).filter(a => a.enabled)
+const legacyFte = enabledAllocations.length > 0
+  ? enabledAllocations.reduce((sum, a) => sum + a.fte, 0) / enabledAllocations.length
+  : 1
+
+// Build legacy years object for backward compatibility
+const legacyYears = {
+  base: subFormData.allocations.base?.enabled ?? false,
+  option1: subFormData.allocations.option1?.enabled ?? false,
+  option2: subFormData.allocations.option2?.enabled ?? false,
+  option3: subFormData.allocations.option3?.enabled ?? false,
+  option4: subFormData.allocations.option4?.enabled ?? false,
+}
+
+if (editingSub) {
+  updateSubcontractor(editingSub.id, {
+    companyName,
+    role: subFormData.role,
+    laborCategory: subFormData.laborCategory,
+    theirRate: subFormData.theirRate,
+    markupPercent: subFormData.markupPercent,
+    billedRate,
+    fte: legacyFte,
+    years: legacyYears,
+    allocations: subFormData.allocations,
+    partnerId,
+  })
+} else {
+  addSubcontractor({
+    id: `sub-${Date.now()}`,
+    companyName,
+    role: subFormData.role,
+    laborCategory: subFormData.laborCategory,
+    theirRate: subFormData.theirRate,
+    markupPercent: subFormData.markupPercent,
+    billedRate,
+    fte: legacyFte,
+    years: legacyYears,
+    allocations: subFormData.allocations,
+    partnerId,
+  })
+}
     setSubDialogOpen(false)
     setEditingSub(null)
   }
@@ -731,6 +887,200 @@ export function RolesAndPricingTab() {
 
   const toggleSubFormYear = (yearId: string) => {
     setSubFormData(prev => ({
+      ...prev,
+      years: prev.years.includes(yearId)
+        ? prev.years.filter(y => y !== yearId)
+        : [...prev.years, yearId]
+    }))
+  }
+
+  // ==================== ASSIGN ROLE TO SUB HANDLERS ====================
+
+  const handleAssignToSub = (role: Role) => {
+    setAssigningRole(role)
+    const defaultYears = contractYears.length > 0 
+      ? contractYears.map(y => y.id) 
+      : ['base', 'option1', 'option2']
+    setAssignSubFormData({
+      partnerId: '',
+      newPartnerName: '',
+      theirRate: 0,
+      markupPercent: 10,
+      quantity: role.quantity,
+      ftePerPerson: 1,
+      years: defaultYears,
+    })
+    setAssignSubDialogOpen(true)
+  }
+
+  const handleSaveAssignSub = () => {
+    if (!assigningRole) return
+    
+    // Get or create partner
+    let partnerName = ''
+    let partnerId = assignSubFormData.partnerId
+    
+    if (assignSubFormData.partnerId === 'new' && assignSubFormData.newPartnerName) {
+      const newPartner = getOrCreatePartnerByName(assignSubFormData.newPartnerName)
+      partnerName = assignSubFormData.newPartnerName
+      partnerId = newPartner.id
+    } else if (assignSubFormData.partnerId) {
+      const existingPartner = teamingPartners.find(p => p.id === assignSubFormData.partnerId)
+      partnerName = existingPartner?.companyName || ''
+    }
+    
+    if (!partnerName) return
+    
+    const billedRate = assignSubFormData.theirRate * (1 + assignSubFormData.markupPercent / 100)
+    const totalFte = assignSubFormData.quantity * assignSubFormData.ftePerPerson
+    
+    addSubcontractor({
+      id: `sub-${Date.now()}`,
+      companyName: partnerName,
+      role: assigningRole.name,
+      laborCategory: assigningRole.icLevel,
+      theirRate: assignSubFormData.theirRate,
+      markupPercent: assignSubFormData.markupPercent,
+      billedRate,
+      fte: totalFte,
+      years: yearsArrayToObject(assignSubFormData.years),
+      partnerId,
+    })
+    
+    setAssignSubDialogOpen(false)
+    setAssigningRole(null)
+  }
+
+  const toggleAssignSubYear = (yearId: string) => {
+    setAssignSubFormData(prev => ({
+      ...prev,
+      years: prev.years.includes(yearId)
+        ? prev.years.filter(y => y !== yearId)
+        : [...prev.years, yearId]
+    }))
+  }
+
+  const toggleSubYear = (subId: string, yearId: string) => {
+  const sub = subcontractors.find(s => s.id === subId)
+  if (!sub) return
+
+  if (sub.allocations) {
+    // New allocation structure
+    const currentAlloc = sub.allocations[yearId as keyof typeof sub.allocations]
+    const updatedAllocations = {
+      ...sub.allocations,
+      [yearId]: {
+        ...currentAlloc,
+        enabled: !currentAlloc.enabled,
+        // Keep existing FTE or default to 1 when enabling
+        fte: !currentAlloc.enabled ? (currentAlloc.fte || 1) : currentAlloc.fte
+      }
+    }
+    updateSubcontractor(subId, { allocations: updatedAllocations })
+  } else {
+    // Legacy: convert to new structure on first toggle
+    const currentYears = yearsObjectToArray(sub.years)
+    const newEnabled = !currentYears.includes(yearId)
+    
+    // Build allocations from legacy data
+    const allocations = {
+      base: { enabled: currentYears.includes('base'), fte: sub.fte },
+      option1: { enabled: currentYears.includes('option1'), fte: sub.fte },
+      option2: { enabled: currentYears.includes('option2'), fte: sub.fte },
+      option3: { enabled: currentYears.includes('option3'), fte: sub.fte },
+      option4: { enabled: currentYears.includes('option4'), fte: sub.fte },
+    }
+    
+    // Apply the toggle
+    allocations[yearId as keyof typeof allocations] = {
+      enabled: newEnabled,
+      fte: sub.fte
+    }
+    
+    updateSubcontractor(subId, { allocations })
+  }
+}
+
+  // ==================== MANUAL ADD ROLE HANDLERS ====================
+
+  const handleOpenAddRole = () => {
+    const defaultYears = contractYears.length > 0 
+      ? contractYears.map(y => y.id) 
+      : ['base', 'option1', 'option2']
+    setAddRoleDestination('prime')
+    setAddRoleFormData({
+      title: '',
+      icLevel: 'IC4',
+      quantity: 1,
+      storyPoints: 20,
+      ftePerPerson: 1,
+      baseSalary: 120000,
+      partnerId: '',
+      newPartnerName: '',
+      theirRate: 0,
+      markupPercent: 10,
+      years: defaultYears,
+    })
+    setAddRoleDialogOpen(true)
+  }
+
+  const handleSaveAddRole = () => {
+    if (!addRoleFormData.title) return
+    
+    const defaultYears = addRoleFormData.years.length > 0 ? addRoleFormData.years : contractYears.map(y => y.id)
+    
+    if (addRoleDestination === 'prime') {
+      // Add as prime labor
+      addRole({
+     id: `role-${Date.now()}`,
+      name: addRoleFormData.title,
+    description: '',
+   icLevel: addRoleFormData.icLevel,
+   baseSalary: addRoleFormData.baseSalary,
+  quantity: addRoleFormData.quantity,
+  fte: addRoleFormData.ftePerPerson,
+  storyPoints: addRoleFormData.storyPoints,
+  years: yearsArrayToObject(defaultYears),
+  billableHours: billableHours,
+})
+    } else {
+      // Add as subcontractor
+      let partnerName = ''
+      let partnerId = addRoleFormData.partnerId
+      
+      if (addRoleFormData.partnerId === 'new' && addRoleFormData.newPartnerName) {
+        const newPartner = getOrCreatePartnerByName(addRoleFormData.newPartnerName)
+        partnerName = addRoleFormData.newPartnerName
+        partnerId = newPartner.id
+      } else if (addRoleFormData.partnerId) {
+        const existingPartner = teamingPartners.find(p => p.id === addRoleFormData.partnerId)
+        partnerName = existingPartner?.companyName || ''
+      }
+      
+      if (!partnerName) return
+      
+      const billedRate = addRoleFormData.theirRate * (1 + addRoleFormData.markupPercent / 100)
+      const totalFte = addRoleFormData.quantity * addRoleFormData.ftePerPerson
+      
+      addSubcontractor({
+        id: `sub-${Date.now()}`,
+        companyName: partnerName,
+        role: addRoleFormData.title,
+        laborCategory: addRoleFormData.icLevel,
+        theirRate: addRoleFormData.theirRate,
+        markupPercent: addRoleFormData.markupPercent,
+        billedRate,
+        fte: totalFte,
+        years: yearsArrayToObject(defaultYears),
+        partnerId,
+      })
+    }
+    
+    setAddRoleDialogOpen(false)
+  }
+
+  const toggleAddRoleYear = (yearId: string) => {
+    setAddRoleFormData(prev => ({
       ...prev,
       years: prev.years.includes(yearId)
         ? prev.years.filter(y => y !== yearId)
@@ -749,8 +1099,8 @@ export function RolesAndPricingTab() {
     }).format(amount)
   }
 
-  const totalStoryPoints = mockRecommendedRoles.reduce((sum, r) => sum + r.storyPoints, 0)
-  const totalRecommendedFTE = mockRecommendedRoles.reduce((sum, r) => sum + r.quantity, 0)
+  const totalStoryPoints = recommendedRoles.reduce((sum, r) => sum + r.storyPoints, 0)
+  const totalRecommendedFTE = recommendedRoles.reduce((sum, r) => sum + r.quantity, 0)
   const contractType = solicitation?.contractType || 'T&M'
 
   // ==================== RENDER ====================
@@ -766,9 +1116,46 @@ export function RolesAndPricingTab() {
           </div>
           
           <div className="flex items-center gap-4">
+        {/* Billable Hours */}
+<div className="flex items-center gap-2">
+  <div className="flex items-center gap-1">
+    <Label htmlFor="billableHours" className="text-sm text-gray-600">Hours/Yr</Label>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" aria-label="Learn more about billable hours">
+          <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        <p className="text-xs">Standard billable hours per FTE per year. FTE is multiplied by this number to calculate total hours.</p>
+      </TooltipContent>
+    </Tooltip>
+  </div>
+  <div className="flex items-center">
+    <Input
+      id="billableHours"
+      type="number"
+      value={billableHours}
+      onChange={(e) => setBillableHours(Number(e.target.value))}
+      className="w-20 h-8 text-sm"
+    />
+  </div>
+</div>
             {/* Profit Margin */}
             <div className="flex items-center gap-2">
-              <Label htmlFor="profit" className="text-sm text-gray-600">Profit</Label>
+              <div className="flex items-center gap-1">
+                <Label htmlFor="profit" className="text-sm text-gray-600">Profit</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="Learn more about profit margin">
+                      <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-xs">Applied to your fully-loaded labor rate (after fringe, overhead, and G&A) to calculate your fee on prime labor</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <div className="flex items-center">
                 <Input
                   id="profit"
@@ -807,7 +1194,7 @@ export function RolesAndPricingTab() {
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="text-xs">Annual escalation for prime labor rates</p>
+                      <p className="text-xs">Annual escalation for all labor costs</p>
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
@@ -844,12 +1231,18 @@ export function RolesAndPricingTab() {
           {/* Column 1: Recommended Roles */}
           <div className="border border-gray-100 rounded-lg p-4 bg-white">
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-gray-400" />
-                  <h2 className="font-medium text-gray-900">Recommended Roles</h2>
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-gray-400" />
+                    <h2 className="font-medium text-gray-900">Recommended Roles</h2>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={handleOpenAddRole} className="h-7 text-xs">
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Add Role
+                  </Button>
                 </div>
-                <span className="text-xs text-gray-500">AI-generated</span>
+                <p className="text-xs text-gray-500 mt-1 ml-6">Assign to Prime or Subcontractor</p>
               </div>
 
               <div className="flex items-center gap-4 text-sm">
@@ -866,58 +1259,86 @@ export function RolesAndPricingTab() {
               </div>
 
               <div className="space-y-2">
-                {mockRecommendedRoles.map((role) => {
-                  const added = isRoleAdded(role.title)
-                  return (
-                    <div
-                      key={role.id}
-                      className={`border rounded-lg p-3 transition-all ${
-                        added ? 'border-gray-100 bg-gray-50' : 'border-gray-100 bg-white hover:border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm text-gray-900">{role.title}</span>
-                            {role.isKey && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-0">
-                                Key
-                              </Badge>
-                            )}
+                {recommendedRoles.length === 0 ? (
+                  <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center">
+                    <Sparkles className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">No roles extracted yet</p>
+                    <p className="text-xs text-gray-500 mt-1">Upload an RFP to get AI recommendations</p>
+                  </div>
+                ) : (
+                  recommendedRoles.map((role) => {
+                    const assignment = getRoleAssignment(role.name)
+                    const priority = getPriorityFromConfidence(role.confidence)
+                    return (
+                      <div
+                        key={role.id}
+                        className={`border rounded-lg p-3 transition-all ${
+                          assignment ? 'border-gray-100 bg-gray-50' : 'border-gray-100 bg-white hover:border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm text-gray-900">{role.name}</span>
+                              {role.isKeyPersonnel && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-0">
+                                  Key
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>
                           </div>
-                          <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-3 text-xs text-gray-600 mb-3">
-                        <span>IC: <span className="font-medium text-gray-900">{role.icLevel}</span></span>
-                        <span>Qty: <span className="font-medium text-gray-900">{role.quantity}</span></span>
-                        <Badge 
-                          variant="outline" 
-                          className={`text-[10px] px-1.5 py-0 h-4 ${
-                            role.priority === 'high' ? 'bg-red-50 text-red-700 border-red-200' 
-                            : role.priority === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                            : 'bg-gray-50 text-gray-600 border-gray-200'
-                          }`}
-                        >
-                          {role.priority}
-                        </Badge>
-                        <span className="text-gray-400">{role.storyPoints} SP</span>
-                      </div>
-
-                      {added ? (
-                        <div className="flex items-center justify-center gap-2 py-1.5 text-sm text-gray-500 bg-gray-100 rounded-md">
-                          <Check className="w-4 h-4" />
-                          Added
+                        <div className="flex items-center gap-3 text-xs text-gray-600 mb-3">
+                          <span>IC: <span className="font-medium text-gray-900">{role.icLevel}</span></span>
+                          <span>Qty: <span className="font-medium text-gray-900">{role.quantity}</span></span>
+                          <Badge 
+                            variant="outline" 
+                            className={`text-[10px] px-1.5 py-0 h-4 ${
+                              priority === 'high' ? 'bg-red-50 text-red-700 border-red-200' 
+                              : priority === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                              : 'bg-gray-50 text-gray-600 border-gray-200'
+                            }`}
+                          >
+                            {priority}
+                          </Badge>
+                          <span className="text-gray-500">{role.storyPoints} SP</span>
                         </div>
-                      ) : (
-                        <Button onClick={() => handleAddToTeam(role)} className="w-full h-8 text-sm">
-                          Add to Team
-                        </Button>
-                      )}
-                    </div>
-                  )
-                })}
+
+                        {assignment ? (
+                          <div className={`flex items-center justify-center gap-2 py-1.5 text-sm rounded-md ${
+                            assignment === 'prime' 
+                              ? 'text-blue-600 bg-blue-50' 
+                              : 'text-orange-600 bg-orange-50'
+                          }`}>
+                            <Check className="w-4 h-4" />
+                            {assignment === 'prime' ? 'Added to Prime' : 'Assigned to Sub'}
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Button 
+                              onClick={() => handleAddToTeam(role)} 
+                              variant="outline"
+                              className="flex-1 h-8 text-sm border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-300"
+                            >
+                              <Building2 className="w-3.5 h-3.5 mr-1.5" />
+                              Prime
+                            </Button>
+                            <Button 
+                              onClick={() => handleAssignToSub(role)} 
+                              variant="outline"
+                              className="flex-1 h-8 text-sm border-orange-200 text-orange-700 hover:bg-orange-50 hover:border-orange-300"
+                            >
+                              <Users className="w-3.5 h-3.5 mr-1.5" />
+                              Sub
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
               </div>
             </div>
           </div>
@@ -931,100 +1352,286 @@ export function RolesAndPricingTab() {
               </div>
 
               <div className="text-sm text-gray-500">
-                {calculations.totalFTE.toFixed(2)} FTE · {calculations.roleCount} roles
+                {(calculations.totalFTE + subcontractors.reduce((sum, s) => sum + s.fte, 0)).toFixed(2)} FTE · {calculations.roleCount + subcontractors.length} roles
               </div>
 
-              {teamRoles.length === 0 ? (
-                <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center">
-                  <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No roles added yet</p>
-                  <p className="text-xs text-gray-400 mt-1">Add roles from recommendations</p>
+              {/* Prime/Sub Split - FAR 52.219-14 Compliance */}
+              {(calculations.laborTotal > 0 || calculations.subsTotal > 0) && (
+                <div className="space-y-1.5">
+                  {(() => {
+                    const totalLaborCost = calculations.laborTotal + calculations.subsTotal
+                    const primePercent = totalLaborCost > 0 ? (calculations.laborTotal / totalLaborCost) * 100 : 0
+                    const subPercent = 100 - primePercent
+                    const isCompliant = primePercent >= 50
+                    
+                    return (
+                      <>
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-600">Prime: <span className="font-medium">{primePercent.toFixed(0)}%</span></span>
+                            <span className="text-gray-400">·</span>
+                            <span className="text-gray-600">Sub: <span className="font-medium">{subPercent.toFixed(0)}%</span></span>
+                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                isCompliant 
+                                  ? 'bg-green-50 text-green-700' 
+                                  : 'bg-red-50 text-red-700'
+                              }`}>
+                                {isCompliant ? (
+                                  <><Check className="w-3 h-3" /> Compliant</>
+                                ) : (
+                                  <><AlertTriangle className="w-3 h-3" /> Under 50%</>
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p className="text-xs font-medium mb-1">FAR 52.219-14: Limitations on Subcontracting</p>
+                              <p className="text-xs">For small business set-asides, the prime contractor must perform at least 50% of the cost of contract performance.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all ${isCompliant ? 'bg-blue-500' : 'bg-red-400'}`}
+                            style={{ width: `${primePercent}%` }}
+                          />
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {teamRoles.map((role) => (
-                    <div
-                      key={role.id}
-                      className="group border border-gray-100 rounded-lg p-3 bg-gray-50 hover:border-gray-200 transition-all"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <span className="font-medium text-sm text-gray-900">{role.title}</span>
-                          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{role.icLevel}</Badge>
-                            <span>×{role.quantity}</span>
-                            <span>·</span>
-                            <span>{role.ftePerPerson} FTE</span>
-                            <span>·</span>
-                            <span>{role.hoursPerYear.toLocaleString()} hrs</span>
-                            <span>·</span>
-                            <span className="font-medium text-gray-700">{formatCurrency(role.hourlyRate)}/hr</span>
+              )}
+
+              {/* Prime Labor Section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-4 bg-blue-500 rounded-full" />
+                    <span className="text-xs font-medium text-gray-700 uppercase tracking-wide">Prime Labor</span>
+                  </div>
+                  <span className="text-xs text-gray-500">{calculations.totalFTE.toFixed(2)} FTE</span>
+                </div>
+
+                {teamRoles.length === 0 ? (
+                  <div className="border border-dashed border-gray-200 rounded-lg p-6 text-center">
+                    <Users className="w-6 h-6 text-gray-300 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">No prime roles added yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {teamRoles.map((role) => (
+                      <div
+                        key={role.id}
+                        className="group border border-blue-100 rounded-lg p-3 bg-blue-50/50 hover:border-blue-200 transition-all"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <span className="font-medium text-sm text-gray-900">{role.title}</span>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{role.icLevel}</Badge>
+                              <span>×{role.quantity}</span>
+                              <span>·</span>
+                              <span>{role.ftePerPerson} FTE</span>
+                              <span>·</span>
+                              <span className="font-medium text-gray-700">{formatCurrency(role.hourlyRate)}/hr</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditRole(role)}
+                                  aria-label={`Edit ${role.title}`}
+                                  className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p className="text-xs">Edit this role's details</p></TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedRoleForBreakdown(role)}
+                                  aria-label={`View rate breakdown for ${role.title}`}
+                                  className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                >
+                                  <Calculator className="w-3.5 h-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p className="text-xs">See how this rate is calculated</p></TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveFromTeam(role.id)}
+                                  aria-label={`Remove ${role.title} from team`}
+                                  className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p className="text-xs">Remove this role from your team</p></TooltipContent>
+                            </Tooltip>
                           </div>
                         </div>
-                        
-                        <div className="flex gap-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditRole(role)}
-                                className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+
+                        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Select active years">
+                          {contractYears.map((year) => {
+                            const isActive = role.years.includes(year.id)
+                            return (
+                              <button
+                                key={year.id}
+                                onClick={() => toggleRoleYear(role.id, year.id)}
+                                aria-pressed={isActive}
+                                className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
+                                  isActive ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                }`}
                               >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p className="text-xs">Edit role</p></TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setSelectedRoleForBreakdown(role)}
-                                className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                              >
-                                <Calculator className="w-3.5 h-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p className="text-xs">View rate breakdown</p></TooltipContent>
-                          </Tooltip>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveFromTeam(role.id)}
-                            className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                                {year.label}
+                              </button>
+                            )
+                          })}
                         </div>
                       </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-                      <div className="flex flex-wrap gap-1.5">
+              {/* Subcontractors Section */}
+              <div className="space-y-2 pt-3 border-t border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-4 bg-orange-500 rounded-full" />
+                    <span className="text-xs font-medium text-gray-700 uppercase tracking-wide">Subcontractors</span>
+                  </div>
+                  <span className="text-xs text-gray-500">{subcontractors.reduce((sum, s) => sum + s.fte, 0).toFixed(2)} FTE</span>
+                </div>
+
+                {subcontractors.length === 0 ? (
+                  <div className="border border-dashed border-gray-200 rounded-lg p-6 text-center">
+                    <Building2 className="w-6 h-6 text-gray-300 mx-auto mb-2" />
+                    <p className="text-xs text-gray-600 mb-1">No subcontractors assigned</p>
+                    <p className="text-xs text-gray-500">Use "Sub" on a role to assign it</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {subcontractors.map((sub) => {
+  // Support both new allocations and legacy years
+  const getAllocation = (yearId: string) => {
+    if (sub.allocations) {
+      return sub.allocations[yearId as keyof typeof sub.allocations]
+    }
+    // Legacy fallback
+    const subYears = yearsObjectToArray(sub.years)
+    return { enabled: subYears.includes(yearId), fte: sub.fte }
+  }
+  
+  const totalFte = sub.allocations
+    ? Object.values(sub.allocations).reduce((sum, a) => sum + (a.enabled ? a.fte : 0), 0)
+    : sub.fte * yearsObjectToArray(sub.years).length
+  
+  const avgFtePerYear = sub.allocations
+    ? totalFte / Math.max(Object.values(sub.allocations).filter(a => a.enabled).length, 1)
+    : sub.fte
+
+  return (
+    <div
+      key={sub.id}
+      className="group border border-orange-100 rounded-lg p-3 bg-orange-50/50 hover:border-orange-200 transition-all"
+    >
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm text-gray-900">{sub.role}</span>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-orange-100 text-orange-700 border-orange-200">
+              Sub
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+            <span className="text-orange-700">{sub.companyName}</span>
+            <span>·</span>
+            <span>{avgFtePerYear.toFixed(2)} FTE</span>
+            <span>·</span>
+            <span className="font-medium text-gray-700">${sub.billedRate.toFixed(2)}/hr</span>
+            <span className="text-green-600">(+{sub.markupPercent}%)</span>
+          </div>
+        </div>
+        
+        <div className="flex gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleEditSub(sub)}
+                aria-label={`Edit ${sub.companyName} - ${sub.role}`}
+                className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent><p className="text-xs">Edit this subcontractor's details</p></TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDeleteSub(sub.id)}
+                aria-label={`Remove ${sub.companyName} - ${sub.role}`}
+                className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent><p className="text-xs">Remove this subcontractor</p></TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* Clickable Year Toggles with FTE display */}
+                      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Select active years and FTE">
                         {contractYears.map((year) => {
-                          const isActive = role.years.includes(year.id)
+                          const allocation = getAllocation(year.id)
+                          const isActive = allocation?.enabled ?? false
+                          const fte = allocation?.fte ?? 0
+                          
                           return (
                             <button
                               key={year.id}
-                              onClick={() => toggleRoleYear(role.id, year.id)}
-                              className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
-                                isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                              onClick={() => toggleSubYear(sub.id, year.id)}
+                              aria-pressed={isActive}
+                              className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 ${
+                                isActive ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                               }`}
                             >
-                              {year.label}
+                              {year.label}{isActive && fte ? ` · ${fte}` : ''}
                             </button>
                           )
                         })}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
+        </div>
+      </div>
 
-          {/* Column 3: Contract Value */}
-          <div className="border border-gray-100 rounded-lg p-4 bg-white">
+      {/* Column 3: Contract Value */}
+      <div className="border border-gray-100 rounded-lg p-4 bg-white">
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-gray-400" />
@@ -1049,7 +1656,7 @@ export function RolesAndPricingTab() {
                         <span className="text-sm text-gray-600">
                           {year.id === 'base' ? 'Base Year' : `Option Year ${year.id.replace('option', '')}`}:
                         </span>
-                        {laborEsc && <span className="text-xs text-gray-400">({laborEsc})</span>}
+                        {laborEsc && <span className="text-xs text-gray-500">({laborEsc})</span>}
                       </div>
                       <span className="font-medium text-gray-900">{formatCurrency(yearData.total)}</span>
                     </div>
@@ -1067,83 +1674,155 @@ export function RolesAndPricingTab() {
               <div className="border-t border-gray-100 pt-3">
                 <button
                   onClick={() => setShowSubsExpanded(!showSubsExpanded)}
-                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
+                  aria-expanded={showSubsExpanded}
+                  aria-controls="subs-expanded-content"
+                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
                 >
                   <div className="flex items-center gap-2">
-                    <Building2 className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-sm text-gray-600">+ Subcontractors</span>
+                    <Building2 className="w-3.5 h-3.5 text-gray-500" />
+                    <span className="text-sm text-gray-700">+ Subcontractors</span>
+                    {groupedSubcontractors.length > 0 && (
+                      <span className="text-xs text-gray-400">
+                        ({groupedSubcontractors.length} partner{groupedSubcontractors.length !== 1 ? 's' : ''})
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-900">{formatCurrency(calculations.subsTotal)}</span>
-                    {showSubsExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                    {showSubsExpanded ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                   </div>
                 </button>
                 
                 {showSubsExpanded && (
-                  <div className="mt-2 ml-5 space-y-2">
-                    {subcontractors.map((sub) => (
-                      <div key={sub.id} className="group text-xs">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-700 font-medium">{sub.companyName}</span>
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">+{sub.markupPercent}%</Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-900 font-medium">{formatCurrency(sub.billedRate * sub.fte * 1920)}/yr</span>
-                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="ghost" size="sm" onClick={() => handleEditSub(sub)} className="h-5 w-5 p-0 text-gray-400 hover:text-blue-600">
-                                <Pencil className="w-3 h-3" />
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDeleteSub(sub.id)} className="h-5 w-5 p-0 text-gray-400 hover:text-red-600">
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
+                  <div id="subs-expanded-content" className="mt-2 ml-5 space-y-2">
+                   {groupedSubcontractors.map((group) => {
+                      const isExpanded = expandedPartnerGroups[group.partnerId || group.companyName]
+                      return (
+                        <div key={group.partnerId || group.companyName} className="text-xs">
+                          {/* Partner Header - Clickable to expand */}
+                          <button
+                            onClick={() => togglePartnerGroup(group.partnerId || group.companyName)}
+                            className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-700 font-medium">{group.companyName}</span>
+                              <span className="text-gray-400">
+                                ({group.roles.length} role{group.roles.length !== 1 ? 's' : ''})
+                              </span>
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
+                                +{Math.round(group.avgMarkup)}%
+                              </Badge>
                             </div>
-                          </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-900 font-medium">{formatCurrency(group.totalAnnual)}/yr</span>
+                              {isExpanded ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+                            </div>
+                          </button>
+                          
+                          {/* Expanded Role Details */}
+                          {isExpanded && (
+                            <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-100 pl-3">
+                              {group.roles.map((sub) => {
+                                const effectiveFte = sub.allocations
+                                  ? (() => {
+                                      const enabled = Object.values(sub.allocations).filter(a => a.enabled)
+                                      return enabled.length > 0 
+                                        ? enabled.reduce((sum, a) => sum + a.fte, 0) / enabled.length 
+                                        : 0
+                                    })()
+                                  : sub.fte
+                                
+                                return (
+                                  <div key={sub.id} className="group flex items-center justify-between py-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-600">{sub.role}</span>
+                                      <span className="text-gray-400">
+                                        {effectiveFte.toFixed(2)} FTE · ${sub.theirRate.toFixed(0)}/hr
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-700">{formatCurrency(sub.billedRate * effectiveFte *  billableHours)}/yr</span>
+                                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          onClick={() => handleEditSub(sub)} 
+                                          aria-label={`Edit ${sub.role}`}
+                                          className="h-5 w-5 p-0 text-gray-500 hover:text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                        >
+                                          <Pencil className="w-3 h-3" />
+                                        </Button>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          onClick={() => handleDeleteSub(sub.id)} 
+                                          aria-label={`Remove ${sub.role}`}
+                                          className="h-5 w-5 p-0 text-gray-500 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-gray-500 mt-0.5">{sub.role} · {sub.fte} FTE · {formatCurrency(sub.theirRate)}/hr</div>
-                      </div>
-                    ))}
-                    <button onClick={handleAddSub} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 mt-2">
-                      <Plus className="w-3 h-3" />
-                      Add Subcontractor
-                    </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>
+                 
 
               {/* ODCs - Collapsible */}
               <div className="border-t border-gray-100 pt-3">
                 <button
                   onClick={() => setShowOdcExpanded(!showOdcExpanded)}
-                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
+                  aria-expanded={showOdcExpanded}
+                  aria-controls="odcs-expanded-content"
+                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
                 >
                   <div className="flex items-center gap-2">
-                    <Package className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-sm text-gray-600">+ ODCs</span>
+                    <Package className="w-3.5 h-3.5 text-gray-500" />
+                    <span className="text-sm text-gray-700">+ ODCs</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-900">{formatCurrency(calculations.odcsTotal)}</span>
-                    {showOdcExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                    {showOdcExpanded ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                   </div>
                 </button>
                 
                 {showOdcExpanded && (
-                  <div className="mt-2 ml-5 space-y-1.5">
+                  <div id="odcs-expanded-content" className="mt-2 ml-5 space-y-1.5">
                     {odcs.map((odc) => (
                       <div key={odc.id} className="group flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
-                          <span className="text-gray-500">{odc.description}</span>
+                          <span className="text-gray-600">{odc.description}</span>
                           <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">{odcCategoryLabels[odc.category]}</Badge>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-gray-700">
                             {odc.quantity > 1 ? `${odc.quantity} × ` : ''}{formatCurrency(odc.unitCost)}/yr
                           </span>
-                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="sm" onClick={() => handleEditOdc(odc)} className="h-5 w-5 p-0 text-gray-400 hover:text-blue-600">
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleEditOdc(odc)} 
+                              aria-label={`Edit ${odc.description}`}
+                              className="h-5 w-5 p-0 text-gray-500 hover:text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                            >
                               <Pencil className="w-3 h-3" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteOdc(odc.id)} className="h-5 w-5 p-0 text-gray-400 hover:text-red-600">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleDeleteOdc(odc.id)} 
+                              aria-label={`Remove ${odc.description}`}
+                              className="h-5 w-5 p-0 text-gray-500 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                            >
                               <Trash2 className="w-3 h-3" />
                             </Button>
                           </div>
@@ -1162,37 +1841,51 @@ export function RolesAndPricingTab() {
               <div className="border-t border-gray-100 pt-3">
                 <button
                   onClick={() => setShowTravelExpanded(!showTravelExpanded)}
-                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
+                  aria-expanded={showTravelExpanded}
+                  aria-controls="travel-expanded-content"
+                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
                 >
                   <div className="flex items-center gap-2">
-                    <Plane className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-sm text-gray-600">+ Travel</span>
+                    <Plane className="w-3.5 h-3.5 text-gray-500" />
+                    <span className="text-sm text-gray-700">+ Travel</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-900">{formatCurrency(calculations.travelTotal)}</span>
-                    {showTravelExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                    {showTravelExpanded ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                   </div>
                 </button>
                 
                 {showTravelExpanded && (
-                  <div className="mt-2 ml-5 space-y-2">
+                  <div id="travel-expanded-content" className="mt-2 ml-5 space-y-2">
                     {perDiem.map((pd) => (
                       <div key={pd.id} className="group text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-gray-700 font-medium">{pd.location}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-gray-900 font-medium">{formatCurrency(pd.totalCost)}/yr</span>
-                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="ghost" size="sm" onClick={() => handleEditTravel(pd)} className="h-5 w-5 p-0 text-gray-400 hover:text-blue-600">
+                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => handleEditTravel(pd)} 
+                                aria-label={`Edit travel to ${pd.location}`}
+                                className="h-5 w-5 p-0 text-gray-500 hover:text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                              >
                                 <Pencil className="w-3 h-3" />
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDeleteTravel(pd.id)} className="h-5 w-5 p-0 text-gray-400 hover:text-red-600">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => handleDeleteTravel(pd.id)} 
+                                aria-label={`Remove travel to ${pd.location}`}
+                                className="h-5 w-5 p-0 text-gray-500 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                              >
                                 <Trash2 className="w-3 h-3" />
                               </Button>
                             </div>
                           </div>
                         </div>
-                        <div className="text-gray-500 mt-0.5">
+                        <div className="text-sm text-gray-600 mt-0.5">
                           {pd.numberOfPeople} people × {pd.numberOfDays} days × {formatCurrency(pd.ratePerDay)}/day
                         </div>
                       </div>
@@ -1211,7 +1904,7 @@ export function RolesAndPricingTab() {
                   <span className="text-sm font-medium text-gray-600">Total Contract:</span>
                   <span className="text-2xl font-semibold text-green-600">{formatCurrency(calculations.totalContract)}</span>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Labor + Subs + ODCs + Travel (with escalation)</p>
+                <p className="text-xs text-gray-500 mt-1">Labor + Subs + ODCs + Travel (with escalation)</p>
               </div>
 
               {/* Summary */}
@@ -1326,26 +2019,6 @@ export function RolesAndPricingTab() {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center gap-1">
-                  <Label htmlFor="role-hours">Billable Hours Per Year</Label>
-                  <Tooltip>
-                    <TooltipTrigger><HelpCircle className="w-3.5 h-3.5 text-gray-400" /></TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <p className="text-xs">Standard full-time is 1,920 (2,080 minus holidays/PTO). Adjust for partial allocations.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Input
-                  id="role-hours"
-                  type="number"
-                  min={0}
-                  max={2080}
-                  value={roleFormData.hoursPerYear}
-                  onChange={(e) => setRoleFormData(prev => ({ ...prev, hoursPerYear: Number(e.target.value) }))}
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label>Year Allocations</Label>
                 <div className="flex flex-wrap gap-2">
                   {contractYears.map((year) => {
@@ -1443,27 +2116,26 @@ export function RolesAndPricingTab() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>Applicable Years</Label>
-                <div className="flex flex-wrap gap-2">
-                  {contractYears.map((year) => {
-                    const isActive = odcFormData.years.includes(year.id)
-                    return (
-                      <button
-                        key={year.id}
-                        type="button"
-                        onClick={() => toggleOdcFormYear(year.id)}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                          isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}
-                      >
-                        {year.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
+  <div className="space-y-2">
+  <Label>Applicable Years</Label>
+  <div className="flex flex-wrap gap-2">
+    {contractYears.map((year) => {
+      const isActive = odcFormData.years.includes(year.id)
+      return (
+        <button
+          key={year.id}
+          type="button"
+          onClick={() => toggleOdcFormYear(year.id)}
+          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+            isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+          }`}
+        >
+          {year.label}
+        </button>
+      )
+    })}
+  </div>
+</div>
               {odcFormData.unitCost > 0 && odcFormData.years.length > 0 && (
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <div className="flex justify-between items-center text-sm">
@@ -1473,7 +2145,6 @@ export function RolesAndPricingTab() {
                 </div>
               )}
             </div>
-
             <DialogFooter>
               <Button variant="outline" onClick={() => setOdcDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleSaveOdc} disabled={!odcFormData.description || odcFormData.unitCost <= 0}>
@@ -1535,28 +2206,6 @@ export function RolesAndPricingTab() {
                   />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label>Applicable Years</Label>
-                <div className="flex flex-wrap gap-2">
-                  {contractYears.map((year) => {
-                    const isActive = travelFormData.years.includes(year.id)
-                    return (
-                      <button
-                        key={year.id}
-                        type="button"
-                        onClick={() => toggleTravelFormYear(year.id)}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                          isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}
-                      >
-                        {year.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
               {travelFormData.ratePerDay > 0 && travelFormData.years.length > 0 && (
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <div className="flex justify-between items-center text-sm">
@@ -1589,15 +2238,69 @@ export function RolesAndPricingTab() {
             </DialogHeader>
 
             <div className="space-y-4 py-4">
+              {/* Partner Selection */}
               <div className="space-y-2">
-                <Label htmlFor="sub-company">Company Name <span className="text-red-500">*</span></Label>
-                <Input
-                  id="sub-company"
-                  placeholder="e.g., TechPartners LLC"
-                  value={subFormData.companyName}
-                  onChange={(e) => setSubFormData(prev => ({ ...prev, companyName: e.target.value }))}
-                />
+                <Label>Teaming Partner <span className="text-red-500">*</span></Label>
+                <Select 
+                  value={subFormData.partnerId} 
+                  onValueChange={(v) => {
+                    if (v === 'new') {
+                      setSubFormData(prev => ({ ...prev, partnerId: v, newPartnerName: '', companyName: '' }))
+                    } else {
+                      const partner = teamingPartners.find(p => p.id === v)
+                      setSubFormData(prev => ({ 
+                        ...prev, 
+                        partnerId: v, 
+                        companyName: partner?.companyName || '',
+                        newPartnerName: '' 
+                      }))
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a teaming partner..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">
+                      <span className="flex items-center gap-2">
+                        <Plus className="w-3.5 h-3.5" />
+                        Add New Partner
+                      </span>
+                    </SelectItem>
+                    {teamingPartners.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-medium text-gray-500 border-t">
+                          Existing Partners
+                        </div>
+                        {teamingPartners.map(partner => (
+                          <SelectItem key={partner.id} value={partner.id}>
+                            <span className="flex items-center gap-2">
+                              {partner.companyName}
+                              {partner.businessSize === 'small' && (
+                                <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">SB</Badge>
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
+
+              {/* New Partner Name (if adding new) */}
+              {subFormData.partnerId === 'new' && (
+                <div className="space-y-2">
+                  <Label htmlFor="sub-new-partner">Company Name <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="sub-new-partner"
+                    placeholder="e.g., TechPartners LLC"
+                    value={subFormData.newPartnerName}
+                    onChange={(e) => setSubFormData(prev => ({ ...prev, newPartnerName: e.target.value, companyName: e.target.value }))}
+                  />
+                  <p className="text-xs text-gray-500">This will create a new teaming partner</p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="sub-role">Role <span className="text-red-500">*</span></Label>
@@ -1618,56 +2321,570 @@ export function RolesAndPricingTab() {
                   onChange={(e) => setSubFormData(prev => ({ ...prev, laborCategory: e.target.value }))}
                 />
               </div>
+             <div className="grid grid-cols-2 gap-4">
+  <div className="space-y-2">
+    <Label htmlFor="sub-rate">Their Rate/hr <span className="text-red-500">*</span></Label>
+    <Input
+      id="sub-rate"
+      type="number"
+      min={0}
+      placeholder="0.00"
+      value={subFormData.theirRate || ''}
+      onChange={(e) => setSubFormData(prev => ({ ...prev, theirRate: Number(e.target.value) }))}
+    />
+  </div>
+  <div className="space-y-2">
+    <Label htmlFor="sub-markup">Markup %</Label>
+    <Input
+      id="sub-markup"
+      type="number"
+      min={0}
+      max={100}
+      value={subFormData.markupPercent}
+      onChange={(e) => setSubFormData(prev => ({ ...prev, markupPercent: Number(e.target.value) }))}
+    />
+  </div>
+</div>
+
+<div className="space-y-3">
+  <Label>Year Allocations</Label>
+  <div className="space-y-2">
+    {contractYears.map((year) => {
+      const allocation = subFormData.allocations[year.id] || { enabled: false, fte: 1 }
+      return (
+        <div key={year.id} className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              setSubFormData(prev => ({
+                ...prev,
+                allocations: {
+                  ...prev.allocations,
+                  [year.id]: {
+                    ...allocation,
+                    enabled: !allocation.enabled,
+                    fte: !allocation.enabled ? (allocation.fte || 1) : allocation.fte
+                  }
+                }
+              }))
+            }}
+            className={`w-16 px-2 py-1.5 text-sm font-medium rounded-md transition-all ${
+              allocation.enabled ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+          >
+            {year.label}
+          </button>
+        
+            <div className="flex items-center gap-2">
+              <Label htmlFor={`sub-fte-${year.id}`} className="text-xs text-gray-500">FTE:</Label>
+              <Input
+                id={`sub-fte-${year.id}`}
+                type="number"
+                min={0.25}
+                max={10}
+                step={0.25}
+                value={allocation.fte}
+                onChange={(e) => {
+                  setSubFormData(prev => ({
+                    ...prev,
+                    allocations: {
+                      ...prev.allocations,
+                      [year.id]: {
+                        ...allocation,
+                        fte: Number(e.target.value)
+                      }
+                    }
+                  }))
+                }}
+                className="w-20 h-8 text-sm"
+              />
+              <span className="text-xs text-gray-400">({(allocation.fte *  billableHours).toLocaleString()} hrs)</span>
+            </div>
+        </div>
+      )
+    })}
+  </div>
+</div>
+        
+             {subFormData.theirRate > 0 && Object.values(subFormData.allocations).some(a => a.enabled) && (
+  <div className="p-3 bg-gray-50 rounded-lg space-y-2">
+    <div className="flex justify-between text-sm">
+      <span className="text-gray-600">Their Rate:</span>
+      <span className="text-gray-900">{formatCurrency(subFormData.theirRate)}/hr</span>
+    </div>
+    <div className="flex justify-between text-sm">
+      <span className="text-gray-600">Billed Rate (+{subFormData.markupPercent}%):</span>
+      <span className="text-gray-900">{formatCurrency(subFormData.theirRate * (1 + subFormData.markupPercent / 100))}/hr</span>
+    </div>
+    <div className="border-t border-gray-200 pt-2 mt-2 space-y-1">
+      <p className="text-xs font-medium text-gray-500 uppercase">Annual Cost by Period (1,920 hrs)</p>
+      {contractYears.map(year => {
+        const allocation = subFormData.allocations[year.id]
+        if (!allocation?.enabled) return null
+        const theirCost = subFormData.theirRate * allocation.fte *  billableHours
+        const billedCost = subFormData.theirRate * (1 + subFormData.markupPercent / 100) * allocation.fte *  billableHours
+        return (
+          <div key={year.id} className="flex justify-between text-xs">
+            <span className="text-gray-600">{year.label} ({allocation.fte} FTE):</span>
+            <div className="text-right">
+              <span className="text-gray-500">{formatCurrency(theirCost)}</span>
+              <span className="text-gray-400 mx-1">→</span>
+              <span className="font-medium text-gray-900">{formatCurrency(billedCost)}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  </div>
+)}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSubDialogOpen(false)}>Cancel</Button>
+              <Button 
+                onClick={handleSaveSub} 
+                disabled={
+                  !subFormData.role || 
+                  subFormData.theirRate <= 0 ||
+                  (!subFormData.partnerId || (subFormData.partnerId === 'new' && !subFormData.newPartnerName))
+                }
+              >
+                {editingSub ? <><CheckCircle2 className="w-4 h-4 mr-2" />Save Changes</> : <><Plus className="w-4 h-4 mr-2" />Add Sub</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Assign Role to Subcontractor Dialog */}
+        <Dialog open={assignSubDialogOpen} onOpenChange={setAssignSubDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Assign Role to Subcontractor</DialogTitle>
+              <DialogDescription>
+                Select a teaming partner to fill this role
+              </DialogDescription>
+            </DialogHeader>
+
+            {assigningRole && (
+              <div className="space-y-4 py-4">
+                {/* Role Summary */}
+                <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-sm text-gray-900">{assigningRole.name}</span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{assigningRole.icLevel}</Badge>
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    {assigningRole.quantity} position{assigningRole.quantity !== 1 ? 's' : ''} · {assigningRole.storyPoints} story points
+                  </p>
+                </div>
+
+                {/* Partner Selection */}
+                <div className="space-y-2">
+                  <Label>Teaming Partner <span className="text-red-500">*</span></Label>
+                  <Select 
+                    value={assignSubFormData.partnerId} 
+                    onValueChange={(v) => setAssignSubFormData(prev => ({ ...prev, partnerId: v, newPartnerName: '' }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a teaming partner..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new">
+                        <span className="flex items-center gap-2">
+                          <Plus className="w-3.5 h-3.5" />
+                          Add New Partner
+                        </span>
+                      </SelectItem>
+                      {teamingPartners.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-medium text-gray-500 border-t">
+                            Existing Partners
+                          </div>
+                          {teamingPartners.map(partner => (
+                            <SelectItem key={partner.id} value={partner.id}>
+                              <span className="flex items-center gap-2">
+                                {partner.companyName}
+                                {partner.businessSize === 'small' && (
+                                  <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">SB</Badge>
+                                )}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* New Partner Name (if adding new) */}
+                {assignSubFormData.partnerId === 'new' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="new-partner-name">Company Name <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="new-partner-name"
+                      placeholder="e.g., TechPartners LLC"
+                      value={assignSubFormData.newPartnerName}
+                      onChange={(e) => setAssignSubFormData(prev => ({ ...prev, newPartnerName: e.target.value }))}
+                    />
+                    <p className="text-xs text-gray-500">This will create a new teaming partner you can complete later</p>
+                  </div>
+                )}
+
+                {/* Quantity and FTE */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="assign-qty">Quantity</Label>
+                    <Input
+                      id="assign-qty"
+                      type="number"
+                      min={1}
+                      value={assignSubFormData.quantity}
+                      onChange={(e) => setAssignSubFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="assign-fte">FTE per Person</Label>
+                    <Input
+                      id="assign-fte"
+                      type="number"
+                      min={0.25}
+                      max={1}
+                      step={0.25}
+                      value={assignSubFormData.ftePerPerson}
+                      onChange={(e) => setAssignSubFormData(prev => ({ ...prev, ftePerPerson: Number(e.target.value) }))}
+                    />
+                  </div>
+                </div>
+
+                {/* Rate and Markup */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="assign-rate">Their Rate/hr <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="assign-rate"
+                      type="number"
+                      min={0}
+                      placeholder="0.00"
+                      value={assignSubFormData.theirRate || ''}
+                      onChange={(e) => setAssignSubFormData(prev => ({ ...prev, theirRate: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="assign-markup">Your Markup %</Label>
+                    <Input
+                      id="assign-markup"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={assignSubFormData.markupPercent}
+                      onChange={(e) => setAssignSubFormData(prev => ({ ...prev, markupPercent: Number(e.target.value) }))}
+                    />
+                  </div>
+                </div>
+
+                {/* Years */}
+                <div className="space-y-2">
+                  <Label>Applicable Years</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {contractYears.map((year) => {
+                      const isActive = assignSubFormData.years.includes(year.id)
+                      return (
+                        <button
+                          key={year.id}
+                          type="button"
+                          onClick={() => toggleAssignSubYear(year.id)}
+                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                            isActive ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {year.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Cost Preview */}
+                {assignSubFormData.theirRate > 0 && assignSubFormData.years.length > 0 && (
+                  <div className="p-3 bg-gray-50 rounded-lg space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Billed Rate:</span>
+                      <span className="text-gray-900">{formatCurrency(assignSubFormData.theirRate * (1 + assignSubFormData.markupPercent / 100))}/hr</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total FTE:</span>
+                      <span className="text-gray-900">{(assignSubFormData.quantity * assignSubFormData.ftePerPerson).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Annual Cost:</span>
+                      <span className="font-semibold text-gray-900">
+                        {formatCurrency(assignSubFormData.theirRate * (1 + assignSubFormData.markupPercent / 100) * assignSubFormData.quantity * assignSubFormData.ftePerPerson *  billableHours)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAssignSubDialogOpen(false)}>Cancel</Button>
+              <Button 
+                onClick={handleSaveAssignSub} 
+                disabled={
+                  !assignSubFormData.theirRate || 
+                  assignSubFormData.years.length === 0 ||
+                  (!assignSubFormData.partnerId || (assignSubFormData.partnerId === 'new' && !assignSubFormData.newPartnerName))
+                }
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Assign to Sub
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Manual Add Role Dialog (with destination choice) */}
+        <Dialog open={addRoleDialogOpen} onOpenChange={setAddRoleDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add Role</DialogTitle>
+              <DialogDescription>
+                Add a role that wasn't identified by AI analysis
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Role Details */}
+              <div className="space-y-2">
+                <Label htmlFor="add-role-title">Role Title <span className="text-red-500">*</span></Label>
+                <Input
+                  id="add-role-title"
+                  placeholder="e.g., Security Analyst"
+                  value={addRoleFormData.title}
+                  onChange={(e) => setAddRoleFormData(prev => ({ ...prev, title: e.target.value }))}
+                />
+              </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="sub-rate">Their Rate/hr <span className="text-red-500">*</span></Label>
+                  <Label>IC Level</Label>
+                  <Select 
+                    value={addRoleFormData.icLevel} 
+                    onValueChange={(v: Role['icLevel']) => setAddRoleFormData(prev => ({ ...prev, icLevel: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="IC1">IC1</SelectItem>
+                      <SelectItem value="IC2">IC2</SelectItem>
+                      <SelectItem value="IC3">IC3</SelectItem>
+                      <SelectItem value="IC4">IC4</SelectItem>
+                      <SelectItem value="IC5">IC5</SelectItem>
+                      <SelectItem value="IC6">IC6</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add-role-qty">Quantity</Label>
                   <Input
-                    id="sub-rate"
+                    id="add-role-qty"
                     type="number"
-                    min={0}
-                    placeholder="0.00"
-                    value={subFormData.theirRate || ''}
-                    onChange={(e) => setSubFormData(prev => ({ ...prev, theirRate: Number(e.target.value) }))}
+                    min={1}
+                    value={addRoleFormData.quantity}
+                    onChange={(e) => setAddRoleFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="sub-markup">Markup %</Label>
+                  <Label htmlFor="add-role-sp">Story Points</Label>
                   <Input
-                    id="sub-markup"
+                    id="add-role-sp"
                     type="number"
                     min={0}
-                    max={100}
-                    value={subFormData.markupPercent}
-                    onChange={(e) => setSubFormData(prev => ({ ...prev, markupPercent: Number(e.target.value) }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sub-fte">FTE</Label>
-                  <Input
-                    id="sub-fte"
-                    type="number"
-                    min={0.25}
-                    max={10}
-                    step={0.25}
-                    value={subFormData.fte}
-                    onChange={(e) => setSubFormData(prev => ({ ...prev, fte: Number(e.target.value) }))}
+                    value={addRoleFormData.storyPoints}
+                    onChange={(e) => setAddRoleFormData(prev => ({ ...prev, storyPoints: Number(e.target.value) }))}
                   />
                 </div>
               </div>
 
+              {/* Destination Choice */}
+              <div className="space-y-2">
+                <Label>Assign to</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAddRoleDestination('prime')}
+                    className={`p-3 rounded-lg border-2 transition-all text-left ${
+                      addRoleDestination === 'prime' 
+                        ? 'border-blue-500 bg-blue-50' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                        addRoleDestination === 'prime' ? 'border-blue-500' : 'border-gray-300'
+                      }`}>
+                        {addRoleDestination === 'prime' && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                      </div>
+                      <span className="font-medium text-sm text-gray-900">Prime Labor</span>
+                    </div>
+                    <p className="text-xs text-gray-500 ml-6">Your team staffs this role</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddRoleDestination('sub')}
+                    className={`p-3 rounded-lg border-2 transition-all text-left ${
+                      addRoleDestination === 'sub' 
+                        ? 'border-orange-500 bg-orange-50' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                        addRoleDestination === 'sub' ? 'border-orange-500' : 'border-gray-300'
+                      }`}>
+                        {addRoleDestination === 'sub' && <div className="w-2 h-2 rounded-full bg-orange-500" />}
+                      </div>
+                      <span className="font-medium text-sm text-gray-900">Subcontractor</span>
+                    </div>
+                    <p className="text-xs text-gray-500 ml-6">A partner fills this role</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Prime-specific fields */}
+              {addRoleDestination === 'prime' && (
+                <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-100">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="add-role-salary">Base Salary</Label>
+                      <Input
+                        id="add-role-salary"
+                        type="number"
+                        min={0}
+                        value={addRoleFormData.baseSalary}
+                        onChange={(e) => setAddRoleFormData(prev => ({ ...prev, baseSalary: Number(e.target.value) }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="add-role-fte-prime">FTE per Person</Label>
+                      <Input
+                        id="add-role-fte-prime"
+                        type="number"
+                        min={0.25}
+                        max={1}
+                        step={0.25}
+                        value={addRoleFormData.ftePerPerson}
+                        onChange={(e) => setAddRoleFormData(prev => ({ ...prev, ftePerPerson: Number(e.target.value) }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-specific fields */}
+              {addRoleDestination === 'sub' && (
+                <div className="space-y-4 p-4 bg-orange-50 rounded-lg border border-orange-100">
+                  {/* Partner Selection */}
+                  <div className="space-y-2">
+                    <Label>Teaming Partner <span className="text-red-500">*</span></Label>
+                    <Select 
+                      value={addRoleFormData.partnerId} 
+                      onValueChange={(v) => setAddRoleFormData(prev => ({ ...prev, partnerId: v, newPartnerName: '' }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a teaming partner..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="new">
+                          <span className="flex items-center gap-2">
+                            <Plus className="w-3.5 h-3.5" />
+                            Add New Partner
+                          </span>
+                        </SelectItem>
+                        {teamingPartners.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-medium text-gray-500 border-t">
+                              Existing Partners
+                            </div>
+                            {teamingPartners.map(partner => (
+                              <SelectItem key={partner.id} value={partner.id}>
+                                {partner.companyName}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {addRoleFormData.partnerId === 'new' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="add-role-new-partner">Company Name <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="add-role-new-partner"
+                        placeholder="e.g., TechPartners LLC"
+                        value={addRoleFormData.newPartnerName}
+                        onChange={(e) => setAddRoleFormData(prev => ({ ...prev, newPartnerName: e.target.value }))}
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="add-role-rate">Their Rate/hr <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="add-role-rate"
+                        type="number"
+                        min={0}
+                        placeholder="0.00"
+                        value={addRoleFormData.theirRate || ''}
+                        onChange={(e) => setAddRoleFormData(prev => ({ ...prev, theirRate: Number(e.target.value) }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="add-role-markup">Markup %</Label>
+                      <Input
+                        id="add-role-markup"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={addRoleFormData.markupPercent}
+                        onChange={(e) => setAddRoleFormData(prev => ({ ...prev, markupPercent: Number(e.target.value) }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="add-role-fte-sub">FTE/Person</Label>
+                      <Input
+                        id="add-role-fte-sub"
+                        type="number"
+                        min={0.25}
+                        max={1}
+                        step={0.25}
+                        value={addRoleFormData.ftePerPerson}
+                        onChange={(e) => setAddRoleFormData(prev => ({ ...prev, ftePerPerson: Number(e.target.value) }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Years */}
               <div className="space-y-2">
                 <Label>Applicable Years</Label>
                 <div className="flex flex-wrap gap-2">
                   {contractYears.map((year) => {
-                    const isActive = subFormData.years.includes(year.id)
+                    const isActive = addRoleFormData.years.includes(year.id)
                     return (
                       <button
                         key={year.id}
                         type="button"
-                        onClick={() => toggleSubFormYear(year.id)}
+                        onClick={() => toggleAddRoleYear(year.id)}
                         className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                          isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          isActive 
+                            ? addRoleDestination === 'prime' ? 'bg-blue-600 text-white' : 'bg-orange-600 text-white'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                         }`}
                       >
                         {year.label}
@@ -1676,27 +2893,28 @@ export function RolesAndPricingTab() {
                   })}
                 </div>
               </div>
-
-              {subFormData.theirRate > 0 && subFormData.years.length > 0 && (
-                <div className="p-3 bg-gray-50 rounded-lg space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Billed Rate:</span>
-                    <span className="text-gray-900">{formatCurrency(subFormData.theirRate * (1 + subFormData.markupPercent / 100))}/hr</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Annual ({subFormData.fte} FTE × 1,920 hrs):</span>
-                    <span className="font-semibold text-gray-900">
-                      {formatCurrency(subFormData.theirRate * (1 + subFormData.markupPercent / 100) * subFormData.fte * 1920)}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setSubDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleSaveSub} disabled={!subFormData.companyName || !subFormData.role || subFormData.theirRate <= 0}>
-                {editingSub ? <><CheckCircle2 className="w-4 h-4 mr-2" />Save Changes</> : <><Plus className="w-4 h-4 mr-2" />Add Sub</>}
+              <Button variant="outline" onClick={() => setAddRoleDialogOpen(false)}>Cancel</Button>
+              <Button 
+                onClick={handleSaveAddRole} 
+                disabled={
+                  !addRoleFormData.title ||
+                  addRoleFormData.years.length === 0 ||
+                  (addRoleDestination === 'sub' && (
+                    !addRoleFormData.theirRate ||
+                    !addRoleFormData.partnerId ||
+                    (addRoleFormData.partnerId === 'new' && !addRoleFormData.newPartnerName)
+                  ))
+                }
+                className={addRoleDestination === 'prime' ? '' : 'bg-orange-600 hover:bg-orange-700'}
+              >
+                {addRoleDestination === 'prime' ? (
+                  <><Building2 className="w-4 h-4 mr-2" />Add to Prime</>
+                ) : (
+                  <><Users className="w-4 h-4 mr-2" />Assign to Sub</>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1776,7 +2994,7 @@ export function RolesAndPricingTab() {
                         <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Annual Cost (Base Year)</h4>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">Billable Hours:</span>
-                          <span className="font-medium text-gray-900">{selectedRoleForBreakdown.hoursPerYear.toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{billableHours.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">× Quantity:</span>

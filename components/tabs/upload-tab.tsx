@@ -48,6 +48,15 @@ const mockExtractedSolicitation = {
   },
 }
 
+// Mock recommended roles from AI analysis
+const mockExtractedRoles = [
+  { id: 'rec-1', name: 'Technical Lead', description: 'Technical Lead position overseeing architecture and team delivery', icLevel: 'IC5' as const, baseSalary: 150000, quantity: 1, fte: 1, storyPoints: 45, years: { base: true, option1: true, option2: true, option3: true, option4: true }, isKeyPersonnel: true, confidence: 'high' as const },
+  { id: 'rec-2', name: 'Senior Software Engineer', description: 'Senior Software Engineer for cloud migration and DevSecOps implementation', icLevel: 'IC4' as const, baseSalary: 120000, quantity: 3, fte: 1, storyPoints: 120, years: { base: true, option1: true, option2: true, option3: true, option4: true }, confidence: 'high' as const },
+  { id: 'rec-3', name: 'DevOps Engineer', description: 'DevOps Engineer for CI/CD pipeline and infrastructure automation', icLevel: 'IC4' as const, baseSalary: 120000, quantity: 1, fte: 1, storyPoints: 35, years: { base: true, option1: true, option2: true, option3: true, option4: true }, confidence: 'medium' as const },
+  { id: 'rec-4', name: 'Cloud Security Engineer', description: 'Security specialist for FedRAMP compliance and DevSecOps', icLevel: 'IC4' as const, baseSalary: 125000, quantity: 1, fte: 1, storyPoints: 30, years: { base: true, option1: true, option2: true, option3: true, option4: true }, confidence: 'medium' as const },
+  { id: 'rec-5', name: 'Business Analyst', description: 'Business Analyst for requirements gathering and stakeholder coordination', icLevel: 'IC3' as const, baseSalary: 95000, quantity: 1, fte: 1, storyPoints: 20, years: { base: true, option1: true, option2: true, option3: true, option4: true }, confidence: 'low' as const },
+]
+
 // ==================== HELPERS ====================
 const contractTypeLabels: Record<string, string> = {
   'FFP': 'Firm Fixed Price',
@@ -71,7 +80,7 @@ const setAsideLabels: Record<string, string> = {
 
 // ==================== COMPONENT ====================
 export function UploadTab({ onContinue }: UploadTabProps) {
-  const { updateSolicitation } = useAppContext()
+  const { updateSolicitation, setRecommendedRoles } = useAppContext()
   
   const [isDragging, setIsDragging] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -135,6 +144,9 @@ export function UploadTab({ onContinue }: UploadTabProps) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     })
+
+    // Set recommended roles from AI analysis
+    setRecommendedRoles(mockExtractedRoles)
 
     setState('complete')
   }

@@ -271,7 +271,18 @@ export interface Subcontractor {
   theirRate: number;
   markupPercent: number;
   billedRate: number;
-  fte: number;
+  
+  // NEW: Period-specific allocations (replaces single fte + years booleans)
+  allocations: {
+    base: { enabled: boolean; fte: number };
+    option1: { enabled: boolean; fte: number };
+    option2: { enabled: boolean; fte: number };
+    option3: { enabled: boolean; fte: number };
+    option4: { enabled: boolean; fte: number };
+  };
+  
+  // Keep for backward compatibility, but derive from allocations
+  fte: number; // Total/default FTE
   years: {
     base: boolean;
     option1: boolean;
@@ -279,9 +290,60 @@ export interface Subcontractor {
     option3: boolean;
     option4: boolean;
   };
+  
   rateSource?: string;
   quoteDate?: string;
   quoteReference?: string;
+  partnerId?: string;
+}
+
+// ==================== TEAMING PARTNERS ====================
+
+export interface TeamingPartnerCertifications {
+  sb: boolean;
+  wosb: boolean;
+  sdvosb: boolean;
+  hubzone: boolean;
+  eightA: boolean;
+}
+
+export interface TeamingPartner {
+  id: string;
+  companyName: string;
+  legalName?: string;
+  uei?: string;
+  cageCode?: string;
+  
+  // Business Size & Certifications
+  businessSize: 'small' | 'other-than-small' | '';
+  certifications: TeamingPartnerCertifications;
+  
+  // Teaming Agreement
+  teamingAgreementStatus: 'none' | 'draft' | 'under-review' | 'signed' | 'executed';
+  teamingAgreementExpiration?: string;
+  ndaStatus: 'none' | 'draft' | 'signed';
+  ndaExpiration?: string;
+  
+  // Rate Information
+  defaultRate?: number;
+  rateSource: 'quote' | 'prior-agreement' | 'gsa-schedule' | 'market-research' | '';
+  quoteDate?: string;
+  quoteReference?: string;
+  
+  // Capabilities
+  capabilities?: string[];
+  otherCapabilities?: string;
+  pastPerformance?: string;
+  
+  // Contact
+  primaryContact?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  
+  // Internal tracking
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ==================== ODCs ====================
@@ -378,10 +440,24 @@ interface AppContextType {
   profitTargets: ProfitTargets;
   setProfitTargets: (targets: ProfitTargets) => void;
   
-  // Escalation
+  // Escalation (base rates as decimals)
   escalationRates: EscalationRates;
   setEscalationRates: (rates: EscalationRates) => void;
   
+  // UI-specific escalation settings (persist across tab switches)
+  // These are stored as percentages (e.g., 3 for 3%) for direct UI binding
+  uiLaborEscalation: number;
+  uiOdcEscalation: number;
+  uiShowEscalation: boolean;
+  setUiLaborEscalation: (rate: number) => void;
+  setUiOdcEscalation: (rate: number) => void;
+  setUiShowEscalation: (show: boolean) => void;
+  
+  // UI-specific profit margin (persist across tab switches)
+  uiProfitMargin: number;
+  setUiProfitMargin: (margin: number) => void;
+  uiBillableHours: number;
+  setUiBillableHours: (hours: number) => void;
   // Company Policy
   companyPolicy: CompanyPolicy;
   setCompanyPolicy: (policy: CompanyPolicy) => void;
@@ -412,6 +488,16 @@ interface AppContextType {
   addSubcontractor: (sub: Subcontractor) => void;
   removeSubcontractor: (id: string) => void;
   updateSubcontractor: (id: string, updates: Partial<Subcontractor>) => void;
+  
+  // Teaming Partners (Company-level compliance)
+  teamingPartners: TeamingPartner[];
+  setTeamingPartners: (partners: TeamingPartner[]) => void;
+  addTeamingPartner: (partner: TeamingPartner) => void;
+  removeTeamingPartner: (id: string) => void;
+  updateTeamingPartner: (id: string, updates: Partial<TeamingPartner>) => void;
+  getOrCreatePartnerByName: (companyName: string) => TeamingPartner;
+  getPartnerById: (id: string) => TeamingPartner | undefined;
+  getSubcontractorsByPartnerId: (partnerId: string) => Subcontractor[];
   
   // ODCs
   odcs: ODCItem[];
@@ -547,6 +633,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     source: 'BLS Employment Cost Index - Professional and Technical Services',
   });
 
+  // ==================== UI-SPECIFIC SETTINGS (Persist across tab switches) ====================
+  // These are stored as percentages for direct UI binding
+  const [uiLaborEscalation, setUiLaborEscalation] = useState<number>(3); // 3%
+  const [uiOdcEscalation, setUiOdcEscalation] = useState<number>(2);     // 2%
+  const [uiShowEscalation, setUiShowEscalation] = useState<boolean>(true);
+  const [uiProfitMargin, setUiProfitMargin] = useState<number>(8);       // 8%
+  const [uiBillableHours, setUiBillableHours] = useState<number>(1920);
+
   // ==================== COMPANY POLICY ====================
   const [companyPolicy, setCompanyPolicy] = useState<CompanyPolicy>({
     standardHours: 2080,
@@ -648,42 +742,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ==================== BID-SPECIFIC DATA ====================
   const [recommendedRoles, setRecommendedRoles] = useState<Role[]>([]);
   const [selectedRoles, setSelectedRoles] = useState<Role[]>([]);
-  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([
-    {
-      id: 'sub-1',
-      companyName: 'Booz Allen Hamilton',
-      role: 'Senior Cloud Architect',
-      theirRate: 185,
-      markupPercent: 15,
-      billedRate: 185 * 1.15,
-      fte: 1.0,
-      years: { base: true, option1: true, option2: true, option3: false, option4: false },
-      rateSource: 'Quote',
-    },
-    {
-      id: 'sub-2',
-      companyName: 'Deloitte Consulting',
-      role: 'Cybersecurity Specialist',
-      theirRate: 165,
-      markupPercent: 12,
-      billedRate: 165 * 1.12,
-      fte: 1.0,
-      years: { base: true, option1: true, option2: true, option3: false, option4: false },
-      rateSource: 'Prior Agreement',
-    }
-  ]);
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [teamingPartners, setTeamingPartners] = useState<TeamingPartner[]>([]);
   const [odcs, setODCs] = useState<ODCItem[]>([]);
-  const [perDiem, setPerDiem] = useState<PerDiemCalculation[]>([
-    {
-      id: 'pd-1',
-      location: 'Washington, DC',
-      ratePerDay: 294,
-      numberOfDays: 15,
-      numberOfPeople: 2,
-      totalCost: 8820,
-      years: { base: true, option1: true, option2: true, option3: false, option4: false }
-    }
-  ]);
+  const [perDiem, setPerDiem] = useState<PerDiemCalculation[]>([]);
   const [gsaContractInfo, setGSAContractInfo] = useState<GSAContractInfo | null>(null);
 
   // ==================== CALCULATION FUNCTIONS ====================
@@ -827,6 +889,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ==================== SUBCONTRACTOR MANAGEMENT ====================
 
   const addSubcontractor = (sub: Subcontractor) => {
+    // Auto-create or link to teaming partner
+    if (sub.companyName && !sub.partnerId) {
+      const partner = getOrCreatePartnerByName(sub.companyName);
+      sub.partnerId = partner.id;
+    }
     setSubcontractors([...subcontractors, sub]);
   };
 
@@ -836,6 +903,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateSubcontractor = (id: string, updates: Partial<Subcontractor>) => {
     setSubcontractors(subcontractors.map(s => s.id === id ? { ...s, ...updates } : s));
+  };
+
+  // ==================== TEAMING PARTNER MANAGEMENT ====================
+
+  const addTeamingPartner = (partner: TeamingPartner) => {
+    setTeamingPartners([...teamingPartners, partner]);
+  };
+
+  const removeTeamingPartner = (id: string) => {
+    // Also unlink any subcontractors that reference this partner
+    setSubcontractors(subcontractors.map(s => 
+      s.partnerId === id ? { ...s, partnerId: undefined } : s
+    ));
+    setTeamingPartners(teamingPartners.filter(p => p.id !== id));
+  };
+
+  const updateTeamingPartner = (id: string, updates: Partial<TeamingPartner>) => {
+    setTeamingPartners(teamingPartners.map(p => 
+      p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
+    ));
+  };
+
+  const getOrCreatePartnerByName = (companyName: string): TeamingPartner => {
+    // Check if partner already exists (case-insensitive)
+    const existing = teamingPartners.find(
+      p => p.companyName.toLowerCase() === companyName.toLowerCase()
+    );
+    if (existing) return existing;
+
+    // Create a new shell partner
+    const newPartner: TeamingPartner = {
+      id: `partner-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      companyName,
+      businessSize: '',
+      certifications: {
+        sb: false,
+        wosb: false,
+        sdvosb: false,
+        hubzone: false,
+        eightA: false,
+      },
+      teamingAgreementStatus: 'none',
+      ndaStatus: 'none',
+      rateSource: '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    
+    // Add to state
+    setTeamingPartners(prev => [...prev, newPartner]);
+    return newPartner;
+  };
+
+  const getPartnerById = (id: string): TeamingPartner | undefined => {
+    return teamingPartners.find(p => p.id === id);
+  };
+
+  const getSubcontractorsByPartnerId = (partnerId: string): Subcontractor[] => {
+    return subcontractors.filter(s => s.partnerId === partnerId);
   };
 
   // ==================== ODC MANAGEMENT ====================
@@ -924,6 +1050,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     escalationRates,
     setEscalationRates,
     
+    // UI-specific settings (persist across tab switches)
+    uiLaborEscalation,
+    uiOdcEscalation,
+    uiShowEscalation,
+    setUiLaborEscalation,
+    setUiOdcEscalation,
+    setUiShowEscalation,
+    uiProfitMargin,
+    setUiProfitMargin,
+    uiBillableHours,
+    setUiBillableHours,
+    
     // Company Policy
     companyPolicy,
     setCompanyPolicy,
@@ -954,6 +1092,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addSubcontractor,
     removeSubcontractor,
     updateSubcontractor,
+    
+    // Teaming Partners
+    teamingPartners,
+    setTeamingPartners,
+    addTeamingPartner,
+    removeTeamingPartner,
+    updateTeamingPartner,
+    getOrCreatePartnerByName,
+    getPartnerById,
+    getSubcontractorsByPartnerId,
     
     // ODCs
     odcs,

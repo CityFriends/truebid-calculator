@@ -11,7 +11,7 @@ import { UploadTab } from '@/components/tabs/upload-tab'
 import { ScopingTab } from '@/components/tabs/scoping-tab'
 import { RolesAndPricingTab } from '@/components/tabs/roles-and-pricing-tab'
 import { RateJustificationTab } from '@/components/tabs/rate-justification-tab'
-import { SubcontractorsTab } from '@/components/tabs/subcontractors-tab'
+import { TeamingPartnersTab } from '@/components/tabs/teaming-partners-tab'
 import { SubRatesTab } from '@/components/tabs/sub-rates-tab'
 import { ExportTab } from '@/components/tabs/export-tab'
 import GSABidTab from '@/components/tabs/gsa-bid-tab'
@@ -50,7 +50,7 @@ const evaluationMethodLabels: Record<string, string> = {
   'tradeoff': 'Tradeoff'
 }
 
-type TabType = 'upload' | 'scoping' | 'roles' | 'rate-justification' | 'subcontractors' | 'export' | 'gsa-bid' | 'sub-rates'
+type TabType = 'upload' | 'scoping' | 'roles' | 'rate-justification' | 'teaming-partners' | 'export' | 'gsa-bid' | 'sub-rates'
 
 export function TabsNavigation() {
   const [activeTab, setActiveTab] = useState<TabType>('upload')
@@ -64,7 +64,7 @@ export function TabsNavigation() {
     { id: 'scoping' as TabType, label: 'Scoping', icon: Target },
     { id: 'roles' as TabType, label: 'Roles & Pricing', icon: Users },
     { id: 'rate-justification' as TabType, label: 'Rate Justification', icon: TrendingUp },
-    { id: 'subcontractors' as TabType, label: 'Subcontractors', icon: Building2 },
+    { id: 'teaming-partners' as TabType, label: 'Teaming Partners', icon: Building2 },
     { id: 'export' as TabType, label: 'Export', icon: FileDown },
   ]
 
@@ -881,8 +881,8 @@ export function TabsNavigation() {
         {activeTab === 'upload' && <UploadTab onContinue={() => setActiveTab('scoping')} />}
         {activeTab === 'scoping' && <ScopingTab onContinue={() => setActiveTab('roles')} />}
         {activeTab === 'roles' && <RolesAndPricingTab />}
-        {activeTab === 'rate-justification' && <RateJustificationTab onContinue={() => setActiveTab('subcontractors')} />}
-        {activeTab === 'subcontractors' && <SubcontractorsTab onContinue={() => setActiveTab('export')} />}
+        {activeTab === 'rate-justification' && <RateJustificationTab onContinue={() => setActiveTab('teaming-partners')} />}
+        {activeTab === 'teaming-partners' && <TeamingPartnersTab onContinue={() => setActiveTab('export')} />}
         {activeTab === 'export' && <ExportTab />}
         
         {/* Utility Tools */}
