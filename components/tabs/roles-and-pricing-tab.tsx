@@ -476,49 +476,70 @@ subcontractors.forEach(sub => {
   }, [teamRoles, contractYears, laborEscalation, odcEscalation, showEscalation, subcontractors, odcs, perDiem])
 
   // Group subcontractors by partner for cleaner display
-  const groupedSubcontractors = useMemo(() => {
-    const groups: Record<string, { 
-      partnerId: string;
-      companyName: string; 
-      roles: Subcontractor[]; 
-      totalAnnual: number;
-      totalFte: number;
-      avgMarkup: number;
-    }> = {}
-    
-    subcontractors.forEach(sub => {
-      const key = sub.partnerId || sub.companyName.toLowerCase()
-      if (!groups[key]) {
-        groups[key] = {
-          partnerId: sub.partnerId || '',
-          companyName: sub.companyName,
-          roles: [],
-          totalAnnual: 0,
-          totalFte: 0,
-          avgMarkup: 0,
-        }
-      }
-      groups[key].roles.push(sub)
-     // Calculate total FTE across all enabled periods
-const subTotalFte = sub.allocations 
-  ? Object.values(sub.allocations).reduce((sum, alloc) => sum + (alloc.enabled ? alloc.fte : 0), 0) / Object.values(sub.allocations).filter(a => a.enabled).length || 0
-  : sub.fte
+  // Helper to calculate sub total contract cost with escalation
+const calculateSubTotalContractCost = (sub: Subcontractor): number => {
+  const getEscMult = (yearIndex: number): number => {
+    if (!showEscalation || yearIndex === 0) return 1
+    return Math.pow(1 + laborEscalation / 100, yearIndex)
+  }
+  
+  let total = 0
+  contractYears.forEach((year) => {
+    let fte = 0
+    if (sub.allocations) {
+      const alloc = sub.allocations[year.id as keyof typeof sub.allocations]
+      fte = alloc?.enabled ? alloc.fte : 0
+    } else {
+      const subYears = yearsObjectToArray(sub.years)
+      fte = subYears.includes(year.id) ? sub.fte : 0
+    }
+    total += sub.billedRate * fte * billableHours * getEscMult(year.index)
+  })
+  return total
+}
 
-// Base year cost (no escalation) - use billedRate for what we charge gov
-const baseYearCost = sub.billedRate * subTotalFte *  billableHours
-groups[key].totalAnnual += baseYearCost
-groups[key].totalFte += subTotalFte
-    })
-    
-    // Calculate average markup for each group
-    Object.values(groups).forEach(group => {
-      if (group.roles.length > 0) {
-        group.avgMarkup = group.roles.reduce((sum, r) => sum + r.markupPercent, 0) / group.roles.length
+const groupedSubcontractors = useMemo(() => {
+  const groups: Record<string, { 
+    partnerId: string;
+    companyName: string; 
+    roles: Subcontractor[]; 
+    totalContractCost: number;
+    baseFte: number;
+    avgMarkup: number;
+  }> = {}
+  
+  subcontractors.forEach(sub => {
+    const key = sub.partnerId || sub.companyName.toLowerCase()
+    if (!groups[key]) {
+      groups[key] = {
+        partnerId: sub.partnerId || '',
+        companyName: sub.companyName,
+        roles: [],
+        totalContractCost: 0,
+        baseFte: 0,
+        avgMarkup: 0,
       }
-    })
+    }
+    groups[key].roles.push(sub)
     
-    return Object.values(groups)
-  }, [subcontractors])
+    // Calculate total contract cost with escalation
+    groups[key].totalContractCost += calculateSubTotalContractCost(sub)
+    
+    // Track base year FTE for display
+    const baseFte = sub.allocations?.base?.enabled ? sub.allocations.base.fte : sub.fte
+    groups[key].baseFte += baseFte
+  })
+  
+  // Calculate average markup for each group
+  Object.values(groups).forEach(group => {
+    if (group.roles.length > 0) {
+      group.avgMarkup = group.roles.reduce((sum, r) => sum + r.markupPercent, 0) / group.roles.length
+    }
+  })
+  
+  return Object.values(groups)
+}, [subcontractors, contractYears, showEscalation, laborEscalation, billableHours])
+
 
   // State for expanded partner groups in contract value section
   const [expandedPartnerGroups, setExpandedPartnerGroups] = useState<Record<string, boolean>>({})
@@ -1714,34 +1735,42 @@ if (editingSub) {
                               </Badge>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-gray-900 font-medium">{formatCurrency(group.totalAnnual)}/yr</span>
-                              {isExpanded ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
-                            </div>
+                            <span className="text-gray-900 font-medium">{formatCurrency(group.totalContractCost)}</span>
+                            {isExpanded ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+                          </div>
                           </button>
                           
                           {/* Expanded Role Details */}
                           {isExpanded && (
                             <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-100 pl-3">
                               {group.roles.map((sub) => {
-                                const effectiveFte = sub.allocations
-                                  ? (() => {
-                                      const enabled = Object.values(sub.allocations).filter(a => a.enabled)
-                                      return enabled.length > 0 
-                                        ? enabled.reduce((sum, a) => sum + a.fte, 0) / enabled.length 
-                                        : 0
-                                    })()
-                                  : sub.fte
-                                
-                                return (
-                                  <div key={sub.id} className="group flex items-center justify-between py-0.5">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-600">{sub.role}</span>
-                                      <span className="text-gray-400">
-                                        {effectiveFte.toFixed(2)} FTE · ${sub.theirRate.toFixed(0)}/hr
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-700">{formatCurrency(sub.billedRate * effectiveFte *  billableHours)}/yr</span>
+  // Get per-period FTEs
+  const baseFte = sub.allocations?.base?.enabled ? sub.allocations.base.fte : sub.fte
+  const opt1Fte = sub.allocations?.option1?.enabled ? sub.allocations.option1.fte : 0
+  const opt2Fte = sub.allocations?.option2?.enabled ? sub.allocations.option2.fte : 0
+  
+  const hasVaryingFte = sub.allocations && (baseFte !== opt1Fte || baseFte !== opt2Fte || opt1Fte !== opt2Fte)
+  const subTotalCost = calculateSubTotalContractCost(sub)
+  
+  return (
+    <div key={sub.id} className="group flex items-center justify-between py-0.5">
+      <div className="flex items-center gap-2">
+        <span className="text-gray-600">{sub.role}</span>
+        <span className="text-gray-400">
+          {hasVaryingFte ? (
+            <span className="text-[10px]">
+              {baseFte > 0 && `Base:${baseFte.toFixed(1)}`}
+              {opt1Fte > 0 && ` OP1:${opt1Fte.toFixed(1)}`}
+              {opt2Fte > 0 && ` OP2:${opt2Fte.toFixed(1)}`}
+            </span>
+          ) : (
+            `${baseFte.toFixed(2)} FTE`
+          )}
+          {' · '}${sub.theirRate.toFixed(0)}/hr
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-gray-700">{formatCurrency(subTotalCost)} total</span>
                                       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                                         <Button 
                                           variant="ghost" 

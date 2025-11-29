@@ -98,6 +98,70 @@ const getExpirationStatus = (dateString: string): 'expired' | 'warning' | 'ok' =
   return 'ok'
 }
 
+// Helper to get FTE from subcontractor (handles both old and new allocation structure)
+const getSubcontractorFte = (sub: any, period: 'base' | 'option1' | 'option2'): number => {
+  // New allocation structure
+  if (sub.allocations && sub.allocations[period]) {
+    return sub.allocations[period].enabled ? sub.allocations[period].fte : 0
+  }
+  // Legacy structure - years is an object { base: boolean, option1: boolean, ... }
+  if (sub.years && typeof sub.years === 'object') {
+    if (!sub.years[period]) return 0
+  }
+  // Fall back to single fte value
+  return sub.fte || 0
+}
+
+// Helper to calculate total contract cost for a subcontractor across all periods
+const calculateSubContractorTotalCost = (
+  sub: any, 
+  billableHours: number,
+  laborEscalation: number
+): { totalCost: number; periodCosts: { base: number; opt1: number; opt2: number } } => {
+  // Use the stored billedRate (theirRate + markup already calculated)
+  const billedRate = sub.billedRate || (sub.theirRate * (1 + (sub.markupPercent || 0) / 100))
+  
+  const baseFte = getSubcontractorFte(sub, 'base')
+  const opt1Fte = getSubcontractorFte(sub, 'option1')
+  const opt2Fte = getSubcontractorFte(sub, 'option2')
+  
+  const baseCost = billedRate * baseFte * billableHours
+  const opt1Cost = billedRate * opt1Fte * billableHours * (1 + laborEscalation / 100)
+  const opt2Cost = billedRate * opt2Fte * billableHours * Math.pow(1 + laborEscalation / 100, 2)
+  
+  return {
+    totalCost: baseCost + opt1Cost + opt2Cost,
+    periodCosts: { base: baseCost, opt1: opt1Cost, opt2: opt2Cost }
+  }
+}
+
+// Helper to get average FTE across enabled periods
+const getAverageFte = (sub: any): number => {
+  const baseFte = getSubcontractorFte(sub, 'base')
+  const opt1Fte = getSubcontractorFte(sub, 'option1')
+  const opt2Fte = getSubcontractorFte(sub, 'option2')
+  
+  // Count enabled periods
+  let enabledCount = 0
+  let totalFte = 0
+  
+  if (sub.allocations) {
+    if (sub.allocations.base?.enabled) { enabledCount++; totalFte += baseFte }
+    if (sub.allocations.option1?.enabled) { enabledCount++; totalFte += opt1Fte }
+    if (sub.allocations.option2?.enabled) { enabledCount++; totalFte += opt2Fte }
+  } else if (sub.years) {
+    // Legacy structure
+    if (sub.years.includes(0)) { enabledCount++; totalFte += baseFte }
+    if (sub.years.includes(1)) { enabledCount++; totalFte += opt1Fte }
+    if (sub.years.includes(2)) { enabledCount++; totalFte += opt2Fte }
+  } else {
+    // Single year assumed
+    return sub.fte || 0
+  }
+  
+  return enabledCount > 0 ? totalFte / enabledCount : 0
+}
+
 // Plain language agreement status labels
 const agreementStatusLabels: Record<string, string> = {
   'none': 'No Agreement',
@@ -195,7 +259,13 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
     updateTeamingPartner,
     removeTeamingPartner,
     subcontractors,
+    uiBillableHours,
+    uiLaborEscalation,
   } = useAppContext()
+
+  // Default values if context values are undefined
+  const billableHours = uiBillableHours ?? 1920
+  const laborEscalation = uiLaborEscalation ?? 2
 
   // UI State
   const [searchQuery, setSearchQuery] = useState('')
@@ -231,7 +301,16 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
       s.partnerId === partner.id || 
       s.companyName.toLowerCase() === partner.companyName.toLowerCase()
     )
-    const totalAnnualCost = partnerSubs.reduce((sum, s) => sum + (s.billedRate * s.fte * 1920), 0)
+    
+    // Calculate total contract cost using new allocation structure
+    let totalContractCost = 0
+    let totalBaseFte = 0
+    
+    partnerSubs.forEach(sub => {
+      const costCalc = calculateSubContractorTotalCost(sub, billableHours, laborEscalation)
+      totalContractCost += costCalc.totalCost
+      totalBaseFte += getSubcontractorFte(sub, 'base')
+    })
     
     // Determine if partner needs attention
     const hasNoAgreement = partner.teamingAgreementStatus === 'none'
@@ -242,8 +321,8 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
       ...partner,
       roles: partnerSubs,
       roleCount: partnerSubs.length,
-      totalFte: partnerSubs.reduce((sum, s) => sum + s.fte, 0),
-      totalAnnualCost,
+      totalBaseFte,
+      totalContractCost,
       needsAttention,
     }
   })
@@ -263,12 +342,12 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
     sdvosb: partners.filter(p => p.certifications.sdvosb).length,
     hubzone: partners.filter(p => p.certifications.hubzone).length,
     eightA: partners.filter(p => p.certifications.eightA).length,
-    jv: 0, // Will track when we add JV to context
+    jv: partners.filter(p => (p as any).isJointVenture).length,
   }
 
   // Total subcontractor FTE and cost
-  const totalSubFte = partnersWithRoles.reduce((sum, p) => sum + p.totalFte, 0)
-  const totalSubCost = partnersWithRoles.reduce((sum, p) => sum + p.totalAnnualCost, 0)
+  const totalSubFte = partnersWithRoles.reduce((sum, p) => sum + p.totalBaseFte, 0)
+  const totalSubContractCost = partnersWithRoles.reduce((sum, p) => sum + p.totalContractCost, 0)
 
   // ==================== FILTERING ====================
 
@@ -349,7 +428,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
       notes: partner.notes || '',
     })
     setSelectedCapabilities(partner.capabilities || [])
-    setFormJV(false)
+    setFormJV((partner as any).isJointVenture || false)
     setFormErrors({})
     setIsPanelOpen(true)
   }
@@ -381,6 +460,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
     const dataToSave = {
       ...formData,
       capabilities: selectedCapabilities,
+      isJointVenture: formJV,
     }
 
     if (editingId) {
@@ -473,13 +553,13 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                 <span className="text-sm font-semibold text-gray-900">{subcontractors.length}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Total Sub FTE</span>
+                <span className="text-xs text-gray-600">Base Year FTE</span>
                 <span className="text-sm font-semibold text-gray-900">{totalSubFte.toFixed(2)}</span>
               </div>
-              {totalSubCost > 0 && (
+              {totalSubContractCost > 0 && (
                 <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-                  <span className="text-xs text-gray-600">Annual Cost</span>
-                  <span className="text-sm font-semibold text-green-700">{formatCurrency(totalSubCost)}</span>
+                  <span className="text-xs text-gray-600">Total Contract</span>
+                  <span className="text-sm font-semibold text-green-700">{formatCurrency(totalSubContractCost)}</span>
                 </div>
               )}
             </div>
@@ -718,11 +798,12 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                       </div>
                     </div>
 
-                    {/* Certifications Row */}
-                    {(partner.certifications.sb || partner.certifications.wosb || partner.certifications.sdvosb || 
-                      partner.certifications.hubzone || partner.certifications.eightA) && (
+                    {/* Certifications Row - SB only shows if businessSize isn't already 'small' */}
+                    {((partner.certifications.sb && partner.businessSize !== 'small') || 
+                      partner.certifications.wosb || partner.certifications.sdvosb || 
+                      partner.certifications.hubzone || partner.certifications.eightA || (partner as any).isJointVenture) && (
                       <div className="flex flex-wrap gap-1.5 mb-3">
-                        {partner.certifications.sb && (
+                        {partner.certifications.sb && partner.businessSize !== 'small' && (
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">SB</Badge>
                         )}
                         {partner.certifications.wosb && (
@@ -736,6 +817,12 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                         )}
                         {partner.certifications.eightA && (
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">8(a)</Badge>
+                        )}
+                        {(partner as any).isJointVenture && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-blue-50 text-blue-700 border-blue-200">
+                            <Handshake className="w-3 h-3 mr-1" />
+                            JV
+                          </Badge>
                         )}
                       </div>
                     )}
@@ -806,22 +893,44 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                           <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-2">
                             Current Bid Roles
                           </p>
-                          {partner.roles.slice(0, 3).map((role) => (
-                            <div key={role.id} className="flex items-center justify-between text-xs">
-                              <span className="text-gray-700 truncate flex-1">{role.role}</span>
-                              <span className="text-gray-500 ml-2 whitespace-nowrap">
-                                {role.fte} FTE · ${role.theirRate.toFixed(0)}/hr
-                              </span>
-                            </div>
-                          ))}
+                          {partner.roles.slice(0, 3).map((role) => {
+                            // Get FTE display - show per-period if available
+                            const baseFte = getSubcontractorFte(role, 'base')
+                            const opt1Fte = getSubcontractorFte(role, 'option1')
+                            const opt2Fte = getSubcontractorFte(role, 'option2')
+                            
+                            // Check if FTEs vary by period
+                            const hasVaryingFte = role.allocations && (
+                              baseFte !== opt1Fte || baseFte !== opt2Fte || opt1Fte !== opt2Fte
+                            )
+                            
+                            return (
+                              <div key={role.id} className="flex items-center justify-between text-xs">
+                                <span className="text-gray-700 truncate flex-1">{role.role}</span>
+                                <span className="text-gray-500 ml-2 whitespace-nowrap">
+                                  {hasVaryingFte ? (
+                                    // Show per-period FTEs
+                                    <span className="text-[10px]">
+                                      {baseFte > 0 && `Base:${baseFte.toFixed(1)}`}
+                                      {opt1Fte > 0 && ` OP1:${opt1Fte.toFixed(1)}`}
+                                      {opt2Fte > 0 && ` OP2:${opt2Fte.toFixed(1)}`}
+                                    </span>
+                                  ) : (
+                                    `${baseFte.toFixed(2)} FTE`
+                                  )}
+                                  {' · '}${role.theirRate.toFixed(0)}/hr
+                                </span>
+                              </div>
+                            )
+                          })}
                           {partner.roles.length > 3 && (
                             <p className="text-xs text-gray-400">
                               +{partner.roles.length - 3} more role{partner.roles.length - 3 !== 1 ? 's' : ''}
                             </p>
                           )}
                           <div className="flex items-center justify-between text-xs pt-2 mt-2 border-t border-gray-100">
-                            <span className="font-medium text-gray-600">{partner.totalFte.toFixed(2)} FTE Total</span>
-                            <span className="font-semibold text-gray-900">{formatCurrency(partner.totalAnnualCost)}/yr</span>
+                            <span className="font-medium text-gray-600">{partner.totalBaseFte.toFixed(2)} FTE (Base)</span>
+                            <span className="font-semibold text-gray-900">{formatCurrency(partner.totalContractCost)} total</span>
                           </div>
                         </div>
                       )}

@@ -1037,7 +1037,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Company Profile
     companyProfile,
     setCompanyProfile,
-    
+
     // Indirect Rates
     indirectRates,
     setIndirectRates,
