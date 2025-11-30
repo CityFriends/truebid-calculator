@@ -720,7 +720,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                     key={partner.id}
                     className={`
                       group border border-gray-200 border-l-4 rounded-lg p-4 
-                      hover:border-orange-400 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] 
+                      hover:border-gray-300 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] 
                       transition-all cursor-pointer bg-white
                       ${getCardAccent()}
                     `}

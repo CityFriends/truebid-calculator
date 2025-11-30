@@ -1743,30 +1743,20 @@ if (editingSub) {
                           {/* Expanded Role Details */}
                           {isExpanded && (
                             <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-100 pl-3">
-                              {group.roles.map((sub) => {
-  // Get per-period FTEs
-  const baseFte = sub.allocations?.base?.enabled ? sub.allocations.base.fte : sub.fte
-  const opt1Fte = sub.allocations?.option1?.enabled ? sub.allocations.option1.fte : 0
-  const opt2Fte = sub.allocations?.option2?.enabled ? sub.allocations.option2.fte : 0
+       {group.roles.map((sub) => {
+      // Get base year FTE for display
+      const baseFte = sub.allocations?.base?.enabled ? sub.allocations.base.fte : sub.fte
+      const subTotalCost = calculateSubTotalContractCost(sub)
   
-  const hasVaryingFte = sub.allocations && (baseFte !== opt1Fte || baseFte !== opt2Fte || opt1Fte !== opt2Fte)
-  const subTotalCost = calculateSubTotalContractCost(sub)
+  // Format FTE cleanly (1, 0.5, 0.75 - no trailing zeros)
+  const fteDisplay = baseFte === Math.floor(baseFte) ? baseFte.toString() : Number(baseFte.toFixed(2)).toString()
   
   return (
     <div key={sub.id} className="group flex items-center justify-between py-0.5">
       <div className="flex items-center gap-2">
         <span className="text-gray-600">{sub.role}</span>
         <span className="text-gray-400">
-          {hasVaryingFte ? (
-            <span className="text-[10px]">
-              {baseFte > 0 && `Base:${baseFte.toFixed(1)}`}
-              {opt1Fte > 0 && ` OP1:${opt1Fte.toFixed(1)}`}
-              {opt2Fte > 0 && ` OP2:${opt2Fte.toFixed(1)}`}
-            </span>
-          ) : (
-            `${baseFte.toFixed(2)} FTE`
-          )}
-          {' · '}${sub.theirRate.toFixed(0)}/hr
+          {fteDisplay} FTE · ${sub.theirRate.toFixed(0)}/hr
         </span>
       </div>
       <div className="flex items-center gap-2">

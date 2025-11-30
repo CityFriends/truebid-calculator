@@ -6,6 +6,206 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export type ContractType = 'tm' | 'ffp' | 'gsa';
 
+// ==================== ESTIMATE TAB TYPES (BOE Support) ====================
+
+// Estimate method types based on BOE document hierarchy (best to worst)
+export type EstimateMethod = 
+  | 'historical'      // Best - Historical Program Data with charge numbers
+  | 'parametric'      // Good - Productivity/parametric data
+  | 'firm-quote'      // Good - Subcontractor quote
+  | 'level-of-effort' // Acceptable - LOE (should be <15-20% of project)
+  | 'engineering';    // Least desired - WAG warning
+
+// Quality grade based on government color coding (DCAA standards)
+export type QualityGrade = 'blue' | 'green' | 'yellow' | 'red';
+
+// Labor estimate for a single role within a WBS element
+export interface WBSLaborEstimate {
+  id: string;
+  roleId: string;
+  roleName: string;
+  baseHours: number;
+  complexityFactor: number;
+  calculatedHours: number;
+  rationale: string;
+}
+
+// Historical reference for "Historical Program" estimate method
+export interface HistoricalReference {
+  programName: string;
+  chargeNumber: string;          // Critical for GREEN/BLUE grade
+  actualHours: number;
+  taskDescription: string;
+}
+
+// WBS Element - the core unit for BOE-focused workflow
+export interface WBSElement {
+  id: string;
+  wbsNumber: string;                    // e.g., "1.2.3"
+  title: string;
+  
+  // 1. Header Information (Required for audit)
+  sowReference: string;                 // PWS/SOW paragraph reference
+  clin?: string;                        // Contract Line Item Number
+  periodOfPerformance: {
+    start: string;                      // ISO date
+    end: string;
+  };
+  
+  // 2. Task Description (Required for audit)
+  why: string;                          // Why is this task being done?
+  what: string;                         // What will be done?
+  notIncluded: string;                  // Scope exclusions - equally important!
+  assumptions: string[];
+  dependencies: string[];
+  
+  // 3. Basis of Estimate (Determines quality grade)
+  estimateMethod: EstimateMethod;
+  historicalReference?: HistoricalReference;  // Required for GREEN when using 'historical'
+  complexityFactor: number;             // 1.0 = same, 1.2 = 20% more complex
+  complexityJustification: string;      // Required when factor ≠ 1.0
+  
+  // 4. Bid Detail (Labor Hours)
+  laborEstimates: WBSLaborEstimate[];
+  totalHours: number;
+  
+  // Quality tracking (auto-calculated)
+  qualityGrade: QualityGrade;
+  qualityIssues: string[];
+  isComplete: boolean;
+  
+  // Metadata
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Complete estimate data structure
+export interface EstimateData {
+  wbsElements: WBSElement[];
+  
+  // Contract period context
+  contractPeriod: {
+    baseYear: boolean;
+    optionYears: number;
+  };
+  
+  // WBS settings
+  wbsPrefix: string;  // e.g., "1.0" for "1.0.1", "1.0.2", etc.
+  
+  // Metadata
+  lastUpdated: string;
+}
+
+// Empty estimate data (for new bids)
+export const emptyEstimateData: EstimateData = {
+  wbsElements: [],
+  contractPeriod: {
+    baseYear: true,
+    optionYears: 2
+  },
+  wbsPrefix: '1.0',
+  lastUpdated: new Date().toISOString()
+};
+
+// ==================== QUALITY CALCULATION UTILITY ====================
+
+export interface QualityResult {
+  grade: QualityGrade;
+  score: number;
+  issues: string[];
+}
+
+export const calculateWBSQuality = (element: WBSElement): QualityResult => {
+  const issues: string[] = [];
+  let score = 100;
+  
+  // Check header completeness (-10 to -15 each)
+  if (!element.sowReference) {
+    issues.push('Missing SOW/PWS reference');
+    score -= 15;
+  }
+  if (!element.periodOfPerformance.start || !element.periodOfPerformance.end) {
+    issues.push('Period of performance not defined');
+    score -= 10;
+  }
+  
+  // Check task description (-10 each)
+  if (!element.why || element.why.length < 20) {
+    issues.push('Task purpose (WHY) not adequately described');
+    score -= 10;
+  }
+  if (!element.what || element.what.length < 20) {
+    issues.push('Task scope (WHAT) not adequately described');
+    score -= 10;
+  }
+  
+  // Check basis of estimate method (-10 to -20)
+  if (element.estimateMethod === 'engineering') {
+    issues.push('Engineering estimate requires detailed step-by-step breakdown');
+    score -= 20;
+  } else if (element.estimateMethod === 'level-of-effort') {
+    issues.push('LOE method - ensure <15-20% of total project value');
+    score -= 10;
+  }
+  
+  // Check historical reference for historical method (-15 to -25)
+  if (element.estimateMethod === 'historical') {
+    if (!element.historicalReference?.chargeNumber) {
+      issues.push('Missing charge number for historical comparison');
+      score -= 25;
+    }
+    if (!element.historicalReference?.actualHours) {
+      issues.push('Missing actual hours from historical program');
+      score -= 15;
+    }
+  }
+  
+  // Check complexity factor justification (-10 to -15)
+  if (element.complexityFactor !== 1.0 && !element.complexityJustification) {
+    issues.push('Complexity factor requires justification');
+    score -= 15;
+  }
+  if (element.complexityFactor > 1.5 || element.complexityFactor < 0.5) {
+    if (!element.complexityJustification || element.complexityJustification.length < 50) {
+      issues.push('Extreme complexity factor (>1.5x or <0.5x) requires strong justification');
+      score -= 10;
+    }
+  }
+  
+  // Check labor estimates (-10 to -30)
+  if (element.laborEstimates.length === 0) {
+    issues.push('No labor estimates defined');
+    score -= 30;
+  } else {
+    const missingRationale = element.laborEstimates.filter(l => !l.rationale || l.rationale.length < 10);
+    if (missingRationale.length > 0) {
+      issues.push(`${missingRationale.length} labor estimate(s) missing rationale`);
+      score -= 10;
+    }
+  }
+  
+  // Check math (-20)
+  const calculatedTotal = element.laborEstimates.reduce((sum, l) => sum + l.calculatedHours, 0);
+  if (Math.abs(calculatedTotal - element.totalHours) > 0.5) {
+    issues.push('Hours summary does not match labor detail calculations');
+    score -= 20;
+  }
+  
+  // Determine grade
+  let grade: QualityGrade;
+  if (score >= 90 && element.estimateMethod === 'historical' && element.historicalReference?.chargeNumber) {
+    grade = 'blue';  // Excellent - multiple sources or strong historical
+  } else if (score >= 75) {
+    grade = 'green';  // Good - passes audit
+  } else if (score >= 50) {
+    grade = 'yellow';  // Needs work
+  } else {
+    grade = 'red';  // Unsupported - will be questioned
+  }
+  
+  return { grade, score: Math.max(0, score), issues };
+};
+
 // ==================== SOLICITATION TYPES ====================
 // These types define the RFP/solicitation data that flows across all tabs
 
@@ -146,6 +346,176 @@ export const setAsideLabels: Record<string, string> = {
   'edwosb': 'EDWOSB Set-Aside'
 }
 
+// ==================== RATE JUSTIFICATION TYPES ====================
+
+export interface RoleJustification {
+  roleId: string
+  roleTitle: string
+  percentile: number
+  selectedReasons: {
+    // High rate justifications (≥75th percentile)
+    clearance?: string
+    location?: string
+    certifications?: string[]
+    keyPersonnel?: boolean
+    nicheSkills?: boolean
+    experience?: string
+    pastPerformance?: boolean
+    // Low rate justifications (≤25th percentile - cost realism)
+    efficiency?: boolean
+    reusableAssets?: boolean
+    lowCostLocation?: string
+    establishedRelationship?: boolean
+    volumeDiscount?: boolean
+    provenDelivery?: boolean
+  }
+  notes: string
+  savedAt: string
+}
+
+// ==================== SCOPING TYPES (Legacy - kept for backward compatibility) ====================
+
+// Hours breakdown per role for an epic - this is the key BOE data
+export interface EpicHoursBreakdown {
+  roleId: string
+  roleName: string
+  hours: number
+  rationale: string
+  confidence: 'high' | 'medium' | 'low'
+  assumptions: string[]
+}
+
+// Enhanced Epic interface for BOE generation
+export interface ScopingEpic {
+  id: string
+  title: string
+  description: string
+  storyPoints: number
+  priority: 'high' | 'medium' | 'low'
+  
+  // Hours breakdown by role (key for BOE)
+  hoursBreakdown: EpicHoursBreakdown[]
+  
+  // PWS/SOW traceability
+  pwsReferences: string[]  // e.g., ["PWS 3.1.1", "PWS 3.2.4"]
+  
+  // Timeline
+  timeline: {
+    estimatedStart: string
+    estimatedEnd: string
+    milestones: string[]
+  }
+  
+  // Dependencies and assumptions
+  dependencies: string[]
+  assumptions: string[]
+  
+  // Technical details
+  technicalDetails: {
+    stack: string[]
+    constraints: string[]
+    integrations: string[]
+    compliance: string[]
+  }
+  
+  // Quality
+  acceptanceCriteria: string[]
+  successMetrics: string[]
+  testingStrategy: string[]
+  
+  // Documentation
+  documentationNeeds: string[]
+  dataRequirements: string[]
+  openQuestions: string[]
+  
+  // Legacy compatibility
+  requiredRoles: string[]
+}
+
+// Risk for scoping
+export interface ScopingRisk {
+  id: string
+  title: string
+  description: string
+  probability: 'low' | 'medium' | 'high'
+  impact: 'low' | 'medium' | 'high'
+  mitigation: string
+  owner: string
+  relatedEpics: string[]
+}
+
+// Technical decision
+export interface TechnicalDecision {
+  id: string
+  category: 'stack' | 'architecture' | 'compliance' | 'security' | 'infrastructure'
+  title: string
+  description: string
+  rationale: string
+  priority: 'critical' | 'high' | 'medium' | 'low'
+  relatedEpics: string[]
+}
+
+// BD Assumption for delivery handoff
+export interface BDAssumption {
+  id: string
+  category: 'budget' | 'resource' | 'timeline' | 'technical' | 'client' | 'delivery'
+  title: string
+  description: string
+  impact: string
+  validationNeeded: boolean
+  validated?: boolean
+  validatedBy?: string
+  validatedDate?: string
+  owner: string
+  relatedEpics: string[]
+}
+
+// Complete scoping data structure (Legacy)
+export interface ScopingData {
+  epics: ScopingEpic[]
+  risks: ScopingRisk[]
+  technicalDecisions: TechnicalDecision[]
+  assumptions: BDAssumption[]
+  
+  // Velocity settings for hours calculation
+  velocitySettings: {
+    sprintLengthWeeks: number
+    hoursPerSprint: number
+    velocitySpPerSprint: number
+  }
+  
+  // WBS settings
+  wbsPrefix: string  // e.g., "1.0" for "1.0.1", "1.0.2", etc.
+}
+
+// Default scoping data WITH mock data for development
+export const defaultScopingData: ScopingData = {
+  epics: [],
+  risks: [],
+  technicalDecisions: [],
+  assumptions: [],
+  velocitySettings: {
+    sprintLengthWeeks: 2,
+    hoursPerSprint: 160,
+    velocitySpPerSprint: 20
+  },
+  wbsPrefix: '1.0'
+}
+
+// Empty scoping data (for production/reset)
+export const emptyScopingData: ScopingData = {
+  epics: [],
+  risks: [],
+  technicalDecisions: [],
+  assumptions: [],
+  velocitySettings: {
+    sprintLengthWeeks: 2,
+    hoursPerSprint: 160,
+    velocitySpPerSprint: 20
+  },
+  wbsPrefix: '1.0'
+}
+
 // ==================== COMPANY PROFILE (SaaS-Ready) ====================
 
 export interface CompanyProfile {
@@ -259,6 +629,7 @@ export interface Role {
   loadedRate?: number;
   annualCost?: number;
   billableHours?: number;
+  hourlyRate?: number;
 }
 
 // ==================== SUBCONTRACTORS ====================
@@ -458,6 +829,7 @@ interface AppContextType {
   setUiProfitMargin: (margin: number) => void;
   uiBillableHours: number;
   setUiBillableHours: (hours: number) => void;
+  
   // Company Policy
   companyPolicy: CompanyPolicy;
   setCompanyPolicy: (policy: CompanyPolicy) => void;
@@ -499,6 +871,57 @@ interface AppContextType {
   getPartnerById: (id: string) => TeamingPartner | undefined;
   getSubcontractorsByPartnerId: (partnerId: string) => Subcontractor[];
   
+  // Rate Justifications (persist across tab switches)
+  rateJustifications: Record<string, RoleJustification>;
+  setRateJustifications: (justifications: Record<string, RoleJustification>) => void;
+  updateRateJustification: (roleId: string, justification: RoleJustification) => void;
+  removeRateJustification: (roleId: string) => void;
+  
+  // Scoping Data (Legacy - kept for backward compatibility)
+  scopingData: ScopingData;
+  setScopingData: (data: ScopingData) => void;
+  
+  // Epic management (Legacy)
+  addEpic: (epic: ScopingEpic) => void;
+  updateEpic: (id: string, updates: Partial<ScopingEpic>) => void;
+  removeEpic: (id: string) => void;
+  
+  // Risk management (Legacy)
+  addScopingRisk: (risk: ScopingRisk) => void;
+  updateScopingRisk: (id: string, updates: Partial<ScopingRisk>) => void;
+  removeScopingRisk: (id: string) => void;
+  
+  // Technical decision management (Legacy)
+  addTechnicalDecision: (decision: TechnicalDecision) => void;
+  updateTechnicalDecision: (id: string, updates: Partial<TechnicalDecision>) => void;
+  removeTechnicalDecision: (id: string) => void;
+  
+  // BD Assumption management (Legacy)
+  addBDAssumption: (assumption: BDAssumption) => void;
+  updateBDAssumption: (id: string, updates: Partial<BDAssumption>) => void;
+  removeBDAssumption: (id: string) => void;
+  
+  // Scoping calculations (Legacy)
+  getTotalScopingHours: () => number;
+  getTotalStoryPoints: () => number;
+  getHoursByRole: () => Record<string, number>;
+  
+  // ==================== ESTIMATE TAB (NEW) ====================
+  
+  // Estimate Data (BOE support)
+  estimateData: EstimateData;
+  setEstimateData: (data: EstimateData) => void;
+  
+  // WBS Element management
+  addWBSElement: (element: WBSElement) => void;
+  updateWBSElement: (id: string, updates: Partial<WBSElement>) => void;
+  removeWBSElement: (id: string) => void;
+  
+  // Estimate calculations
+  getEstimateTotalHours: () => number;
+  getEstimateHoursByRole: () => Record<string, number>;
+  getEstimateReadiness: () => { score: number; complete: number; total: number };
+  
   // ODCs
   odcs: ODCItem[];
   setODCs: (odcs: ODCItem[]) => void;
@@ -526,6 +949,8 @@ interface AppContextType {
   ) => number;
   
   calculateLoadedCost: (baseSalary: number) => number;
+  
+  calculateLoadedRate: (baseSalary: number) => number;
   
   calculateEscalatedRate: (baseRate: number, year: number) => number;
   
@@ -747,6 +1172,214 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [odcs, setODCs] = useState<ODCItem[]>([]);
   const [perDiem, setPerDiem] = useState<PerDiemCalculation[]>([]);
   const [gsaContractInfo, setGSAContractInfo] = useState<GSAContractInfo | null>(null);
+  
+  // ==================== RATE JUSTIFICATIONS (Persist across tab switches) ====================
+  const [rateJustifications, setRateJustifications] = useState<Record<string, RoleJustification>>({});
+  
+  const updateRateJustification = (roleId: string, justification: RoleJustification) => {
+    setRateJustifications(prev => ({
+      ...prev,
+      [roleId]: justification
+    }));
+  };
+  
+  const removeRateJustification = (roleId: string) => {
+    setRateJustifications(prev => {
+      const updated = { ...prev };
+      delete updated[roleId];
+      return updated;
+    });
+  };
+
+  // ==================== SCOPING DATA (Legacy - kept for backward compatibility) ====================
+  const [scopingData, setScopingData] = useState<ScopingData>(defaultScopingData);
+
+  // Epic management (Legacy)
+  const addEpic = (epic: ScopingEpic) => {
+    setScopingData(prev => ({
+      ...prev,
+      epics: [...prev.epics, epic]
+    }));
+  };
+
+  const updateEpic = (id: string, updates: Partial<ScopingEpic>) => {
+    setScopingData(prev => ({
+      ...prev,
+      epics: prev.epics.map(e => e.id === id ? { ...e, ...updates } : e)
+    }));
+  };
+
+  const removeEpic = (id: string) => {
+    setScopingData(prev => ({
+      ...prev,
+      epics: prev.epics.filter(e => e.id !== id)
+    }));
+  };
+
+  // Risk management (Legacy)
+  const addScopingRisk = (risk: ScopingRisk) => {
+    setScopingData(prev => ({
+      ...prev,
+      risks: [...prev.risks, risk]
+    }));
+  };
+
+  const updateScopingRisk = (id: string, updates: Partial<ScopingRisk>) => {
+    setScopingData(prev => ({
+      ...prev,
+      risks: prev.risks.map(r => r.id === id ? { ...r, ...updates } : r)
+    }));
+  };
+
+  const removeScopingRisk = (id: string) => {
+    setScopingData(prev => ({
+      ...prev,
+      risks: prev.risks.filter(r => r.id !== id)
+    }));
+  };
+
+  // Technical decision management (Legacy)
+  const addTechnicalDecision = (decision: TechnicalDecision) => {
+    setScopingData(prev => ({
+      ...prev,
+      technicalDecisions: [...prev.technicalDecisions, decision]
+    }));
+  };
+
+  const updateTechnicalDecision = (id: string, updates: Partial<TechnicalDecision>) => {
+    setScopingData(prev => ({
+      ...prev,
+      technicalDecisions: prev.technicalDecisions.map(d => d.id === id ? { ...d, ...updates } : d)
+    }));
+  };
+
+  const removeTechnicalDecision = (id: string) => {
+    setScopingData(prev => ({
+      ...prev,
+      technicalDecisions: prev.technicalDecisions.filter(d => d.id !== id)
+    }));
+  };
+
+  // BD Assumption management (Legacy)
+  const addBDAssumption = (assumption: BDAssumption) => {
+    setScopingData(prev => ({
+      ...prev,
+      assumptions: [...prev.assumptions, assumption]
+    }));
+  };
+
+  const updateBDAssumption = (id: string, updates: Partial<BDAssumption>) => {
+    setScopingData(prev => ({
+      ...prev,
+      assumptions: prev.assumptions.map(a => a.id === id ? { ...a, ...updates } : a)
+    }));
+  };
+
+  const removeBDAssumption = (id: string) => {
+    setScopingData(prev => ({
+      ...prev,
+      assumptions: prev.assumptions.filter(a => a.id !== id)
+    }));
+  };
+
+  // Scoping calculations (Legacy)
+  const getTotalScopingHours = (): number => {
+    return scopingData.epics.reduce((total, epic) => {
+      const epicHours = epic.hoursBreakdown.reduce((sum, hb) => sum + hb.hours, 0);
+      return total + epicHours;
+    }, 0);
+  };
+
+  const getTotalStoryPoints = (): number => {
+    return scopingData.epics.reduce((total, epic) => total + epic.storyPoints, 0);
+  };
+
+  const getHoursByRole = (): Record<string, number> => {
+    const hoursByRole: Record<string, number> = {};
+    scopingData.epics.forEach(epic => {
+      epic.hoursBreakdown.forEach(hb => {
+        if (!hoursByRole[hb.roleName]) {
+          hoursByRole[hb.roleName] = 0;
+        }
+        hoursByRole[hb.roleName] += hb.hours;
+      });
+    });
+    return hoursByRole;
+  };
+
+  // ==================== ESTIMATE DATA (NEW - BOE Support) ====================
+  const [estimateData, setEstimateData] = useState<EstimateData>(emptyEstimateData);
+
+  // WBS Element management
+  const addWBSElement = (element: WBSElement) => {
+    const quality = calculateWBSQuality(element);
+    const elementWithQuality: WBSElement = {
+      ...element,
+      qualityGrade: quality.grade,
+      qualityIssues: quality.issues,
+      isComplete: quality.issues.length === 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setEstimateData(prev => ({
+      ...prev,
+      wbsElements: [...prev.wbsElements, elementWithQuality],
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  const updateWBSElement = (id: string, updates: Partial<WBSElement>) => {
+    setEstimateData(prev => ({
+      ...prev,
+      wbsElements: prev.wbsElements.map(el => {
+        if (el.id !== id) return el;
+        const updated: WBSElement = { ...el, ...updates, updatedAt: new Date().toISOString() };
+        const quality = calculateWBSQuality(updated);
+        return {
+          ...updated,
+          qualityGrade: quality.grade,
+          qualityIssues: quality.issues,
+          isComplete: quality.issues.length === 0
+        };
+      }),
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  const removeWBSElement = (id: string) => {
+    setEstimateData(prev => ({
+      ...prev,
+      wbsElements: prev.wbsElements.filter(el => el.id !== id),
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  // Estimate calculations
+  const getEstimateTotalHours = (): number => {
+    return estimateData.wbsElements.reduce((total, el) => total + el.totalHours, 0);
+  };
+
+  const getEstimateHoursByRole = (): Record<string, number> => {
+    const hoursByRole: Record<string, number> = {};
+    estimateData.wbsElements.forEach(el => {
+      el.laborEstimates.forEach(labor => {
+        if (!hoursByRole[labor.roleName]) {
+          hoursByRole[labor.roleName] = 0;
+        }
+        hoursByRole[labor.roleName] += labor.calculatedHours;
+      });
+    });
+    return hoursByRole;
+  };
+
+  const getEstimateReadiness = (): { score: number; complete: number; total: number } => {
+    const total = estimateData.wbsElements.length;
+    const complete = estimateData.wbsElements.filter(
+      el => el.qualityGrade === 'green' || el.qualityGrade === 'blue'
+    ).length;
+    const score = total > 0 ? Math.round((complete / total) * 100) : 0;
+    return { score, complete, total };
+  };
 
   // ==================== CALCULATION FUNCTIONS ====================
 
@@ -769,6 +1402,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const calculateLoadedCost = (baseSalary: number): number => {
     return calculateFullyBurdenedRate(baseSalary, false);
+  };
+  
+  // Alias for use in Rate Justification tab
+  const calculateLoadedRate = (baseSalary: number): number => {
+    return calculateFullyBurdenedRate(baseSalary, true, uiProfitMargin / 100);
   };
 
   const calculateEscalatedRate = (baseRate: number, year: number): number => {
@@ -880,6 +1518,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const removeRole = (id: string) => {
     setSelectedRoles(selectedRoles.filter(r => r.id !== id));
+    // Also remove any justification for this role
+    removeRateJustification(id);
   };
 
   const updateRole = (id: string, updates: Partial<Role>) => {
@@ -899,6 +1539,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const removeSubcontractor = (id: string) => {
     setSubcontractors(subcontractors.filter(s => s.id !== id));
+    // Also remove any justification for this subcontractor
+    removeRateJustification(id);
   };
 
   const updateSubcontractor = (id: string, updates: Partial<Subcontractor>) => {
@@ -1103,6 +1745,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getPartnerById,
     getSubcontractorsByPartnerId,
     
+    // Rate Justifications
+    rateJustifications,
+    setRateJustifications,
+    updateRateJustification,
+    removeRateJustification,
+    
+    // Scoping Data (Legacy)
+    scopingData,
+    setScopingData,
+    addEpic,
+    updateEpic,
+    removeEpic,
+    addScopingRisk,
+    updateScopingRisk,
+    removeScopingRisk,
+    addTechnicalDecision,
+    updateTechnicalDecision,
+    removeTechnicalDecision,
+    addBDAssumption,
+    updateBDAssumption,
+    removeBDAssumption,
+    getTotalScopingHours,
+    getTotalStoryPoints,
+    getHoursByRole,
+    
+    // Estimate Data (NEW)
+    estimateData,
+    setEstimateData,
+    addWBSElement,
+    updateWBSElement,
+    removeWBSElement,
+    getEstimateTotalHours,
+    getEstimateHoursByRole,
+    getEstimateReadiness,
+    
     // ODCs
     odcs,
     setODCs,
@@ -1124,6 +1801,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Calculations (Audit-Ready)
     calculateFullyBurdenedRate,
     calculateLoadedCost,
+    calculateLoadedRate,
     calculateEscalatedRate,
     getRateBreakdown,
     calculateYearSalaries,

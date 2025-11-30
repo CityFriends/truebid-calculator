@@ -41,7 +41,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { useAppContext } from '@/contexts/app-context'
+import { useAppContext, RoleJustification } from '@/contexts/app-context'
 
 // ==================== TYPES ====================
 
@@ -62,23 +62,7 @@ interface RoleDisplay {
   markupPercent?: number
 }
 
-// Justification for premium rates
-interface RoleJustification {
-  roleId: string
-  roleTitle: string
-  percentile: number
-  selectedReasons: {
-    clearance?: string
-    location?: string
-    certifications?: string[]
-    keyPersonnel?: boolean
-    nicheSkills?: boolean
-    experience?: string
-    pastPerformance?: boolean
-  }
-  notes: string
-  savedAt: string
-}
+// RoleJustification is imported from app-context
 
 interface BLSData {
   socCode: string
@@ -868,6 +852,15 @@ const formatCurrency = (amount: number): string => {
   }).format(amount)
 }
 
+// Format FTE to clean display (1, 0.5, 0.67, etc.)
+const formatFTE = (fte: number): string => {
+  if (fte === Math.floor(fte)) {
+    return fte.toString() // Whole number: 1, 2, 3
+  }
+  // Round to 2 decimal places, remove trailing zeros
+  return Number(fte.toFixed(2)).toString()
+}
+
 // ==================== COMPONENT ====================
 
 export function RateJustificationTab() {
@@ -898,8 +891,8 @@ export function RateJustificationTab() {
   const [gsaFilterRole, setGsaFilterRole] = useState<string>('all')
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
   
-  // Rate justification state - stores justifications per role
-  const [roleJustifications, setRoleJustifications] = useState<Record<string, RoleJustification>>({})
+  // Rate justification state - now from context to persist across tab switches
+  const { rateJustifications: roleJustifications, setRateJustifications, updateRateJustification } = context
 
   // Justification options
   const justificationOptions = [
@@ -989,11 +982,14 @@ export function RateJustificationTab() {
         
         if (existing) {
           // Aggregate FTE for same role from same company
-          existing.fte += (sub.fte || sub.quantity || 1)
+          // Use base year FTE from allocations if available
+          const baseFte = sub.allocations?.base?.fte ?? sub.fte ?? sub.quantity ?? 1
+          existing.fte += baseFte
         } else {
           const theirRate = sub.theirRate || sub.rate || 0
           const billedRate = sub.billedRate || sub.ourRate || theirRate
-          const fte = sub.fte || sub.quantity || 1
+          // Use base year FTE for display (most relevant for rate comparison)
+          const fte = sub.allocations?.base?.fte ?? sub.fte ?? sub.quantity ?? 1
           
           subMap.set(key, {
             id: sub.id || '',
@@ -1125,8 +1121,13 @@ export function RateJustificationTab() {
     
     const needsJustification = rolesWithData.filter(role => {
       const blsData = findBLSData(role.title)!
-      const percentile = calculatePercentile(role.salary, blsData)
-      return percentile >= 75
+      const isSub = role.isPrime === false
+      // For subs, calculate percentile based on estimated base salary
+      const percentile = isSub 
+        ? calculatePercentile(role.hourlyRate * 2080 / 2.0, blsData)
+        : calculatePercentile(role.salary, blsData)
+      // High rates (≥75th) OR low rates (≤25th) need justification
+      return percentile >= 75 || percentile <= 25
     })
     
     const hasJustification = needsJustification.filter(role => 
@@ -1405,9 +1406,12 @@ export function RateJustificationTab() {
 
                     // Border color: Blue for prime, Orange for sub
                     const borderColor = isSub ? 'border-l-orange-500' : 'border-l-blue-500'
+                    const hoverBorderColor = isSub ? 'hover:border-orange-300' : 'hover:border-blue-400'
                     
-                    // Check if justification is needed and if it exists
-                    const needsJustification = percentile >= 75
+                    // Check if justification is needed (high OR low rates) and if it exists
+                    // High rates (≥75th): Premium pricing needs defense
+                    // Low rates (≤25th): Cost realism concerns - can you actually deliver?
+                    const needsJustification = percentile >= 75 || percentile <= 25
                     const hasJustification = roleJustifications[role.id]?.savedAt !== undefined && roleJustifications[role.id]?.savedAt !== ''
 
                     return (
@@ -1415,7 +1419,7 @@ export function RateJustificationTab() {
                         key={role.id}
                         className={`
                           group border border-gray-200 border-l-4 rounded-lg p-4 
-                          hover:border-blue-400 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] 
+                          ${hoverBorderColor} hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] 
                           transition-all cursor-pointer bg-white
                           ${borderColor}
                         `}
@@ -1472,7 +1476,7 @@ export function RateJustificationTab() {
                               )}
                             </div>
                             <p className="text-xs text-gray-600">
-                              {role.fte} FTE • ${role.hourlyRate.toFixed(2)}/hr
+                              {formatFTE(role.fte)} FTE • ${role.hourlyRate.toFixed(2)}/hr
                               {isSub && role.markupPercent && role.markupPercent > 0 && (
                                 <span className="text-gray-400"> (+{role.markupPercent.toFixed(0)}% markup)</span>
                               )}
@@ -1934,7 +1938,7 @@ export function RateJustificationTab() {
               <div>
                 <h3 id="bls-panel-title" className="text-lg font-semibold text-gray-900">{selectedRole.title}</h3>
                 <p className="text-sm text-gray-600 mt-0.5">
-                  {selectedRole.level} • {selectedRole.fte} FTE • ${selectedRole.hourlyRate.toFixed(2)}/hr
+                  {selectedRole.level} • {formatFTE(selectedRole.fte)} FTE • ${selectedRole.hourlyRate.toFixed(2)}/hr
                 </p>
               </div>
               <Button 
@@ -2034,16 +2038,21 @@ export function RateJustificationTab() {
                       </div>
                     </div>
 
-                    {/* Rate Justification Form - Only show when above 75th percentile */}
-                    {percentile >= 75 && (
+                    {/* Rate Justification Form - Show for high (≥75th) OR low (≤25th) percentile */}
+                    {(percentile >= 75 || percentile <= 25) && (
                       <div className="border-t border-gray-200 pt-4">
                         <div className="flex items-center gap-2 mb-4">
-                          <AlertTriangle className="w-5 h-5 text-amber-500" />
-                          <h4 className="text-sm font-semibold text-gray-900">Rate Justification Required</h4>
+                          <AlertTriangle className={`w-5 h-5 ${percentile >= 75 ? 'text-amber-500' : 'text-blue-500'}`} />
+                          <h4 className="text-sm font-semibold text-gray-900">
+                            {percentile >= 75 ? 'Rate Justification Required' : 'Cost Realism Justification Required'}
+                          </h4>
                         </div>
                         
                         <p className="text-xs text-gray-600 mb-4">
-                          This role is above the 75th percentile. Document your justification for audit defense.
+                          {percentile >= 75 
+                            ? 'This role is above the 75th percentile. Document your justification for audit defense.'
+                            : 'This role is below the 25th percentile. Document how you can deliver at this rate to address cost realism concerns.'
+                          }
                         </p>
 
                         {(() => {
@@ -2057,161 +2066,268 @@ export function RateJustificationTab() {
                           }
 
                           const updateJustification = (updates: Partial<RoleJustification['selectedReasons']> | { notes: string }) => {
-                            setRoleJustifications(prev => ({
-                              ...prev,
-                              [selectedRole.id]: {
-                                ...currentJustification,
-                                ...(('notes' in updates) ? updates : { selectedReasons: { ...currentJustification.selectedReasons, ...updates } }),
+                            setRateJustifications(prev => {
+                              const existing = prev[selectedRole.id] || {
+                                roleId: selectedRole.id,
+                                roleTitle: selectedRole.title,
+                                percentile,
+                                selectedReasons: {},
+                                notes: '',
                                 savedAt: ''
                               }
-                            }))
+                              return {
+                                ...prev,
+                                [selectedRole.id]: {
+                                  ...existing,
+                                  ...(('notes' in updates) ? updates : { selectedReasons: { ...existing.selectedReasons, ...updates } }),
+                                  savedAt: ''
+                                }
+                              }
+                            })
                           }
 
                           const saveJustification = () => {
-                            setRoleJustifications(prev => ({
-                              ...prev,
-                              [selectedRole.id]: {
-                                ...currentJustification,
-                                savedAt: new Date().toISOString()
+                            setRateJustifications(prev => {
+                              const existing = prev[selectedRole.id] || currentJustification
+                              return {
+                                ...prev,
+                                [selectedRole.id]: {
+                                  ...existing,
+                                  savedAt: new Date().toISOString()
+                                }
                               }
-                            }))
+                            })
                           }
 
                           const hasJustification = currentJustification.savedAt !== ''
+                          const isHighRate = percentile >= 75
 
                           return (
                             <div className="space-y-4">
-                              {/* Security Clearance */}
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <Checkbox 
-                                    id="clearance"
-                                    checked={!!currentJustification.selectedReasons.clearance}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        updateJustification({ clearance: '' })
-                                      } else {
-                                        updateJustification({ clearance: undefined })
-                                      }
-                                    }}
-                                  />
-                                  <Label htmlFor="clearance" className="text-sm font-medium cursor-pointer">Security Clearance Required</Label>
-                                </div>
-                                {currentJustification.selectedReasons.clearance !== undefined && (
-                                  <Select 
-                                    value={currentJustification.selectedReasons.clearance || ''} 
-                                    onValueChange={(value) => updateJustification({ clearance: value })}
-                                  >
-                                    <SelectTrigger className="w-full h-8 text-xs">
-                                      <SelectValue placeholder="Select clearance level" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="Secret">Secret</SelectItem>
-                                      <SelectItem value="Top Secret">Top Secret</SelectItem>
-                                      <SelectItem value="TS/SCI">TS/SCI</SelectItem>
-                                      <SelectItem value="TS/SCI w/ Poly">TS/SCI w/ Poly</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                )}
-                              </div>
+                              {isHighRate ? (
+                                <>
+                                  {/* HIGH RATE JUSTIFICATIONS */}
+                                  
+                                  {/* Security Clearance */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <Checkbox 
+                                        id="clearance"
+                                        checked={!!currentJustification.selectedReasons.clearance}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            updateJustification({ clearance: '' })
+                                          } else {
+                                            updateJustification({ clearance: undefined })
+                                          }
+                                        }}
+                                      />
+                                      <Label htmlFor="clearance" className="text-sm font-medium cursor-pointer">Security Clearance Required</Label>
+                                    </div>
+                                    {currentJustification.selectedReasons.clearance !== undefined && (
+                                      <Select 
+                                        value={currentJustification.selectedReasons.clearance || ''} 
+                                        onValueChange={(value) => updateJustification({ clearance: value })}
+                                      >
+                                        <SelectTrigger className="w-full h-8 text-xs">
+                                          <SelectValue placeholder="Select clearance level" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Secret">Secret</SelectItem>
+                                          <SelectItem value="Top Secret">Top Secret</SelectItem>
+                                          <SelectItem value="TS/SCI">TS/SCI</SelectItem>
+                                          <SelectItem value="TS/SCI w/ Poly">TS/SCI w/ Poly</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                  </div>
 
-                              {/* Geographic Location */}
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <Checkbox 
-                                    id="location"
-                                    checked={!!currentJustification.selectedReasons.location}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        updateJustification({ location: '' })
-                                      } else {
-                                        updateJustification({ location: undefined })
-                                      }
-                                    }}
-                                  />
-                                  <Label htmlFor="location" className="text-sm font-medium cursor-pointer">Geographic Location Premium</Label>
-                                </div>
-                                {currentJustification.selectedReasons.location !== undefined && (
-                                  <Select 
-                                    value={currentJustification.selectedReasons.location || ''} 
-                                    onValueChange={(value) => updateJustification({ location: value })}
-                                  >
-                                    <SelectTrigger className="w-full h-8 text-xs">
-                                      <SelectValue placeholder="Select location" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="Washington DC Metro">Washington DC Metro</SelectItem>
-                                      <SelectItem value="San Francisco Bay Area">San Francisco Bay Area</SelectItem>
-                                      <SelectItem value="New York Metro">New York Metro</SelectItem>
-                                      <SelectItem value="Boston Metro">Boston Metro</SelectItem>
-                                      <SelectItem value="Other HCOL Area">Other HCOL Area</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                )}
-                              </div>
+                                  {/* Geographic Location */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <Checkbox 
+                                        id="location"
+                                        checked={!!currentJustification.selectedReasons.location}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            updateJustification({ location: '' })
+                                          } else {
+                                            updateJustification({ location: undefined })
+                                          }
+                                        }}
+                                      />
+                                      <Label htmlFor="location" className="text-sm font-medium cursor-pointer">Geographic Location Premium</Label>
+                                    </div>
+                                    {currentJustification.selectedReasons.location !== undefined && (
+                                      <Select 
+                                        value={currentJustification.selectedReasons.location || ''} 
+                                        onValueChange={(value) => updateJustification({ location: value })}
+                                      >
+                                        <SelectTrigger className="w-full h-8 text-xs">
+                                          <SelectValue placeholder="Select location" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Washington DC Metro">Washington DC Metro</SelectItem>
+                                          <SelectItem value="San Francisco Bay Area">San Francisco Bay Area</SelectItem>
+                                          <SelectItem value="New York Metro">New York Metro</SelectItem>
+                                          <SelectItem value="Boston Metro">Boston Metro</SelectItem>
+                                          <SelectItem value="Other HCOL Area">Other HCOL Area</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                  </div>
 
-                              {/* Experience Level */}
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <Checkbox 
-                                    id="experience"
-                                    checked={!!currentJustification.selectedReasons.experience}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        updateJustification({ experience: '' })
-                                      } else {
-                                        updateJustification({ experience: undefined })
-                                      }
-                                    }}
-                                  />
-                                  <Label htmlFor="experience" className="text-sm font-medium cursor-pointer">Experience Beyond Minimum</Label>
-                                </div>
-                                {currentJustification.selectedReasons.experience !== undefined && (
-                                  <Select 
-                                    value={currentJustification.selectedReasons.experience || ''} 
-                                    onValueChange={(value) => updateJustification({ experience: value })}
-                                  >
-                                    <SelectTrigger className="w-full h-8 text-xs">
-                                      <SelectValue placeholder="Select experience level" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="10+ years">10+ years</SelectItem>
-                                      <SelectItem value="15+ years">15+ years</SelectItem>
-                                      <SelectItem value="20+ years">20+ years</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                )}
-                              </div>
+                                  {/* Experience Level */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <Checkbox 
+                                        id="experience"
+                                        checked={!!currentJustification.selectedReasons.experience}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            updateJustification({ experience: '' })
+                                          } else {
+                                            updateJustification({ experience: undefined })
+                                          }
+                                        }}
+                                      />
+                                      <Label htmlFor="experience" className="text-sm font-medium cursor-pointer">Experience Beyond Minimum</Label>
+                                    </div>
+                                    {currentJustification.selectedReasons.experience !== undefined && (
+                                      <Select 
+                                        value={currentJustification.selectedReasons.experience || ''} 
+                                        onValueChange={(value) => updateJustification({ experience: value })}
+                                      >
+                                        <SelectTrigger className="w-full h-8 text-xs">
+                                          <SelectValue placeholder="Select experience level" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="10+ years">10+ years</SelectItem>
+                                          <SelectItem value="15+ years">15+ years</SelectItem>
+                                          <SelectItem value="20+ years">20+ years</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                  </div>
 
-                              {/* Key Personnel */}
-                              <div className="flex items-center gap-2">
-                                <Checkbox 
-                                  id="keyPersonnel"
-                                  checked={!!currentJustification.selectedReasons.keyPersonnel}
-                                  onCheckedChange={(checked) => updateJustification({ keyPersonnel: !!checked })}
-                                />
-                                <Label htmlFor="keyPersonnel" className="text-sm font-medium cursor-pointer">Key Personnel (Named Individual)</Label>
-                              </div>
+                                  {/* Key Personnel */}
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                      id="keyPersonnel"
+                                      checked={!!currentJustification.selectedReasons.keyPersonnel}
+                                      onCheckedChange={(checked) => updateJustification({ keyPersonnel: !!checked })}
+                                    />
+                                    <Label htmlFor="keyPersonnel" className="text-sm font-medium cursor-pointer">Key Personnel (Named Individual)</Label>
+                                  </div>
 
-                              {/* Niche Skills */}
-                              <div className="flex items-center gap-2">
-                                <Checkbox 
-                                  id="nicheSkills"
-                                  checked={!!currentJustification.selectedReasons.nicheSkills}
-                                  onCheckedChange={(checked) => updateJustification({ nicheSkills: !!checked })}
-                                />
-                                <Label htmlFor="nicheSkills" className="text-sm font-medium cursor-pointer">Niche Technology / Domain Expertise</Label>
-                              </div>
+                                  {/* Niche Skills */}
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                      id="nicheSkills"
+                                      checked={!!currentJustification.selectedReasons.nicheSkills}
+                                      onCheckedChange={(checked) => updateJustification({ nicheSkills: !!checked })}
+                                    />
+                                    <Label htmlFor="nicheSkills" className="text-sm font-medium cursor-pointer">Niche Technology / Domain Expertise</Label>
+                                  </div>
 
-                              {/* Past Performance */}
-                              <div className="flex items-center gap-2">
-                                <Checkbox 
-                                  id="pastPerformance"
-                                  checked={!!currentJustification.selectedReasons.pastPerformance}
-                                  onCheckedChange={(checked) => updateJustification({ pastPerformance: !!checked })}
-                                />
-                                <Label htmlFor="pastPerformance" className="text-sm font-medium cursor-pointer">Incumbent / Past Performance</Label>
-                              </div>
+                                  {/* Past Performance */}
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                      id="pastPerformance"
+                                      checked={!!currentJustification.selectedReasons.pastPerformance}
+                                      onCheckedChange={(checked) => updateJustification({ pastPerformance: !!checked })}
+                                    />
+                                    <Label htmlFor="pastPerformance" className="text-sm font-medium cursor-pointer">Incumbent / Past Performance</Label>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  {/* LOW RATE JUSTIFICATIONS (Cost Realism) */}
+                                  
+                                  {/* Efficiency / Automation */}
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                      id="efficiency"
+                                      checked={!!currentJustification.selectedReasons.efficiency}
+                                      onCheckedChange={(checked) => updateJustification({ efficiency: !!checked })}
+                                    />
+                                    <Label htmlFor="efficiency" className="text-sm font-medium cursor-pointer">Efficiency Gains / Automation</Label>
+                                  </div>
+
+                                  {/* Reusable Assets */}
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                      id="reusableAssets"
+                                      checked={!!currentJustification.selectedReasons.reusableAssets}
+                                      onCheckedChange={(checked) => updateJustification({ reusableAssets: !!checked })}
+                                    />
+                                    <Label htmlFor="reusableAssets" className="text-sm font-medium cursor-pointer">Reusable Components / IP</Label>
+                                  </div>
+
+                                  {/* Lower Cost Location */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <Checkbox 
+                                        id="lowCostLocation"
+                                        checked={!!currentJustification.selectedReasons.lowCostLocation}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            updateJustification({ lowCostLocation: '' })
+                                          } else {
+                                            updateJustification({ lowCostLocation: undefined })
+                                          }
+                                        }}
+                                      />
+                                      <Label htmlFor="lowCostLocation" className="text-sm font-medium cursor-pointer">Lower Cost Geography</Label>
+                                    </div>
+                                    {currentJustification.selectedReasons.lowCostLocation !== undefined && (
+                                      <Select 
+                                        value={currentJustification.selectedReasons.lowCostLocation || ''} 
+                                        onValueChange={(value) => updateJustification({ lowCostLocation: value })}
+                                      >
+                                        <SelectTrigger className="w-full h-8 text-xs">
+                                          <SelectValue placeholder="Select location type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Remote / Distributed">Remote / Distributed Team</SelectItem>
+                                          <SelectItem value="Lower Cost US Region">Lower Cost US Region</SelectItem>
+                                          <SelectItem value="Near-shore">Near-shore (Canada, Mexico)</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                  </div>
+
+                                  {/* Established Relationship */}
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                      id="establishedRelationship"
+                                      checked={!!currentJustification.selectedReasons.establishedRelationship}
+                                      onCheckedChange={(checked) => updateJustification({ establishedRelationship: !!checked })}
+                                    />
+                                    <Label htmlFor="establishedRelationship" className="text-sm font-medium cursor-pointer">Established Subcontractor Relationship</Label>
+                                  </div>
+
+                                  {/* Volume Discount */}
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                      id="volumeDiscount"
+                                      checked={!!currentJustification.selectedReasons.volumeDiscount}
+                                      onCheckedChange={(checked) => updateJustification({ volumeDiscount: !!checked })}
+                                    />
+                                    <Label htmlFor="volumeDiscount" className="text-sm font-medium cursor-pointer">Volume / Long-term Discount</Label>
+                                  </div>
+
+                                  {/* Proven Track Record */}
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                      id="provenDelivery"
+                                      checked={!!currentJustification.selectedReasons.provenDelivery}
+                                      onCheckedChange={(checked) => updateJustification({ provenDelivery: !!checked })}
+                                    />
+                                    <Label htmlFor="provenDelivery" className="text-sm font-medium cursor-pointer">Proven Delivery at This Rate</Label>
+                                  </div>
+                                </>
+                              )}
 
                               {/* Additional Notes */}
                               <div className="space-y-2">
