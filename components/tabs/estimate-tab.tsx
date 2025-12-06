@@ -242,7 +242,7 @@ const QUALITY_GRADE_CONFIG: Record<string, { label: string; description: string;
     description: 'Historical basis with charge number',
     bgColor: 'bg-blue-50',
     textColor: 'text-blue-700',
-    borderColor: 'border-blue-200'
+    borderColor: 'border-blue-100'
   },
   'green': { 
     label: 'Complete', 
@@ -290,17 +290,17 @@ const REQUIREMENT_TYPE_CONFIG: Record<RequirementType, { label: string; descript
   'should': { 
     label: 'Should', 
     description: 'Expected requirement - strongly recommended',
-    color: 'text-orange-700 bg-orange-50 border-orange-200'
+    color: 'text-orange-700 bg-orange-50 border-orange-100'
   },
   'will': { 
     label: 'Will', 
     description: 'Government action or statement of fact',
-    color: 'text-blue-700 bg-blue-50 border-blue-200'
+    color: 'text-blue-700 bg-blue-50 border-blue-100'
   },
   'may': { 
     label: 'May', 
     description: 'Optional - at contractor discretion',
-    color: 'text-gray-700 bg-gray-50 border-gray-200'
+    color: 'text-gray-700 bg-gray-50 border-gray-100'
   },
 }
 
@@ -1098,7 +1098,7 @@ function HelpBanner() {
       {isExpanded && (
         <div className="mt-3 grid grid-cols-2 gap-4">
           {/* Quality Grades */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="bg-white border border-gray-100 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-gray-900 mb-3">Quality Grades</h4>
             <div className="space-y-2">
               {Object.entries(QUALITY_GRADE_CONFIG).map(([key, config]) => (
@@ -1112,7 +1112,7 @@ function HelpBanner() {
           </div>
           
           {/* Estimate Methods */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="bg-white border border-gray-100 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-gray-900 mb-3">Estimate Methods</h4>
             <div className="space-y-2">
               {Object.entries(ESTIMATE_METHOD_LABELS).map(([key, config]) => (
@@ -1240,7 +1240,7 @@ interface ViewModeToggleProps {
 
 function ViewModeToggle({ viewMode, setViewMode }: ViewModeToggleProps) {
   return (
-    <div className="flex gap-1 border border-gray-200 rounded-lg p-0.5 bg-white">
+    <div className="flex gap-1 border border-gray-100 rounded-lg p-0.5 bg-white">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -1302,7 +1302,7 @@ function WBSCard({ element, onClick, onDelete, contractPeriods }: WBSCardProps) 
   
   return (
     <div
-      className="group bg-white border border-gray-200 rounded-lg hover:border-gray-300 
+      className="group bg-white border border-gray-100 rounded-lg hover:border-gray-300 
                  hover:shadow-sm transition-all cursor-pointer"
       onClick={onClick}
     >
@@ -1411,7 +1411,7 @@ function WBSListItem({ element, onClick, onDelete }: WBSListItemProps) {
   
   return (
     <div
-      className="group flex items-center gap-4 px-4 py-3 bg-white border border-gray-200 rounded-lg 
+      className="group flex items-center gap-4 px-4 py-3 bg-white border border-gray-100 rounded-lg 
                  hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
       onClick={onClick}
     >
@@ -1486,9 +1486,9 @@ interface WBSTableViewProps {
 
 function WBSTableView({ elements, onElementClick, onDelete, contractPeriods }: WBSTableViewProps) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div className="bg-white border border-gray-100 rounded-lg overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b border-gray-200">
+        <thead className="bg-gray-50 border-b border-gray-100">
           <tr>
             <th className="text-left px-4 py-3 text-xs font-medium text-gray-600">WBS</th>
             <th className="text-left px-4 py-3 text-xs font-medium text-gray-600">Title</th>
@@ -1706,7 +1706,7 @@ function ChargeCodeLibrary({ chargeCodes, onSelect, onAdd, onUpdate, onDelete }:
         {filteredCodes.map(cc => (
           <div 
             key={cc.id}
-            className={`group bg-white border border-gray-200 rounded-lg p-4 ${onSelect ? 'hover:border-blue-400 hover:shadow-sm cursor-pointer' : ''} transition-all`}
+            className={`group bg-white border border-gray-100 rounded-lg p-4 ${onSelect ? 'hover:border-blue-400 hover:shadow-sm cursor-pointer' : ''} transition-all`}
             onClick={() => onSelect?.(cc)}
           >
             {editingId === cc.id ? (
@@ -2206,7 +2206,7 @@ function RequirementsSection({
       
       {/* Filter Bar - Only show for List and Matrix views */}
       {(viewMode === 'list' || viewMode === 'matrix') && (
-        <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-4 py-2">
+        <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-lg px-4 py-2">
           <div className="flex-1 max-w-xs">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -2260,7 +2260,7 @@ function RequirementsSection({
       {viewMode === 'list' && (
         <div className="space-y-2">
           {filteredRequirements.length === 0 ? (
-            <div className="text-center py-12 bg-white border border-gray-200 rounded-lg">
+            <div className="text-center py-12 bg-white border border-gray-100 rounded-lg">
               <ClipboardCheck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
               <p className="text-sm text-gray-600">No requirements found</p>
             </div>
@@ -2275,7 +2275,7 @@ function RequirementsSection({
                 <div 
                   key={req.id}
                   className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300
-                    ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'}
+                    ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-100'}
                   `}
                 >
                   {isEditing ? (
@@ -2370,11 +2370,11 @@ function RequirementsSection({
       
       {/* MATRIX VIEW */}
       {viewMode === 'matrix' && (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="bg-white border border-gray-100 rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
+                <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-600 sticky left-0 bg-gray-50 min-w-[280px] z-10">
                     Requirement
                   </th>
@@ -2431,7 +2431,7 @@ function RequirementsSection({
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center gap-4 text-xs text-gray-500">
+          <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center gap-4 text-xs text-gray-500">
             <div className="flex items-center gap-1.5">
               <div className="w-5 h-5 rounded bg-green-100 flex items-center justify-center ring-1 ring-green-200"><Check className="w-3 h-3 text-green-700" /></div>
               Linked
@@ -2467,7 +2467,7 @@ function RequirementsSection({
                 {unmappedRequirements.map(req => {
                   const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
                   return (
-                    <div key={req.id} className="bg-white border border-l-4 border-l-red-400 border-gray-200 rounded-lg p-3">
+                    <div key={req.id} className="bg-white border border-l-4 border-l-red-400 border-gray-100 rounded-lg p-3">
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
@@ -2598,7 +2598,7 @@ function RequirementsSection({
                 <div 
                   key={wbs.id}
                   className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors
-                    ${isLinked ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50 border-gray-200'}
+                    ${isLinked ? 'bg-blue-50 border-blue-100' : 'hover:bg-gray-50 border-gray-100'}
                   `}
                   onClick={() => {
                     if (selectedReqId) {
@@ -3424,11 +3424,12 @@ function ExportSection({ wbsElements, requirements, contractPeriods }: ExportSec
         </p>
       </div>
       
-      {/* Document Information - Cleaner inline layout */}
+      {/* Document Information */}
       <div className="space-y-4">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          Document Information
-        </h3>
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 bg-blue-500 rounded-full" />
+          <span className="text-xs font-medium text-gray-700 uppercase tracking-wide">Document Information</span>
+        </div>
         <div className="grid grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-500">Contract Title</Label>
@@ -3459,12 +3460,13 @@ function ExportSection({ wbsElements, requirements, contractPeriods }: ExportSec
         </div>
       </div>
       
-      {/* Readiness Checks - Cleaner list style */}
+      {/* Readiness Checks */}
       <div className="space-y-4">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          Export Readiness
-        </h3>
-        <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 bg-green-500 rounded-full" />
+          <span className="text-xs font-medium text-gray-700 uppercase tracking-wide">Export Readiness</span>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-lg divide-y divide-gray-100">
           <ReadinessRow 
             label="WBS Elements Defined" 
             passed={checks.hasWbs}
@@ -3494,11 +3496,12 @@ function ExportSection({ wbsElements, requirements, contractPeriods }: ExportSec
         </div>
       </div>
       
-      {/* Document Preview - Subtle stats bar */}
+      {/* Document Preview */}
       <div className="space-y-4">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          Document Preview
-        </h3>
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 bg-purple-500 rounded-full" />
+          <span className="text-xs font-medium text-gray-700 uppercase tracking-wide">Document Preview</span>
+        </div>
         <div className="bg-gray-50 rounded-lg p-5">
           <div className="grid grid-cols-4 gap-6">
             <div>
@@ -3526,8 +3529,8 @@ function ExportSection({ wbsElements, requirements, contractPeriods }: ExportSec
         <button 
           className={`group relative bg-white border-2 rounded-xl p-6 text-left transition-all
             ${isExporting || !isReady 
-              ? 'border-gray-200 opacity-50 cursor-not-allowed' 
-              : 'border-gray-200 hover:border-blue-400 hover:shadow-md cursor-pointer'
+              ? 'border-gray-100 opacity-50 cursor-not-allowed' 
+              : 'border-gray-100 hover:border-blue-400 hover:shadow-md cursor-pointer'
             }`}
           onClick={handleExportWord}
           disabled={isExporting || !isReady}
@@ -3550,8 +3553,8 @@ function ExportSection({ wbsElements, requirements, contractPeriods }: ExportSec
         <button 
           className={`group relative bg-white border-2 rounded-xl p-6 text-left transition-all
             ${isExporting || !isReady 
-              ? 'border-gray-200 opacity-50 cursor-not-allowed' 
-              : 'border-gray-200 hover:border-green-400 hover:shadow-md cursor-pointer'
+              ? 'border-gray-100 opacity-50 cursor-not-allowed' 
+              : 'border-gray-100 hover:border-green-400 hover:shadow-md cursor-pointer'
             }`}
           onClick={handleExportExcel}
           disabled={isExporting || !isReady}
@@ -3811,7 +3814,7 @@ function WBSSlideout({
       <div className="fixed inset-y-0 right-0 w-[700px] bg-white shadow-2xl z-50 
                       overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4">
+        <div className="flex-shrink-0 border-b border-gray-100 px-6 py-4">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -4003,7 +4006,7 @@ function WBSSlideout({
                         </div>
                         
                         {editBuffer.historicalReference ? (
-                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
                             <div className="flex items-center gap-2 mb-1">
                               <Hash className="w-4 h-4 text-blue-600" />
                               <span className="font-mono text-sm font-semibold text-blue-900">
@@ -4217,7 +4220,7 @@ function WBSSlideout({
                   
                   {/* Historical Reference */}
                   {element.historicalReference && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
                       <div className="flex items-center gap-2 mb-2">
                         <Hash className="w-4 h-4 text-blue-600" />
                         <span className="font-mono text-sm font-semibold text-blue-900">
@@ -4229,7 +4232,7 @@ function WBSSlideout({
                         {element.historicalReference.dateRange} • {element.historicalReference.actualHours.toLocaleString()} actual hours
                       </div>
                       {element.historicalReference.notes && (
-                        <p className="text-xs text-blue-800 mt-2 pt-2 border-t border-blue-200">
+                        <p className="text-xs text-blue-800 mt-2 pt-2 border-t border-blue-100">
                           {element.historicalReference.notes}
                         </p>
                       )}
@@ -4326,7 +4329,7 @@ function WBSSlideout({
                   {element.laborEstimates.map(labor => (
                     <div 
                       key={labor.id}
-                      className={`border rounded-lg p-4 ${labor.isOrphaned ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}
+                      className={`border rounded-lg p-4 ${labor.isOrphaned ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-white'}`}
                     >
                       {editingLaborId === labor.id && laborBuffer ? (
                         // EDIT MODE
@@ -4601,7 +4604,7 @@ function WBSSlideout({
                     return (
                       <div 
                         key={risk.id}
-                        className={`border border-l-4 ${getRiskColor(score)} border-gray-200 rounded-lg p-4`}
+                        className={`border border-l-4 ${getRiskColor(score)} border-gray-100 rounded-lg p-4`}
                       >
                         {isEditing ? (
                           // EDIT MODE
@@ -4862,7 +4865,7 @@ function WBSSlideout({
                   {element.dependencies.map(dep => (
                     <div 
                       key={dep.id}
-                      className="flex items-center justify-between border border-gray-200 rounded-lg p-3"
+                      className="flex items-center justify-between border border-gray-100 rounded-lg p-3"
                     >
                       <div className="flex items-center gap-3">
                         <span className="font-semibold text-gray-900">{dep.predecessorWbsNumber}</span>
@@ -5239,7 +5242,7 @@ export function EstimateTab() {
               
               {/* Content */}
               {filteredElements.length === 0 ? (
-                <div className="text-center py-12 bg-white border border-gray-200 rounded-lg">
+                <div className="text-center py-12 bg-white border border-gray-100 rounded-lg">
                   <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                   <p className="text-sm text-gray-600">No WBS elements found</p>
                 </div>
