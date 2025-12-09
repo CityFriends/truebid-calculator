@@ -391,7 +391,7 @@ export function UploadTab({ onContinue }: UploadTabProps) {
             </Button>
             
             <Button onClick={handleContinue} size="lg">
-              Continue to Scoping
+              Continue to Roles & Pricing
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>

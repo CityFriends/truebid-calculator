@@ -1133,8 +1133,11 @@ function HelpBanner() {
 }
 
 // ============================================================================
-// SIDEBAR COMPONENT
+// SIDEBAR COMPONENT (DEPRECATED - replaced with horizontal tabs)
 // ============================================================================
+// NOTE: This component is no longer used. The Estimate tab now uses horizontal
+// tabs at the top, matching the Roles & Pricing tab layout pattern.
+// Keeping for reference in case we need to revert.
 
 interface SidebarProps {
   activeSection: string
@@ -1151,6 +1154,7 @@ interface SidebarProps {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function Sidebar({ activeSection, setActiveSection, wbsElements, requirements, stats }: SidebarProps) {
   const sections = [
     { id: 'requirements', label: 'Requirements', icon: ClipboardCheck, color: 'text-indigo-600', count: requirements.length, badge: stats.unmappedRequirements > 0 ? `${stats.unmappedRequirements} gaps` : null },
@@ -2631,8 +2635,11 @@ function RequirementsSection({
 }
 
 // ============================================================================
-// EXPORT SECTION
+// EXPORT SECTION (DEPRECATED - Export now lives in main Export tab)
 // ============================================================================
+// NOTE: This component is no longer used in the Estimate tab. Export functionality
+// has been consolidated into the main Export tab (export-tab.tsx).
+// Keeping for reference in case useful code needs to be merged.
 
 // Readiness row component for export section
 function ReadinessRow({ 
@@ -2675,6 +2682,7 @@ interface ExportSectionProps {
   contractPeriods: { key: PeriodKey; label: string }[]
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ExportSection({ wbsElements, requirements, contractPeriods }: ExportSectionProps) {
   const [contractTitle, setContractTitle] = useState('Government Contract')
   const [rfpNumber, setRfpNumber] = useState('')
@@ -5168,35 +5176,92 @@ export function EstimateTab() {
   
   return (
     <TooltipProvider>
-      <div className="flex gap-6 p-6">
-        <Sidebar 
-          activeSection={activeSection}
-          setActiveSection={setActiveSection}
-          wbsElements={wbsElements}
-          requirements={requirements}
-          stats={stats}
-        />
-        
-        <div className="flex-1 min-w-0">
-          {/* WBS ELEMENTS SECTION */}
-          {activeSection === 'wbs' && (
-            <div className="space-y-4">
-              <HelpBanner />
-              
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">WBS Elements</h2>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Generate AI
-                  </Button>
-                  <Button size="sm" onClick={() => setShowAddElement(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Element
-                  </Button>
-                </div>
+      <div className="space-y-6">
+        {/* Header - matches Roles & Pricing pattern */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold text-gray-900">Estimate</h1>
+            <Badge variant="outline" className="text-xs">
+              {wbsElements.length} WBS
+            </Badge>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {/* Stats Summary - compact horizontal bar */}
+            <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 rounded-lg text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Hours</span>
+                <span className="font-semibold text-gray-900">{stats.totalHours.toLocaleString()}</span>
               </div>
+              <span className="text-gray-300">·</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Quality</span>
+                <span className="font-semibold text-gray-900">{stats.avgQuality}%</span>
+              </div>
+              <span className="text-gray-300">·</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Reqs</span>
+                <span className={`font-semibold ${stats.requirementsCoverage === 100 ? 'text-green-600' : 'text-yellow-600'}`}>
+                  {stats.requirementsCoverage}%
+                </span>
+              </div>
+              {stats.issueCount > 0 && (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-yellow-600">Issues</span>
+                    <span className="font-semibold text-yellow-600">{stats.issueCount}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Horizontal Tabs Navigation */}
+        <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <TabsList className="bg-gray-100 p-1">
+              <TabsTrigger value="requirements" className="text-xs px-4 data-[state=active]:bg-white">
+                <ClipboardCheck className="w-3.5 h-3.5 mr-1.5" />
+                Requirements
+                {stats.unmappedRequirements > 0 && (
+                  <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 h-4">
+                    {stats.unmappedRequirements}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="wbs" className="text-xs px-4 data-[state=active]:bg-white">
+                <Layers className="w-3.5 h-3.5 mr-1.5" />
+                WBS Elements
+                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">
+                  {wbsElements.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger value="charges" className="text-xs px-4 data-[state=active]:bg-white">
+                <Hash className="w-3.5 h-3.5 mr-1.5" />
+                Charge Codes
+              </TabsTrigger>
+            </TabsList>
+            
+            {/* Context-aware action buttons */}
+            {activeSection === 'wbs' && (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Generate AI
+                </Button>
+                <Button size="sm" onClick={() => setShowAddElement(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Element
+                </Button>
+              </div>
+            )}
+          </div>
+          
+          {/* WBS ELEMENTS SECTION */}
+          <TabsContent value="wbs" className="space-y-4 mt-0">
+            <HelpBanner />
               
               {/* Filters & View Toggle */}
               <div className="flex flex-wrap items-center gap-2">
@@ -5288,11 +5353,10 @@ export function EstimateTab() {
                   contractPeriods={contractPeriods}
                 />
               )}
-            </div>
-          )}
+          </TabsContent>
           
           {/* REQUIREMENTS SECTION */}
-          {activeSection === 'requirements' && (
+          <TabsContent value="requirements" className="mt-0">
             <RequirementsSection
               requirements={requirements}
               wbsElements={wbsElements}
@@ -5302,27 +5366,18 @@ export function EstimateTab() {
               onLinkWbs={handleLinkWbs}
               onUnlinkWbs={handleUnlinkWbs}
             />
-          )}
+          </TabsContent>
           
           {/* CHARGE CODES SECTION */}
-          {activeSection === 'charges' && (
+          <TabsContent value="charges" className="mt-0">
             <ChargeCodeLibrary 
               chargeCodes={chargeCodes}
               onAdd={handleAddChargeCode}
               onUpdate={handleUpdateChargeCode}
               onDelete={handleDeleteChargeCode}
             />
-          )}
-          
-          {/* EXPORT SECTION */}
-          {activeSection === 'export' && (
-            <ExportSection 
-              wbsElements={wbsElements}
-              requirements={requirements}
-              contractPeriods={contractPeriods}
-            />
-          )}
-        </div>
+          </TabsContent>
+        </Tabs>
         
         {/* Slideout */}
         {selectedElement && (

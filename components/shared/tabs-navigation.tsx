@@ -18,12 +18,19 @@ import {
   Pencil, 
   Shield, 
   AlertCircle,
-  Layers // New icon for Estimate tab
+  Layers,
+  HelpCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from '@/components/ui/tooltip'
 import { useAppContext } from '@/contexts/app-context'
 import { UploadTab } from '@/components/tabs/upload-tab'
 import { EstimateTab } from '@/components/tabs/estimate-tab'
@@ -92,10 +99,23 @@ interface TabConfig {
 // ==================== MAIN COMPONENT ====================
 
 export function TabsNavigation() {
-  const [activeTab, setActiveTab] = useState<TabType>('upload')
   const [showSolicitationExpanded, setShowSolicitationExpanded] = useState(false)
-  const [isEditingSolicitation, setIsEditingSolicitation] = useState(false)
-  const { solicitation, updateSolicitation } = useAppContext()
+  const { 
+    solicitation, 
+    updateSolicitation,
+    isSolicitationEditorOpen,
+    openSolicitationEditor,
+    closeSolicitationEditor,
+    // Tab Navigation from context
+    activeMainTab,
+    setActiveMainTab,
+    selectedRoleIdForJustification,
+    clearSelectedRoleForJustification,
+  } = useAppContext()
+  
+  // Use context state for tabs (allows child components to navigate)
+  const activeTab = activeMainTab as TabType
+  const setActiveTab = (tab: TabType) => setActiveMainTab(tab)
 
   // Main bid flow tabs - ordered by workflow sequence
   const bidFlowTabs: TabConfig[] = [
@@ -112,16 +132,16 @@ export function TabsNavigation() {
       description: 'Define team roles and calculate pricing'
     },
     { 
-      id: 'estimate',  // Changed from 'scoping'
-      label: 'Estimate',  // Changed from 'Scoping'
-      icon: Layers,  // Changed from Target to Layers (WBS hierarchy)
-      description: 'Build your Basis of Estimate with WBS elements and labor hours'
-    },
-    { 
       id: 'rate-justification', 
       label: 'Rate Justification', 
       icon: TrendingUp,
       description: 'Document rate justifications for audit defense'
+    },
+    { 
+      id: 'estimate',
+      label: 'Estimate',
+      icon: Layers,
+      description: 'Build your Basis of Estimate with WBS elements and labor hours'
     },
     { 
       id: 'teaming-partners', 
@@ -186,8 +206,8 @@ export function TabsNavigation() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Close slideout on Escape
       if (e.key === 'Escape') {
-        if (isEditingSolicitation) {
-          setIsEditingSolicitation(false)
+        if (isSolicitationEditorOpen) {
+          closeSolicitationEditor()
         } else if (showSolicitationExpanded) {
           setShowSolicitationExpanded(false)
         }
@@ -196,7 +216,7 @@ export function TabsNavigation() {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isEditingSolicitation, showSolicitationExpanded])
+  }, [isSolicitationEditorOpen, closeSolicitationEditor, showSolicitationExpanded])
 
   // ==================== TAB CHANGE HANDLER ====================
 
@@ -389,7 +409,7 @@ export function TabsNavigation() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsEditingSolicitation(true)}
+                  onClick={() => openSolicitationEditor()}
                   className="h-7 px-2 text-gray-500 hover:text-gray-700"
                   aria-label="Edit solicitation details"
                 >
@@ -420,54 +440,94 @@ export function TabsNavigation() {
               <div className="pb-4 pt-3 border-t border-gray-100">
                 {/* Title row */}
                 {solicitation.title && (
-                  <div className="mb-4">
+                  <div className="mb-3">
                     <h3 className="text-sm font-semibold text-gray-900">
                       {solicitation.title}
                     </h3>
                   </div>
                 )}
 
+                {/* Pricing Assumptions - Prominent top section */}
+                <div 
+                  className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200"
+                  role="region"
+                  aria-label="Pricing assumptions for this bid"
+                >
+                  <div className="flex items-center justify-between">
+                    <dl className="flex items-center gap-6">
+                      <div>
+                        <dt className="text-xs text-gray-600">Profit Margin</dt>
+                        <dd className="text-sm font-semibold text-gray-900">
+                          {solicitation.pricingSettings?.profitMargin ?? 8}%
+                        </dd>
+                      </div>
+                      <div className="h-8 w-px bg-blue-200" aria-hidden="true" />
+                      <div>
+                        <dt className="text-xs text-gray-600">Billable Hours</dt>
+                        <dd className="text-sm font-semibold text-gray-900">
+                          {(solicitation.pricingSettings?.billableHours ?? 1920).toLocaleString()} per year
+                        </dd>
+                      </div>
+                      <div className="h-8 w-px bg-blue-200" aria-hidden="true" />
+                      <div>
+                        <dt className="text-xs text-gray-600">Annual Increases</dt>
+                        <dd className="text-sm font-semibold text-gray-900">
+                          {(solicitation.pricingSettings?.escalationEnabled ?? true) 
+                            ? `Labor ${solicitation.pricingSettings?.laborEscalation ?? 3}%, ODCs ${solicitation.pricingSettings?.odcEscalation ?? 2}%`
+                            : 'None'
+                          }
+                        </dd>
+                      </div>
+                    </dl>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openSolicitationEditor()}
+                      className="h-7 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+                      aria-label="Edit pricing settings for this bid"
+                    >
+                      <Pencil className="w-3 h-3 mr-1" aria-hidden="true" />
+                      Edit Settings
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Detail columns */}
                 <div className="grid grid-cols-4 gap-6">
-                  {/* Column 1: Solicitation Details */}
+                  {/* Column 1: Solicitation */}
                   <div>
                     <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                      Solicitation Details
+                      Solicitation
                     </h4>
                     <dl className="space-y-1.5">
                       <div className="text-sm">
-                        <dt className="inline text-gray-500">Number: </dt>
+                        <dt className="inline text-gray-600">Number: </dt>
                         <dd className="inline font-medium text-gray-900">{solicitation.solicitationNumber}</dd>
                       </div>
                       {solicitation.clientAgency && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Agency: </dt>
+                          <dt className="inline text-gray-600">Agency: </dt>
                           <dd className="inline text-gray-900">{solicitation.clientAgency}</dd>
                         </div>
                       )}
                       {solicitation.subAgency && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Sub-Agency: </dt>
+                          <dt className="inline text-gray-600">Office: </dt>
                           <dd className="inline text-gray-900">{solicitation.subAgency}</dd>
-                        </div>
-                      )}
-                      {solicitation.naicsCode && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-500">NAICS: </dt>
-                          <dd className="inline text-gray-900">{solicitation.naicsCode}</dd>
                         </div>
                       )}
                     </dl>
                   </div>
 
-                  {/* Column 2: Contract Structure */}
+                  {/* Column 2: Contract */}
                   <div>
                     <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                      Contract Structure
+                      Contract
                     </h4>
                     <dl className="space-y-1.5">
                       {solicitation.contractType && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Type: </dt>
+                          <dt className="inline text-gray-600">Type: </dt>
                           <dd className="inline text-gray-900">
                             {CONTRACT_TYPE_LABELS[solicitation.contractType] || solicitation.contractType}
                           </dd>
@@ -475,9 +535,9 @@ export function TabsNavigation() {
                       )}
                       {solicitation.periodOfPerformance && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Period: </dt>
+                          <dt className="inline text-gray-600">Duration: </dt>
                           <dd className="inline text-gray-900">
-                            {solicitation.periodOfPerformance.baseYear ? '1 Base' : ''}
+                            {solicitation.periodOfPerformance.baseYear ? '1 Base Year' : ''}
                             {solicitation.periodOfPerformance.optionYears 
                               ? ` + ${solicitation.periodOfPerformance.optionYears} Option Years`
                               : ''
@@ -485,12 +545,10 @@ export function TabsNavigation() {
                           </dd>
                         </div>
                       )}
-                      {solicitation.budgetRange?.ceiling && (
+                      {solicitation.naicsCode && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Budget Ceiling: </dt>
-                          <dd className="inline text-gray-900">
-                            ${solicitation.budgetRange.ceiling.toLocaleString()}
-                          </dd>
+                          <dt className="inline text-gray-600">NAICS: </dt>
+                          <dd className="inline text-gray-900">{solicitation.naicsCode}</dd>
                         </div>
                       )}
                     </dl>
@@ -503,7 +561,7 @@ export function TabsNavigation() {
                     </h4>
                     <dl className="space-y-1.5">
                       <div className="text-sm">
-                        <dt className="inline text-gray-500">Proposal Due: </dt>
+                        <dt className="inline text-gray-600">Proposal Due: </dt>
                         <dd className={`inline font-medium ${
                           isOverdue ? 'text-red-600' : isUrgent ? 'text-yellow-600' : 'text-gray-900'
                         }`}>
@@ -512,13 +570,13 @@ export function TabsNavigation() {
                       </div>
                       {solicitation.questionsDeadline && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Questions Due: </dt>
+                          <dt className="inline text-gray-600">Questions Due: </dt>
                           <dd className="inline text-gray-900">{formatDate(solicitation.questionsDeadline)}</dd>
                         </div>
                       )}
                       {solicitation.anticipatedAwardDate && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Expected Award: </dt>
+                          <dt className="inline text-gray-600">Expected Award: </dt>
                           <dd className="inline text-gray-900">{formatDate(solicitation.anticipatedAwardDate)}</dd>
                         </div>
                       )}
@@ -533,7 +591,7 @@ export function TabsNavigation() {
                     <dl className="space-y-1.5">
                       {solicitation.setAside && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Set-Aside: </dt>
+                          <dt className="inline text-gray-600">Set-Aside: </dt>
                           <dd className="inline text-gray-900">
                             {SET_ASIDE_LABELS[solicitation.setAside] || solicitation.setAside}
                           </dd>
@@ -541,7 +599,7 @@ export function TabsNavigation() {
                       )}
                       {solicitation.clearanceLevel && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Clearance: </dt>
+                          <dt className="inline text-gray-600">Clearance: </dt>
                           <dd className="inline text-gray-900">
                             {CLEARANCE_LEVEL_LABELS[solicitation.clearanceLevel] || solicitation.clearanceLevel}
                           </dd>
@@ -549,20 +607,9 @@ export function TabsNavigation() {
                       )}
                       {solicitation.placeOfPerformance?.type && (
                         <div className="text-sm">
-                          <dt className="inline text-gray-500">Location: </dt>
+                          <dt className="inline text-gray-600">Work Location: </dt>
                           <dd className="inline text-gray-900 capitalize">
                             {solicitation.placeOfPerformance.type}
-                            {solicitation.placeOfPerformance.locations?.length > 0 && (
-                              <span className="text-gray-500"> ({solicitation.placeOfPerformance.locations.join(', ')})</span>
-                            )}
-                          </dd>
-                        </div>
-                      )}
-                      {solicitation.placeOfPerformance?.travelRequired && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-500">Travel: </dt>
-                          <dd className="inline text-gray-900">
-                            Required{solicitation.placeOfPerformance.travelPercent ? ` (${solicitation.placeOfPerformance.travelPercent}%)` : ''}
                           </dd>
                         </div>
                       )}
@@ -601,11 +648,11 @@ export function TabsNavigation() {
       )}
 
       {/* Edit Solicitation Slideout */}
-      {isEditingSolicitation && (
+      {isSolicitationEditorOpen && (
         <EditSolicitationSlideout
           solicitation={solicitation}
           updateSolicitation={updateSolicitation}
-          onClose={() => setIsEditingSolicitation(false)}
+          onClose={() => closeSolicitationEditor()}
         />
       )}
 
@@ -676,9 +723,9 @@ function EditSolicitationSlideout({
         aria-labelledby="edit-solicitation-title"
       >
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between z-10">
-          <h2 id="edit-solicitation-title" className="text-lg font-semibold text-gray-900">
-            Edit Solicitation
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+          <h2 id="edit-solicitation-title" className="text-xl font-semibold text-gray-900">
+            Edit Solicitation Details
           </h2>
           <Button
             variant="ghost"
@@ -896,6 +943,206 @@ function EditSolicitationSlideout({
               </div>
             </div>
           </fieldset>
+
+          {/* ==================== PRICING SETTINGS ==================== */}
+          <TooltipProvider>
+            <fieldset className="space-y-4 pt-4 border-t">
+              <legend className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                Pricing Settings
+              </legend>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {/* Billable Hours */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="billableHours">Billable Hours per Year</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" aria-label="More information about billable hours" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-xs">
+                          A full work year is 2,080 hours. Most contracts use 1,920 hours to account for 
+                          holidays and paid time off. This affects total cost but not hourly rates.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Input
+                    id="billableHours"
+                    type="number"
+                    min="1000"
+                    max="2080"
+                    step="40"
+                    value={solicitation?.pricingSettings?.billableHours ?? 1920}
+                    onChange={(e) => updateSolicitation({ 
+                      pricingSettings: { 
+                        ...solicitation?.pricingSettings,
+                        billableHours: parseInt(e.target.value) || 1920
+                      }
+                    })}
+                    placeholder="1920"
+                    aria-describedby="billableHours-help"
+                  />
+                  <p id="billableHours-help" className="text-xs text-gray-600">
+                    Common: 1,920 (with PTO) or 2,080 (full year)
+                  </p>
+                </div>
+
+                {/* Profit Margin */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="profitMargin">Profit Margin (%)</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" aria-label="More information about profit margin" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-xs">
+                          The percentage added to your costs to determine your bill rate. 
+                          Typical range is 5-15% depending on contract type and competition level.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Input
+                    id="profitMargin"
+                    type="number"
+                    min="0"
+                    max="30"
+                    step="0.5"
+                    value={solicitation?.pricingSettings?.profitMargin ?? 8}
+                    onChange={(e) => updateSolicitation({ 
+                      pricingSettings: { 
+                        ...solicitation?.pricingSettings,
+                        profitMargin: parseFloat(e.target.value) || 8
+                      }
+                    })}
+                    placeholder="8"
+                    aria-describedby="profitMargin-help"
+                  />
+                  <p id="profitMargin-help" className="text-xs text-gray-600">
+                    Typical: 8-10% for competitive bids
+                  </p>
+                </div>
+              </div>
+
+              {/* Annual Rate Increases */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="escalationEnabled">Annual Rate Increases</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" aria-label="More information about annual rate increases" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-xs">
+                          Increase rates each option year to account for inflation and rising costs. 
+                          Typically 2-4% per year based on market conditions.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    id="escalationEnabled"
+                    aria-checked={solicitation?.pricingSettings?.escalationEnabled ?? true}
+                    aria-label={`Annual rate increases are ${(solicitation?.pricingSettings?.escalationEnabled ?? true) ? 'enabled' : 'disabled'}`}
+                    onClick={() => updateSolicitation({ 
+                      pricingSettings: { 
+                        ...solicitation?.pricingSettings,
+                        escalationEnabled: !(solicitation?.pricingSettings?.escalationEnabled ?? true)
+                      }
+                    })}
+                    className={`
+                      relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent 
+                      transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                      ${(solicitation?.pricingSettings?.escalationEnabled ?? true) ? 'bg-blue-600' : 'bg-gray-200'}
+                    `}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`
+                        pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 
+                        transition duration-200 ease-in-out
+                        ${(solicitation?.pricingSettings?.escalationEnabled ?? true) ? 'translate-x-4' : 'translate-x-0'}
+                      `}
+                    />
+                  </button>
+                </div>
+
+                {/* Rate increase fields - only show when enabled */}
+                {(solicitation?.pricingSettings?.escalationEnabled ?? true) && (
+                  <div className="grid grid-cols-2 gap-4 pl-0 pt-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="laborEscalation" className="text-sm text-gray-700">
+                        Labor Rate Increase (% per year)
+                      </Label>
+                      <Input
+                        id="laborEscalation"
+                        type="number"
+                        min="0"
+                        max="10"
+                        step="0.5"
+                        value={solicitation?.pricingSettings?.laborEscalation ?? 3}
+                        onChange={(e) => updateSolicitation({ 
+                          pricingSettings: { 
+                            ...solicitation?.pricingSettings,
+                            laborEscalation: parseFloat(e.target.value) || 3
+                          }
+                        })}
+                        placeholder="3"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="odcEscalation" className="text-sm text-gray-700">
+                        ODC Increase (% per year)
+                      </Label>
+                      <Input
+                        id="odcEscalation"
+                        type="number"
+                        min="0"
+                        max="10"
+                        step="0.5"
+                        value={solicitation?.pricingSettings?.odcEscalation ?? 2}
+                        onChange={(e) => updateSolicitation({ 
+                          pricingSettings: { 
+                            ...solicitation?.pricingSettings,
+                            odcEscalation: parseFloat(e.target.value) || 2
+                          }
+                        })}
+                        placeholder="2"
+                      />
+                      <p className="text-xs text-gray-600">Travel, materials, equipment</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Summary Preview */}
+              <div className="flex items-center gap-2 pt-2 flex-wrap" role="status" aria-live="polite">
+                <span className="text-xs text-gray-600">Current settings:</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                  {solicitation?.pricingSettings?.profitMargin ?? 8}% profit
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                  {(solicitation?.pricingSettings?.billableHours ?? 1920).toLocaleString()} hours per year
+                </span>
+                {(solicitation?.pricingSettings?.escalationEnabled ?? true) ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                    +{solicitation?.pricingSettings?.laborEscalation ?? 3}% labor, +{solicitation?.pricingSettings?.odcEscalation ?? 2}% ODCs yearly
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    No annual increases
+                  </span>
+                )}
+              </div>
+            </fieldset>
+          </TooltipProvider>
+          {/* ==================== END: PRICING SETTINGS ==================== */}
 
           {/* Set-Aside & Compliance */}
           <fieldset className="space-y-4 pt-4 border-t">
