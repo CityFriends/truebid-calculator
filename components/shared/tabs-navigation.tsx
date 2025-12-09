@@ -668,8 +668,8 @@ export function TabsNavigation() {
           {activeTab === 'upload' && <UploadTab onContinue={() => handleTabChange('roles')} />}
           {activeTab === 'roles' && <RolesAndPricingTab />}
           {activeTab === 'estimate' && <EstimateTab />}
-          {activeTab === 'rate-justification' && <RateJustificationTab onContinue={() => handleTabChange('teaming-partners')} />}
-          {activeTab === 'teaming-partners' && <TeamingPartnersTab onContinue={() => handleTabChange('export')} />}
+          {activeTab === 'rate-justification' && <RateJustificationTab />}
+          {activeTab === 'teaming-partners' && <TeamingPartnersTab />}    
           {activeTab === 'export' && <ExportTab />}
           
           {/* Utility Tools */}
