@@ -3,7 +3,6 @@ import { GeistSans } from 'geist/font/sans'
 import './globals.css'
 import { AppProvider } from '@/contexts/app-context'
 import { Header } from '@/components/shared/header'
-import { SolicitationPill } from '@/components/shared/solicitation-pill'
 
 export const metadata: Metadata = {
   title: 'TrueBid - Government Contracting Calculator',
