@@ -669,7 +669,7 @@ export function TabsNavigation() {
           {activeTab === 'roles' && <RolesAndPricingTab />}
           {activeTab === 'estimate' && <EstimateTab />}
           {activeTab === 'rate-justification' && <RateJustificationTab />}
-          {activeTab === 'teaming-partners' && <TeamingPartnersTab />}    
+        {activeTab === 'teaming-partners' && <TeamingPartnersTab />}    
           {activeTab === 'export' && <ExportTab />}
           
           {/* Utility Tools */}
