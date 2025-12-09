@@ -2776,7 +2776,7 @@ function ExportSection({ wbsElements, requirements, contractPeriods }: ExportSec
       // =========================================================================
       // HELPER: Paragraph with spacing
       // =========================================================================
-      const para = (content: TextRun | TextRun[], opts: { align?: any; before?: number; after?: number } = {}) =>
+      const para = (content: any, opts: { align?: any; before?: number; after?: number } = {}) =>
         new Paragraph({
           children: Array.isArray(content) ? content : [content],
           alignment: opts.align || AlignmentType.LEFT,
@@ -3000,7 +3000,7 @@ function ExportSection({ wbsElements, requirements, contractPeriods }: ExportSec
         }))
         
         // SOW Reference & Hours summary
-        const metaParts: TextRun[] = []
+        const metaParts: any[] = []
         if (el.sowReference) {
           metaParts.push(txt('SOW: ', { size: SIZE.small, color: COLORS.muted }))
           metaParts.push(txt(el.sowReference, { size: SIZE.small, bold: true }))
