@@ -36,6 +36,7 @@ import {
   Sparkles,
   DollarSign,
   TrendingUp,
+  TrendingDown,
   ChevronRight,
   ChevronDown,
   ChevronUp,
@@ -48,6 +49,11 @@ import {
   HelpCircle,
   Building2,
   AlertTriangle,
+  MapPin,
+  Shield,
+  Award,
+  ExternalLink,
+  FileText,
 } from 'lucide-react'
 
 // ==================== LOCAL TYPES ====================
@@ -124,6 +130,141 @@ const icLevelRates: Record<string, number> = {
 const icLevelOptions = ['IC2', 'IC3', 'IC4', 'IC5', 'IC6']
 const fteOptions = [0.25, 0.5, 0.75, 1.0]
 
+// ==================== BLS DATA FOR RATE JUSTIFICATION ====================
+
+interface BLSData {
+  socCode: string
+  occupation: string
+  percentile10: number
+  percentile25: number
+  median: number
+  percentile75: number
+  percentile90: number
+  mean: number
+  lastUpdated: string
+}
+
+// BLS salary data by role (May 2024 OEWS)
+const BLS_MAPPINGS: Record<string, BLSData> = {
+  'Technical Lead': {
+    socCode: '11-3021',
+    occupation: 'Computer and Information Systems Managers',
+    percentile10: 98890, percentile25: 128230, median: 169510, percentile75: 217200, percentile90: 267620, mean: 179780,
+    lastUpdated: '2024-05-01'
+  },
+  'Solutions Architect': {
+    socCode: '15-1299',
+    occupation: 'Computer Occupations, All Other',
+    percentile10: 62480, percentile25: 88450, median: 118370, percentile75: 153050, percentile90: 189170, mean: 121370,
+    lastUpdated: '2024-05-01'
+  },
+  'Senior Software Engineer': {
+    socCode: '15-1252',
+    occupation: 'Software Developers',
+    percentile10: 77020, percentile25: 103690, median: 132270, percentile75: 168570, percentile90: 208620, mean: 139380,
+    lastUpdated: '2024-05-01'
+  },
+  'Software Engineer': {
+    socCode: '15-1252',
+    occupation: 'Software Developers',
+    percentile10: 77020, percentile25: 103690, median: 132270, percentile75: 168570, percentile90: 208620, mean: 139380,
+    lastUpdated: '2024-05-01'
+  },
+  'DevOps Engineer': {
+    socCode: '15-1252',
+    occupation: 'Software Developers',
+    percentile10: 77020, percentile25: 103690, median: 132270, percentile75: 168570, percentile90: 208620, mean: 139380,
+    lastUpdated: '2024-05-01'
+  },
+  'Cloud Engineer': {
+    socCode: '15-1252',
+    occupation: 'Software Developers',
+    percentile10: 77020, percentile25: 103690, median: 132270, percentile75: 168570, percentile90: 208620, mean: 139380,
+    lastUpdated: '2024-05-01'
+  },
+  'Data Scientist': {
+    socCode: '15-2051',
+    occupation: 'Data Scientists',
+    percentile10: 61090, percentile25: 85560, median: 108020, percentile75: 141330, percentile90: 178440, mean: 113310,
+    lastUpdated: '2024-05-01'
+  },
+  'Security Engineer': {
+    socCode: '15-1212',
+    occupation: 'Information Security Analysts',
+    percentile10: 64280, percentile25: 84100, median: 120360, percentile75: 156230, percentile90: 188150, mean: 125750,
+    lastUpdated: '2024-05-01'
+  },
+  'QA Engineer': {
+    socCode: '15-1253',
+    occupation: 'Software Quality Assurance Analysts and Testers',
+    percentile10: 51350, percentile25: 71290, median: 101800, percentile75: 130870, percentile90: 158830, mean: 104090,
+    lastUpdated: '2024-05-01'
+  },
+  'UI/UX Designer': {
+    socCode: '15-1255',
+    occupation: 'Web and Digital Interface Designers',
+    percentile10: 41810, percentile25: 57220, median: 80730, percentile75: 109890, percentile90: 142980, mean: 85560,
+    lastUpdated: '2024-05-01'
+  },
+  'Project Manager': {
+    socCode: '11-9199',
+    occupation: 'Managers, All Other',
+    percentile10: 62610, percentile25: 89030, median: 125540, percentile75: 172770, percentile90: 224080, mean: 135960,
+    lastUpdated: '2024-05-01'
+  },
+  'Business Analyst': {
+    socCode: '13-1111',
+    occupation: 'Management Analysts',
+    percentile10: 52250, percentile25: 71500, median: 99410, percentile75: 137160, percentile90: 175080, mean: 107640,
+    lastUpdated: '2024-05-01'
+  },
+  'DEFAULT': {
+    socCode: '15-1299',
+    occupation: 'Computer Occupations, All Other',
+    percentile10: 62480, percentile25: 88450, median: 118370, percentile75: 153050, percentile90: 189170, mean: 121370,
+    lastUpdated: '2024-05-01'
+  }
+}
+
+// Find best BLS match for a role title
+function findBLSData(roleTitle: string): BLSData | null {
+  if (!roleTitle) return null
+  
+  // Direct match
+  if (BLS_MAPPINGS[roleTitle]) return BLS_MAPPINGS[roleTitle]
+  
+  // Partial match
+  const lowerTitle = roleTitle.toLowerCase()
+  for (const [key, data] of Object.entries(BLS_MAPPINGS)) {
+    if (key !== 'DEFAULT' && lowerTitle.includes(key.toLowerCase())) {
+      return data
+    }
+  }
+  
+  // Keyword matching
+  if (lowerTitle.includes('engineer') && lowerTitle.includes('software')) return BLS_MAPPINGS['Software Engineer']
+  if (lowerTitle.includes('lead') || lowerTitle.includes('architect')) return BLS_MAPPINGS['Technical Lead']
+  if (lowerTitle.includes('devops') || lowerTitle.includes('cloud')) return BLS_MAPPINGS['DevOps Engineer']
+  if (lowerTitle.includes('security') || lowerTitle.includes('cyber')) return BLS_MAPPINGS['Security Engineer']
+  if (lowerTitle.includes('data') && lowerTitle.includes('scien')) return BLS_MAPPINGS['Data Scientist']
+  if (lowerTitle.includes('qa') || lowerTitle.includes('test') || lowerTitle.includes('quality')) return BLS_MAPPINGS['QA Engineer']
+  if (lowerTitle.includes('design') || lowerTitle.includes('ux') || lowerTitle.includes('ui')) return BLS_MAPPINGS['UI/UX Designer']
+  if (lowerTitle.includes('project') || lowerTitle.includes('program')) return BLS_MAPPINGS['Project Manager']
+  if (lowerTitle.includes('analyst')) return BLS_MAPPINGS['Business Analyst']
+  
+  return BLS_MAPPINGS['DEFAULT']
+}
+
+// Calculate percentile position for a salary against BLS data
+function calculateBLSPercentile(salary: number, blsData: BLSData): number {
+  if (salary <= blsData.percentile10) return 10
+  if (salary <= blsData.percentile25) return 10 + ((salary - blsData.percentile10) / (blsData.percentile25 - blsData.percentile10)) * 15
+  if (salary <= blsData.median) return 25 + ((salary - blsData.percentile25) / (blsData.median - blsData.percentile25)) * 25
+  if (salary <= blsData.percentile75) return 50 + ((salary - blsData.median) / (blsData.percentile75 - blsData.median)) * 25
+  if (salary <= blsData.percentile90) return 75 + ((salary - blsData.percentile75) / (blsData.percentile90 - blsData.percentile75)) * 15
+  return 90 + Math.min(10, ((salary - blsData.percentile90) / blsData.percentile90) * 100)
+}
+
 // ==================== MAIN COMPONENT ====================
 
 export function RolesAndPricingTab() {
@@ -160,7 +301,7 @@ export function RolesAndPricingTab() {
     removeRole,
     // Recommended Roles from context
     recommendedRoles,
-       // UI-specific settings from context
+    // UI-specific settings from context
     uiLaborEscalation,
     uiOdcEscalation,
     uiShowEscalation,
@@ -171,19 +312,24 @@ export function RolesAndPricingTab() {
     setUiProfitMargin,
     uiBillableHours,
     setUiBillableHours,
+    // Solicitation pricing settings & editor
+    getPricingSettings,
+    openSolicitationEditor,
+    // Rate Justifications
+    rateJustifications,
+    updateRateJustification,
+    // Tab Navigation
+    navigateToRateJustification,
   } = useAppContext()
-    const billableHours = uiBillableHours
-    const setBillableHours = setUiBillableHours
-
-    // Alias context values for compatibility with existing code
-  const profitMargin = uiProfitMargin
-  const setProfitMargin = setUiProfitMargin
-  const laborEscalation = uiLaborEscalation
-  const setLaborEscalation = setUiLaborEscalation
-  const odcEscalation = uiOdcEscalation
-  const setOdcEscalation = setUiOdcEscalation
-  const showEscalation = uiShowEscalation
-  const setShowEscalation = setUiShowEscalation
+  
+  // Get pricing settings from solicitation (centralized source of truth)
+  const pricingSettings = getPricingSettings()
+  
+  const billableHours = pricingSettings.billableHours
+  const profitMargin = pricingSettings.profitMargin
+  const laborEscalation = pricingSettings.laborEscalation
+  const odcEscalation = pricingSettings.odcEscalation
+  const showEscalation = pricingSettings.escalationEnabled
 
   // ==================== DERIVED VALUES (needed early) ====================
 
@@ -214,7 +360,7 @@ export function RolesAndPricingTab() {
     quantity: 1,
     ftePerPerson: 1,
     baseSalary: 120000,
-    hoursPerYear:  billableHours,
+    hoursPerYear: billableHours,
     years: [] as string[],
   })
   
@@ -243,23 +389,22 @@ export function RolesAndPricingTab() {
   // Subcontractor dialog
   const [subDialogOpen, setSubDialogOpen] = useState(false)
   const [editingSub, setEditingSub] = useState<Subcontractor | null>(null)
-const [subFormData, setSubFormData] = useState({
-  partnerId: '',
-  newPartnerName: '',
-  companyName: '',
-  role: '',
-  laborCategory: '',
-  theirRate: 0,
-  markupPercent: 10,
-  // Per-period allocations
-allocations: {
-  base: { enabled: true, fte: 1, hours:  billableHours },
-  option1: { enabled: true, fte: 1, hours:  billableHours },
-  option2: { enabled: true, fte: 1, hours:  billableHours },
-  option3: { enabled: false, fte: 0, hours: 0 },
-  option4: { enabled: false, fte: 0, hours: 0 },
-} as Record<string, { enabled: boolean; fte: number }>,
-})
+  const [subFormData, setSubFormData] = useState({
+    partnerId: '',
+    newPartnerName: '',
+    companyName: '',
+    role: '',
+    laborCategory: '',
+    theirRate: 0,
+    markupPercent: 10,
+    allocations: {
+      base: { enabled: true, fte: 1, hours: billableHours },
+      option1: { enabled: true, fte: 1, hours: billableHours },
+      option2: { enabled: true, fte: 1, hours: billableHours },
+      option3: { enabled: false, fte: 0, hours: 0 },
+      option4: { enabled: false, fte: 0, hours: 0 },
+    } as Record<string, { enabled: boolean; fte: number }>,
+  })
   
   // Assign Role to Sub dialog (for recommended roles)
   const [assignSubDialogOpen, setAssignSubDialogOpen] = useState(false)
@@ -283,9 +428,7 @@ allocations: {
     quantity: 1,
     storyPoints: 20,
     ftePerPerson: 1,
-    // Prime-specific
     baseSalary: 120000,
-    // Sub-specific
     partnerId: '',
     newPartnerName: '',
     theirRate: 0,
@@ -327,13 +470,11 @@ allocations: {
         ftePerPerson: role.fte,
         baseSalary,
         hourlyRate: breakdown.billedRate,
-        hoursPerYear: role.billableHours ||  billableHours,
+        hoursPerYear: role.billableHours || billableHours,
         years: yearsObjectToArray(role.years),
       }
     })
   }, [selectedRoles, rates, profitMargin])
-
-  // ==================== DERIVED VALUES ====================
 
   // Contract years from solicitation
   const contractYears = useMemo(() => {
@@ -351,7 +492,7 @@ allocations: {
   // ==================== CALCULATION FUNCTIONS ====================
 
   const calculateRateBreakdown = (baseSalary: number): RateBreakdown => {
-    const standardHours = 2080 // Always use 2080 for rate calculation
+    const standardHours = 2080
     const directRate = baseSalary / standardHours
     
     const fringeAmount = directRate * (rates.fringe / 100)
@@ -379,7 +520,6 @@ allocations: {
   const calculations = useMemo(() => {
     const yearCosts: Record<string, { labor: number; subs: number; odcs: number; travel: number; total: number }> = {}
     
-    // Helper function inside useMemo to ensure fresh closure
     const getEscMult = (yearIndex: number, rate: number): number => {
       if (!showEscalation || yearIndex === 0) return 1
       return Math.pow(1 + rate / 100, yearIndex)
@@ -400,29 +540,24 @@ allocations: {
       })
       
       // Subcontractor costs
-      // We bill the government: billedRate (theirRate + markup) × FTE × hours
-      // The "cost to us" is theirRate × FTE × hours, but for contract value we show billed amount
-let subsTotal = 0
-subcontractors.forEach(sub => {
-  // Check if sub has new allocations structure or legacy years
-  if (sub.allocations) {
-    // New per-period allocation structure
-    const allocation = sub.allocations[year.id as keyof typeof sub.allocations]
-    if (allocation?.enabled && allocation.fte > 0) {
-      const annualBilled = sub.billedRate * allocation.fte *  billableHours
-      subsTotal += annualBilled * laborEscMult
-    }
-  } else {
-    // Legacy: single FTE with year toggles
-    const subYears = yearsObjectToArray(sub.years)
-    if (subYears.includes(year.id)) {
-      const annualBilled = sub.billedRate * sub.fte *  billableHours
-      subsTotal += annualBilled * laborEscMult
-    }
-  }
-})  
+      let subsTotal = 0
+      subcontractors.forEach(sub => {
+        if (sub.allocations) {
+          const allocation = sub.allocations[year.id as keyof typeof sub.allocations]
+          if (allocation?.enabled && allocation.fte > 0) {
+            const annualBilled = sub.billedRate * allocation.fte * billableHours
+            subsTotal += annualBilled * laborEscMult
+          }
+        } else {
+          const subYears = yearsObjectToArray(sub.years)
+          if (subYears.includes(year.id)) {
+            const annualBilled = sub.billedRate * sub.fte * billableHours
+            subsTotal += annualBilled * laborEscMult
+          }
+        }
+      })
       
-      // ODC costs - calculate directly here
+      // ODC costs
       let odcsTotal = 0
       odcs.forEach(odc => {
         const odcYears = yearsObjectToArray(odc.years)
@@ -432,7 +567,7 @@ subcontractors.forEach(sub => {
         }
       })
       
-      // Per Diem (Travel) costs - calculate directly here
+      // Per Diem (Travel) costs
       let travelTotal = 0
       perDiem.forEach(pd => {
         const pdYears = yearsObjectToArray(pd.years)
@@ -475,73 +610,65 @@ subcontractors.forEach(sub => {
     }
   }, [teamRoles, contractYears, laborEscalation, odcEscalation, showEscalation, subcontractors, odcs, perDiem])
 
-  // Group subcontractors by partner for cleaner display
   // Helper to calculate sub total contract cost with escalation
-const calculateSubTotalContractCost = (sub: Subcontractor): number => {
-  const getEscMult = (yearIndex: number): number => {
-    if (!showEscalation || yearIndex === 0) return 1
-    return Math.pow(1 + laborEscalation / 100, yearIndex)
-  }
-  
-  let total = 0
-  contractYears.forEach((year) => {
-    let fte = 0
-    if (sub.allocations) {
-      const alloc = sub.allocations[year.id as keyof typeof sub.allocations]
-      fte = alloc?.enabled ? alloc.fte : 0
-    } else {
-      const subYears = yearsObjectToArray(sub.years)
-      fte = subYears.includes(year.id) ? sub.fte : 0
+  const calculateSubTotalContractCost = (sub: Subcontractor): number => {
+    const getEscMult = (yearIndex: number): number => {
+      if (!showEscalation || yearIndex === 0) return 1
+      return Math.pow(1 + laborEscalation / 100, yearIndex)
     }
-    total += sub.billedRate * fte * billableHours * getEscMult(year.index)
-  })
-  return total
-}
-
-const groupedSubcontractors = useMemo(() => {
-  const groups: Record<string, { 
-    partnerId: string;
-    companyName: string; 
-    roles: Subcontractor[]; 
-    totalContractCost: number;
-    baseFte: number;
-    avgMarkup: number;
-  }> = {}
-  
-  subcontractors.forEach(sub => {
-    const key = sub.partnerId || sub.companyName.toLowerCase()
-    if (!groups[key]) {
-      groups[key] = {
-        partnerId: sub.partnerId || '',
-        companyName: sub.companyName,
-        roles: [],
-        totalContractCost: 0,
-        baseFte: 0,
-        avgMarkup: 0,
+    
+    let total = 0
+    contractYears.forEach((year) => {
+      let fte = 0
+      if (sub.allocations) {
+        const alloc = sub.allocations[year.id as keyof typeof sub.allocations]
+        fte = alloc?.enabled ? alloc.fte : 0
+      } else {
+        const subYears = yearsObjectToArray(sub.years)
+        fte = subYears.includes(year.id) ? sub.fte : 0
       }
-    }
-    groups[key].roles.push(sub)
-    
-    // Calculate total contract cost with escalation
-    groups[key].totalContractCost += calculateSubTotalContractCost(sub)
-    
-    // Track base year FTE for display
-    const baseFte = sub.allocations?.base?.enabled ? sub.allocations.base.fte : sub.fte
-    groups[key].baseFte += baseFte
-  })
-  
-  // Calculate average markup for each group
-  Object.values(groups).forEach(group => {
-    if (group.roles.length > 0) {
-      group.avgMarkup = group.roles.reduce((sum, r) => sum + r.markupPercent, 0) / group.roles.length
-    }
-  })
-  
-  return Object.values(groups)
-}, [subcontractors, contractYears, showEscalation, laborEscalation, billableHours])
+      total += sub.billedRate * fte * billableHours * getEscMult(year.index)
+    })
+    return total
+  }
 
+  const groupedSubcontractors = useMemo(() => {
+    const groups: Record<string, { 
+      partnerId: string;
+      companyName: string; 
+      roles: Subcontractor[]; 
+      totalContractCost: number;
+      baseFte: number;
+      avgMarkup: number;
+    }> = {}
+    
+    subcontractors.forEach(sub => {
+      const key = sub.partnerId || sub.companyName.toLowerCase()
+      if (!groups[key]) {
+        groups[key] = {
+          partnerId: sub.partnerId || '',
+          companyName: sub.companyName,
+          roles: [],
+          totalContractCost: 0,
+          baseFte: 0,
+          avgMarkup: 0,
+        }
+      }
+      groups[key].roles.push(sub)
+      groups[key].totalContractCost += calculateSubTotalContractCost(sub)
+      const baseFte = sub.allocations?.base?.enabled ? sub.allocations.base.fte : sub.fte
+      groups[key].baseFte += baseFte
+    })
+    
+    Object.values(groups).forEach(group => {
+      if (group.roles.length > 0) {
+        group.avgMarkup = group.roles.reduce((sum, r) => sum + r.markupPercent, 0) / group.roles.length
+      }
+    })
+    
+    return Object.values(groups)
+  }, [subcontractors, contractYears, showEscalation, laborEscalation, billableHours])
 
-  // State for expanded partner groups in contract value section
   const [expandedPartnerGroups, setExpandedPartnerGroups] = useState<Record<string, boolean>>({})
 
   const togglePartnerGroup = (partnerId: string) => {
@@ -566,7 +693,7 @@ const groupedSubcontractors = useMemo(() => {
       fte: 1,
       storyPoints: recRole.storyPoints,
       years: yearsArrayToObject(defaultYears),
-      billableHours:  billableHours,
+      billableHours: billableHours,
       isKeyPersonnel: recRole.isKeyPersonnel,
     })
   }
@@ -639,7 +766,7 @@ const groupedSubcontractors = useMemo(() => {
     })
   }
 
-  // ==================== ODC HANDLERS (using AppContext) ====================
+  // ==================== ODC HANDLERS ====================
 
   const handleAddOdc = () => {
     setEditingOdc(null)
@@ -705,7 +832,7 @@ const groupedSubcontractors = useMemo(() => {
     }))
   }
 
-  // ==================== PER DIEM (TRAVEL) HANDLERS (using AppContext) ====================
+  // ==================== TRAVEL HANDLERS ====================
 
   const handleAddTravel = () => {
     setEditingTravel(null)
@@ -771,75 +898,70 @@ const groupedSubcontractors = useMemo(() => {
     }))
   }
 
-  // ==================== SUBCONTRACTOR HANDLERS (using AppContext) ====================
+  // ==================== SUBCONTRACTOR HANDLERS ====================
 
- const handleAddSub = () => {
-  setEditingSub(null)
-  
-  // Build allocations based on contract years
-  const allocations: Record<string, { enabled: boolean; fte: number }> = {
-    base: { enabled: false, fte: 1 },
-    option1: { enabled: false, fte: 1 },
-    option2: { enabled: false, fte: 1 },
-    option3: { enabled: false, fte: 0 },
-    option4: { enabled: false, fte: 0 },
-  }
-  
-  // Enable years that exist in contract
-  contractYears.forEach(y => {
-    allocations[y.id] = { enabled: true, fte: 1 }
-  })
-  
-  setSubFormData({
-    partnerId: '',
-    newPartnerName: '',
-    companyName: '',
-    role: '',
-    laborCategory: '',
-    theirRate: 0,
-    markupPercent: 10,
-    allocations,
-  })
-  setSubDialogOpen(true)
-}
-
- const handleEditSub = (sub: Subcontractor) => {
-  setEditingSub(sub)
-  const existingPartner = teamingPartners.find(p => 
-    p.id === sub.partnerId || p.companyName.toLowerCase() === sub.companyName.toLowerCase()
-  )
-  
-  // Convert legacy years to allocations if needed
-  let allocations: Record<string, { enabled: boolean; fte: number }>
-  if (sub.allocations) {
-    allocations = { ...sub.allocations }
-  } else {
-    // Legacy conversion
-    const subYears = yearsObjectToArray(sub.years)
-    allocations = {
-      base: { enabled: subYears.includes('base'), fte: sub.fte },
-      option1: { enabled: subYears.includes('option1'), fte: sub.fte },
-      option2: { enabled: subYears.includes('option2'), fte: sub.fte },
-      option3: { enabled: subYears.includes('option3'), fte: sub.fte },
-      option4: { enabled: subYears.includes('option4'), fte: sub.fte },
+  const handleAddSub = () => {
+    setEditingSub(null)
+    
+    const allocations: Record<string, { enabled: boolean; fte: number }> = {
+      base: { enabled: false, fte: 1 },
+      option1: { enabled: false, fte: 1 },
+      option2: { enabled: false, fte: 1 },
+      option3: { enabled: false, fte: 0 },
+      option4: { enabled: false, fte: 0 },
     }
+    
+    contractYears.forEach(y => {
+      allocations[y.id] = { enabled: true, fte: 1 }
+    })
+    
+    setSubFormData({
+      partnerId: '',
+      newPartnerName: '',
+      companyName: '',
+      role: '',
+      laborCategory: '',
+      theirRate: 0,
+      markupPercent: 10,
+      allocations,
+    })
+    setSubDialogOpen(true)
   }
-  
-  setSubFormData({
-    partnerId: existingPartner?.id || '',
-    newPartnerName: '',
-    companyName: sub.companyName,
-    role: sub.role,
-    laborCategory: sub.laborCategory || '',
-    theirRate: sub.theirRate,
-    markupPercent: sub.markupPercent,
-    allocations,
-  })
-  setSubDialogOpen(true)
-}
+
+  const handleEditSub = (sub: Subcontractor) => {
+    setEditingSub(sub)
+    const existingPartner = teamingPartners.find(p => 
+      p.id === sub.partnerId || p.companyName.toLowerCase() === sub.companyName.toLowerCase()
+    )
+    
+    let allocations: Record<string, { enabled: boolean; fte: number }>
+    if (sub.allocations) {
+      allocations = { ...sub.allocations }
+    } else {
+      const subYears = yearsObjectToArray(sub.years)
+      allocations = {
+        base: { enabled: subYears.includes('base'), fte: sub.fte },
+        option1: { enabled: subYears.includes('option1'), fte: sub.fte },
+        option2: { enabled: subYears.includes('option2'), fte: sub.fte },
+        option3: { enabled: subYears.includes('option3'), fte: sub.fte },
+        option4: { enabled: subYears.includes('option4'), fte: sub.fte },
+      }
+    }
+    
+    setSubFormData({
+      partnerId: existingPartner?.id || '',
+      newPartnerName: '',
+      companyName: sub.companyName,
+      role: sub.role,
+      laborCategory: sub.laborCategory || '',
+      theirRate: sub.theirRate,
+      markupPercent: sub.markupPercent,
+      allocations,
+    })
+    setSubDialogOpen(true)
+  }
 
   const handleSaveSub = () => {
-    // Determine company name and partnerId from selection
     let companyName = subFormData.companyName
     let partnerId = subFormData.partnerId
     
@@ -855,64 +977,89 @@ const groupedSubcontractors = useMemo(() => {
       }
     }
     
- const billedRate = subFormData.theirRate * (1 + subFormData.markupPercent / 100)
+    const billedRate = subFormData.theirRate * (1 + subFormData.markupPercent / 100)
 
-// Calculate legacy fte (average of enabled periods) for backward compatibility
-const enabledAllocations = Object.values(subFormData.allocations).filter(a => a.enabled)
-const legacyFte = enabledAllocations.length > 0
-  ? enabledAllocations.reduce((sum, a) => sum + a.fte, 0) / enabledAllocations.length
-  : 1
+    const enabledAllocations = Object.values(subFormData.allocations).filter(a => a.enabled)
+    const legacyFte = enabledAllocations.length > 0
+      ? enabledAllocations.reduce((sum, a) => sum + a.fte, 0) / enabledAllocations.length
+      : 1
 
-// Build legacy years object for backward compatibility
-const legacyYears = {
-  base: subFormData.allocations.base?.enabled ?? false,
-  option1: subFormData.allocations.option1?.enabled ?? false,
-  option2: subFormData.allocations.option2?.enabled ?? false,
-  option3: subFormData.allocations.option3?.enabled ?? false,
-  option4: subFormData.allocations.option4?.enabled ?? false,
-}
+    const legacyYears = {
+      base: subFormData.allocations.base?.enabled ?? false,
+      option1: subFormData.allocations.option1?.enabled ?? false,
+      option2: subFormData.allocations.option2?.enabled ?? false,
+      option3: subFormData.allocations.option3?.enabled ?? false,
+      option4: subFormData.allocations.option4?.enabled ?? false,
+    }
 
-if (editingSub) {
-  updateSubcontractor(editingSub.id, {
-    companyName,
-    role: subFormData.role,
-    laborCategory: subFormData.laborCategory,
-    theirRate: subFormData.theirRate,
-    markupPercent: subFormData.markupPercent,
-    billedRate,
-    fte: legacyFte,
-    years: legacyYears,
-    allocations: subFormData.allocations,
-    partnerId,
-  })
-} else {
-  addSubcontractor({
-    id: `sub-${Date.now()}`,
-    companyName,
-    role: subFormData.role,
-    laborCategory: subFormData.laborCategory,
-    theirRate: subFormData.theirRate,
-    markupPercent: subFormData.markupPercent,
-    billedRate,
-    fte: legacyFte,
-    years: legacyYears,
-    allocations: subFormData.allocations,
-    partnerId,
-  })
-}
+    if (editingSub) {
+      updateSubcontractor(editingSub.id, {
+        companyName,
+        role: subFormData.role,
+        laborCategory: subFormData.laborCategory,
+        theirRate: subFormData.theirRate,
+        markupPercent: subFormData.markupPercent,
+        billedRate,
+        fte: legacyFte,
+        years: legacyYears,
+        allocations: subFormData.allocations,
+        partnerId,
+      })
+    } else {
+      addSubcontractor({
+        id: `sub-${Date.now()}`,
+        companyName,
+        role: subFormData.role,
+        laborCategory: subFormData.laborCategory,
+        theirRate: subFormData.theirRate,
+        markupPercent: subFormData.markupPercent,
+        billedRate,
+        fte: legacyFte,
+        years: legacyYears,
+        allocations: subFormData.allocations,
+        partnerId,
+      })
+    }
     setSubDialogOpen(false)
     setEditingSub(null)
   }
 
   const handleDeleteSub = (subId: string) => removeSubcontractor(subId)
 
-  const toggleSubFormYear = (yearId: string) => {
-    setSubFormData(prev => ({
-      ...prev,
-      years: prev.years.includes(yearId)
-        ? prev.years.filter(y => y !== yearId)
-        : [...prev.years, yearId]
-    }))
+  const toggleSubYear = (subId: string, yearId: string) => {
+    const sub = subcontractors.find(s => s.id === subId)
+    if (!sub) return
+
+    if (sub.allocations) {
+      const currentAlloc = sub.allocations[yearId as keyof typeof sub.allocations]
+      const updatedAllocations = {
+        ...sub.allocations,
+        [yearId]: {
+          ...currentAlloc,
+          enabled: !currentAlloc.enabled,
+          fte: !currentAlloc.enabled ? (currentAlloc.fte || 1) : currentAlloc.fte
+        }
+      }
+      updateSubcontractor(subId, { allocations: updatedAllocations })
+    } else {
+      const currentYears = yearsObjectToArray(sub.years)
+      const newEnabled = !currentYears.includes(yearId)
+      
+      const allocations = {
+        base: { enabled: currentYears.includes('base'), fte: sub.fte },
+        option1: { enabled: currentYears.includes('option1'), fte: sub.fte },
+        option2: { enabled: currentYears.includes('option2'), fte: sub.fte },
+        option3: { enabled: currentYears.includes('option3'), fte: sub.fte },
+        option4: { enabled: currentYears.includes('option4'), fte: sub.fte },
+      }
+      
+      allocations[yearId as keyof typeof allocations] = {
+        enabled: newEnabled,
+        fte: sub.fte
+      }
+      
+      updateSubcontractor(subId, { allocations })
+    }
   }
 
   // ==================== ASSIGN ROLE TO SUB HANDLERS ====================
@@ -937,7 +1084,6 @@ if (editingSub) {
   const handleSaveAssignSub = () => {
     if (!assigningRole) return
     
-    // Get or create partner
     let partnerName = ''
     let partnerId = assignSubFormData.partnerId
     
@@ -981,47 +1127,6 @@ if (editingSub) {
     }))
   }
 
-  const toggleSubYear = (subId: string, yearId: string) => {
-  const sub = subcontractors.find(s => s.id === subId)
-  if (!sub) return
-
-  if (sub.allocations) {
-    // New allocation structure
-    const currentAlloc = sub.allocations[yearId as keyof typeof sub.allocations]
-    const updatedAllocations = {
-      ...sub.allocations,
-      [yearId]: {
-        ...currentAlloc,
-        enabled: !currentAlloc.enabled,
-        // Keep existing FTE or default to 1 when enabling
-        fte: !currentAlloc.enabled ? (currentAlloc.fte || 1) : currentAlloc.fte
-      }
-    }
-    updateSubcontractor(subId, { allocations: updatedAllocations })
-  } else {
-    // Legacy: convert to new structure on first toggle
-    const currentYears = yearsObjectToArray(sub.years)
-    const newEnabled = !currentYears.includes(yearId)
-    
-    // Build allocations from legacy data
-    const allocations = {
-      base: { enabled: currentYears.includes('base'), fte: sub.fte },
-      option1: { enabled: currentYears.includes('option1'), fte: sub.fte },
-      option2: { enabled: currentYears.includes('option2'), fte: sub.fte },
-      option3: { enabled: currentYears.includes('option3'), fte: sub.fte },
-      option4: { enabled: currentYears.includes('option4'), fte: sub.fte },
-    }
-    
-    // Apply the toggle
-    allocations[yearId as keyof typeof allocations] = {
-      enabled: newEnabled,
-      fte: sub.fte
-    }
-    
-    updateSubcontractor(subId, { allocations })
-  }
-}
-
   // ==================== MANUAL ADD ROLE HANDLERS ====================
 
   const handleOpenAddRole = () => {
@@ -1051,21 +1156,19 @@ if (editingSub) {
     const defaultYears = addRoleFormData.years.length > 0 ? addRoleFormData.years : contractYears.map(y => y.id)
     
     if (addRoleDestination === 'prime') {
-      // Add as prime labor
       addRole({
-     id: `role-${Date.now()}`,
-      name: addRoleFormData.title,
-    description: '',
-   icLevel: addRoleFormData.icLevel,
-   baseSalary: addRoleFormData.baseSalary,
-  quantity: addRoleFormData.quantity,
-  fte: addRoleFormData.ftePerPerson,
-  storyPoints: addRoleFormData.storyPoints,
-  years: yearsArrayToObject(defaultYears),
-  billableHours: billableHours,
-})
+        id: `role-${Date.now()}`,
+        name: addRoleFormData.title,
+        description: '',
+        icLevel: addRoleFormData.icLevel,
+        baseSalary: addRoleFormData.baseSalary,
+        quantity: addRoleFormData.quantity,
+        fte: addRoleFormData.ftePerPerson,
+        storyPoints: addRoleFormData.storyPoints,
+        years: yearsArrayToObject(defaultYears),
+        billableHours: billableHours,
+      })
     } else {
-      // Add as subcontractor
       let partnerName = ''
       let partnerId = addRoleFormData.partnerId
       
@@ -1120,7 +1223,6 @@ if (editingSub) {
     }).format(amount)
   }
 
-  const totalStoryPoints = recommendedRoles.reduce((sum, r) => sum + r.storyPoints, 0)
   const totalRecommendedFTE = recommendedRoles.reduce((sum, r) => sum + r.quantity, 0)
   const contractType = solicitation?.contractType || 'T&M'
 
@@ -1129,120 +1231,38 @@ if (editingSub) {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* Header with controls */}
+        {/* Header - Clean with summary pill */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-semibold text-gray-900">Roles & Pricing</h1>
             <Badge variant="outline" className="text-xs">{contractType}</Badge>
           </div>
           
-          <div className="flex items-center gap-4">
-        {/* Billable Hours */}
-<div className="flex items-center gap-2">
-  <div className="flex items-center gap-1">
-    <Label htmlFor="billableHours" className="text-sm text-gray-600">Hours/Yr</Label>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" aria-label="Learn more about billable hours">
-          <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-xs">
-        <p className="text-xs">Standard billable hours per FTE per year. FTE is multiplied by this number to calculate total hours.</p>
-      </TooltipContent>
-    </Tooltip>
-  </div>
-  <div className="flex items-center">
-    <Input
-      id="billableHours"
-      type="number"
-      value={billableHours}
-      onChange={(e) => setBillableHours(Number(e.target.value))}
-      className="w-20 h-8 text-sm"
-    />
-  </div>
-</div>
-            {/* Profit Margin */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                <Label htmlFor="profit" className="text-sm text-gray-600">Profit</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label="Learn more about profit margin">
-                      <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-xs">Applied to your fully-loaded labor rate (after fringe, overhead, and G&A) to calculate your fee on prime labor</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <div className="flex items-center">
-                <Input
-                  id="profit"
-                  type="number"
-                  value={profitMargin}
-                  onChange={(e) => setProfitMargin(Number(e.target.value))}
-                  className="w-16 h-8 text-sm"
-                />
-                <span className="text-sm text-gray-500 ml-1">%</span>
-              </div>
-            </div>
-            
-            {/* Escalation Toggle */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="escalation"
-                checked={showEscalation}
-                onChange={(e) => setShowEscalation(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              <Label htmlFor="escalation" className="text-sm text-gray-600">Escalation</Label>
-              {showEscalation && (
-                <div className="flex items-center gap-3 ml-2 pl-3 border-l border-gray-200">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5 cursor-help">
-                        <span className="text-xs text-gray-500">Labor</span>
-                        <Input
-                          type="number"
-                          value={laborEscalation}
-                          onChange={(e) => setLaborEscalation(Number(e.target.value))}
-                          className="w-14 h-8 text-sm"
-                        />
-                        <span className="text-xs text-gray-500">%</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">Annual escalation for all labor costs</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5 cursor-help">
-                        <span className="text-xs text-gray-500">Other</span>
-                        <Input
-                          type="number"
-                          value={odcEscalation}
-                          onChange={(e) => setOdcEscalation(Number(e.target.value))}
-                          className="w-14 h-8 text-sm"
-                        />
-                        <span className="text-xs text-gray-500">%</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">Annual escalation for ODCs, Travel, and Subcontractors</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              )}
-            </div>
-
-            <Button className="h-9">
-              Continue to Rate Justification
-              <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
+          <div className="flex items-center gap-3">
+            {/* Summary Pill */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button 
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-full text-xs text-gray-600 transition-colors"
+                  onClick={() => openSolicitationEditor()}
+                  aria-label={`Edit pricing settings: ${profitMargin}% profit margin, ${billableHours.toLocaleString()} billable hours per year, ${showEscalation ? `${laborEscalation}% labor and ${odcEscalation}% ODC annual increases` : 'no annual increases'}`}
+                >
+                  <span>{profitMargin}% profit</span>
+                  <span className="text-gray-300" aria-hidden="true">·</span>
+                  <span>{billableHours.toLocaleString()} hours</span>
+                  <span className="text-gray-300" aria-hidden="true">·</span>
+                  {showEscalation ? (
+                    <span>+{laborEscalation}% labor, +{odcEscalation}% ODCs yearly</span>
+                  ) : (
+                    <span className="text-gray-400">No annual increases</span>
+                  )}
+                  <Settings2 className="w-3.5 h-3.5 text-gray-400" aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Click to edit pricing settings</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
@@ -1271,11 +1291,6 @@ if (editingSub) {
                   <Users className="w-4 h-4 text-gray-400" />
                   <span className="font-medium text-gray-900">{totalRecommendedFTE}</span>
                   <span className="text-gray-500">FTE</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Settings2 className="w-4 h-4 text-gray-400" />
-                  <span className="font-medium text-gray-900">{totalStoryPoints}</span>
-                  <span className="text-gray-500">Story Points</span>
                 </div>
               </div>
 
@@ -1324,7 +1339,6 @@ if (editingSub) {
                           >
                             {priority}
                           </Badge>
-                          <span className="text-gray-500">{role.storyPoints} SP</span>
                         </div>
 
                         {assignment ? (
@@ -1467,13 +1481,12 @@ if (editingSub) {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleEditRole(role)}
-                                  aria-label={`Edit ${role.title}`}
-                                  className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                  className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent><p className="text-xs">Edit this role's details</p></TooltipContent>
+                              <TooltipContent><p className="text-xs">Edit role</p></TooltipContent>
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -1481,13 +1494,12 @@ if (editingSub) {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => setSelectedRoleForBreakdown(role)}
-                                  aria-label={`View rate breakdown for ${role.title}`}
-                                  className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                  className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
                                 >
                                   <Calculator className="w-3.5 h-3.5" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent><p className="text-xs">See how this rate is calculated</p></TooltipContent>
+                              <TooltipContent><p className="text-xs">View rate breakdown</p></TooltipContent>
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -1495,26 +1507,24 @@ if (editingSub) {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleRemoveFromTeam(role.id)}
-                                  aria-label={`Remove ${role.title} from team`}
-                                  className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                                  className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent><p className="text-xs">Remove this role from your team</p></TooltipContent>
+                              <TooltipContent><p className="text-xs">Remove role</p></TooltipContent>
                             </Tooltip>
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Select active years">
+                        <div className="flex flex-wrap gap-1.5">
                           {contractYears.map((year) => {
                             const isActive = role.years.includes(year.id)
                             return (
                               <button
                                 key={year.id}
                                 onClick={() => toggleRoleYear(role.id, year.id)}
-                                aria-pressed={isActive}
-                                className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
+                                className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
                                   isActive ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                                 }`}
                               >
@@ -1523,6 +1533,47 @@ if (editingSub) {
                             )
                           })}
                         </div>
+                        
+                        {/* Rate Justification Indicator (simplified) */}
+                        {(() => {
+                          const justification = rateJustifications[role.id]
+                          const hasJustification = justification?.savedAt && justification.savedAt !== ''
+                          
+                          // Calculate BLS percentile
+                          const blsData = findBLSData(role.title)
+                          const percentile = blsData ? calculateBLSPercentile(role.baseSalary, blsData) : null
+                          
+                          const getPercentileColor = (p: number) => {
+                            if (p >= 75) return 'text-red-600'
+                            if (p >= 50) return 'text-blue-600'
+                            if (p >= 25) return 'text-green-600'
+                            return 'text-amber-600'
+                          }
+                          
+                          return (
+                            <div className="mt-2 pt-2 border-t border-blue-100 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-gray-500">Rate Justification</span>
+                                {hasJustification ? (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-50 text-green-700 rounded text-[10px]">
+                                    <CheckCircle2 className="w-2.5 h-2.5" />
+                                    Documented
+                                  </span>
+                                ) : percentile !== null && percentile >= 75 ? (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px]">
+                                    <AlertTriangle className="w-2.5 h-2.5" />
+                                    Needs justification
+                                  </span>
+                                ) : null}
+                              </div>
+                              {percentile !== null && (
+                                <span className={`text-[10px] font-medium ${getPercentileColor(percentile)}`}>
+                                  {percentile.toFixed(0)}th %ile
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -1548,111 +1599,101 @@ if (editingSub) {
                 ) : (
                   <div className="space-y-2">
                     {subcontractors.map((sub) => {
-  // Support both new allocations and legacy years
-  const getAllocation = (yearId: string) => {
-    if (sub.allocations) {
-      return sub.allocations[yearId as keyof typeof sub.allocations]
-    }
-    // Legacy fallback
-    const subYears = yearsObjectToArray(sub.years)
-    return { enabled: subYears.includes(yearId), fte: sub.fte }
-  }
-  
-  const totalFte = sub.allocations
-    ? Object.values(sub.allocations).reduce((sum, a) => sum + (a.enabled ? a.fte : 0), 0)
-    : sub.fte * yearsObjectToArray(sub.years).length
-  
-  const avgFtePerYear = sub.allocations
-    ? totalFte / Math.max(Object.values(sub.allocations).filter(a => a.enabled).length, 1)
-    : sub.fte
+                      const getAllocation = (yearId: string) => {
+                        if (sub.allocations) {
+                          return sub.allocations[yearId as keyof typeof sub.allocations]
+                        }
+                        const subYears = yearsObjectToArray(sub.years)
+                        return { enabled: subYears.includes(yearId), fte: sub.fte }
+                      }
+                      
+                      const avgFtePerYear = sub.allocations
+                        ? Object.values(sub.allocations).filter(a => a.enabled).reduce((sum, a) => sum + a.fte, 0) / Math.max(Object.values(sub.allocations).filter(a => a.enabled).length, 1)
+                        : sub.fte
 
-  return (
-    <div
-      key={sub.id}
-      className="group border border-orange-100 rounded-lg p-3 bg-orange-50/50 hover:border-orange-200 transition-all"
-    >
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-sm text-gray-900">{sub.role}</span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-orange-100 text-orange-700 border-orange-200">
-              Sub
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-            <span className="text-orange-700">{sub.companyName}</span>
-            <span>·</span>
-            <span>{avgFtePerYear.toFixed(2)} FTE</span>
-            <span>·</span>
-            <span className="font-medium text-gray-700">${sub.billedRate.toFixed(2)}/hr</span>
-            <span className="text-green-600">(+{sub.markupPercent}%)</span>
-          </div>
-        </div>
-        
-        <div className="flex gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleEditSub(sub)}
-                aria-label={`Edit ${sub.companyName} - ${sub.role}`}
-                className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent><p className="text-xs">Edit this subcontractor's details</p></TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleDeleteSub(sub.id)}
-                aria-label={`Remove ${sub.companyName} - ${sub.role}`}
-                className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent><p className="text-xs">Remove this subcontractor</p></TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
+                      return (
+                        <div
+                          key={sub.id}
+                          className="group border border-orange-100 rounded-lg p-3 bg-orange-50/50 hover:border-orange-200 transition-all"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-gray-900">{sub.role}</span>
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-orange-100 text-orange-700 border-orange-200">
+                                  Sub
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                                <span className="text-orange-700">{sub.companyName}</span>
+                                <span>·</span>
+                                <span>{avgFtePerYear.toFixed(2)} FTE</span>
+                                <span>·</span>
+                                <span className="font-medium text-gray-700">${sub.billedRate.toFixed(2)}/hr</span>
+                                <span className="text-green-600">(+{sub.markupPercent}%)</span>
+                              </div>
+                            </div>
+                            
+                            <div className="flex gap-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditSub(sub)}
+                                    className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p className="text-xs">Edit subcontractor</p></TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteSub(sub.id)}
+                                    className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p className="text-xs">Remove subcontractor</p></TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </div>
 
-      {/* Clickable Year Toggles with FTE display */}
-                      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Select active years and FTE">
-                        {contractYears.map((year) => {
-                          const allocation = getAllocation(year.id)
-                          const isActive = allocation?.enabled ?? false
-                          const fte = allocation?.fte ?? 0
-                          
-                          return (
-                            <button
-                              key={year.id}
-                              onClick={() => toggleSubYear(sub.id, year.id)}
-                              aria-pressed={isActive}
-                              className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 ${
-                                isActive ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                              }`}
-                            >
-                              {year.label}{isActive && fte ? ` · ${fte}` : ''}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
+                          <div className="flex flex-wrap gap-1.5">
+                            {contractYears.map((year) => {
+                              const allocation = getAllocation(year.id)
+                              const isActive = allocation?.enabled ?? false
+                              const fte = allocation?.fte ?? 0
+                              
+                              return (
+                                <button
+                                  key={year.id}
+                                  onClick={() => toggleSubYear(sub.id, year.id)}
+                                  className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
+                                    isActive ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  {year.label}{isActive && fte ? ` · ${fte}` : ''}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Column 3: Contract Value */}
-      <div className="border border-gray-100 rounded-lg p-4 bg-white">
+          {/* Column 3: Contract Value */}
+          <div className="border border-gray-100 rounded-lg p-4 bg-white">
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-gray-400" />
@@ -1661,7 +1702,7 @@ if (editingSub) {
 
               <p className="text-sm text-gray-500">
                 {showEscalation 
-                  ? `With escalation: ${laborEscalation}% labor, ${odcEscalation}% ODC/Travel`
+                  ? `With escalation: ${laborEscalation}% labor, ${odcEscalation}% ODCs`
                   : 'Fixed pricing across all years'
                 }
               </p>
@@ -1695,9 +1736,7 @@ if (editingSub) {
               <div className="border-t border-gray-100 pt-3">
                 <button
                   onClick={() => setShowSubsExpanded(!showSubsExpanded)}
-                  aria-expanded={showSubsExpanded}
-                  aria-controls="subs-expanded-content"
-                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
                 >
                   <div className="flex items-center gap-2">
                     <Building2 className="w-3.5 h-3.5 text-gray-500" />
@@ -1715,12 +1754,11 @@ if (editingSub) {
                 </button>
                 
                 {showSubsExpanded && (
-                  <div id="subs-expanded-content" className="mt-2 ml-5 space-y-2">
-                   {groupedSubcontractors.map((group) => {
+                  <div className="mt-2 ml-5 space-y-2">
+                    {groupedSubcontractors.map((group) => {
                       const isExpanded = expandedPartnerGroups[group.partnerId || group.companyName]
                       return (
                         <div key={group.partnerId || group.companyName} className="text-xs">
-                          {/* Partner Header - Clickable to expand */}
                           <button
                             onClick={() => togglePartnerGroup(group.partnerId || group.companyName)}
                             className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
@@ -1735,39 +1773,34 @@ if (editingSub) {
                               </Badge>
                             </div>
                             <div className="flex items-center gap-2">
-                            <span className="text-gray-900 font-medium">{formatCurrency(group.totalContractCost)}</span>
-                            {isExpanded ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
-                          </div>
+                              <span className="text-gray-900 font-medium">{formatCurrency(group.totalContractCost)}</span>
+                              {isExpanded ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+                            </div>
                           </button>
                           
-                          {/* Expanded Role Details */}
                           {isExpanded && (
                             <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-100 pl-3">
-       {group.roles.map((sub) => {
-      // Get base year FTE for display
-      const baseFte = sub.allocations?.base?.enabled ? sub.allocations.base.fte : sub.fte
-      const subTotalCost = calculateSubTotalContractCost(sub)
-  
-  // Format FTE cleanly (1, 0.5, 0.75 - no trailing zeros)
-  const fteDisplay = baseFte === Math.floor(baseFte) ? baseFte.toString() : Number(baseFte.toFixed(2)).toString()
-  
-  return (
-    <div key={sub.id} className="group flex items-center justify-between py-0.5">
-      <div className="flex items-center gap-2">
-        <span className="text-gray-600">{sub.role}</span>
-        <span className="text-gray-400">
-          {fteDisplay} FTE · ${sub.theirRate.toFixed(0)}/hr
-        </span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-gray-700">{formatCurrency(subTotalCost)} total</span>
-                                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                              {group.roles.map((sub) => {
+                                const baseFte = sub.allocations?.base?.enabled ? sub.allocations.base.fte : sub.fte
+                                const subTotalCost = calculateSubTotalContractCost(sub)
+                                const fteDisplay = baseFte === Math.floor(baseFte) ? baseFte.toString() : Number(baseFte.toFixed(2)).toString()
+                                
+                                return (
+                                  <div key={sub.id} className="group flex items-center justify-between py-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-600">{sub.role}</span>
+                                      <span className="text-gray-400">
+                                        {fteDisplay} FTE · ${sub.theirRate.toFixed(0)}/hr
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-700">{formatCurrency(subTotalCost)} total</span>
+                                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <Button 
                                           variant="ghost" 
                                           size="sm" 
                                           onClick={() => handleEditSub(sub)} 
-                                          aria-label={`Edit ${sub.role}`}
-                                          className="h-5 w-5 p-0 text-gray-500 hover:text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                          className="h-5 w-5 p-0 text-gray-500 hover:text-blue-600"
                                         >
                                           <Pencil className="w-3 h-3" />
                                         </Button>
@@ -1775,8 +1808,7 @@ if (editingSub) {
                                           variant="ghost" 
                                           size="sm" 
                                           onClick={() => handleDeleteSub(sub.id)} 
-                                          aria-label={`Remove ${sub.role}`}
-                                          className="h-5 w-5 p-0 text-gray-500 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                                          className="h-5 w-5 p-0 text-gray-500 hover:text-red-600"
                                         >
                                           <Trash2 className="w-3 h-3" />
                                         </Button>
@@ -1793,15 +1825,12 @@ if (editingSub) {
                   </div>
                 )}
               </div>
-                 
 
               {/* ODCs - Collapsible */}
               <div className="border-t border-gray-100 pt-3">
                 <button
                   onClick={() => setShowOdcExpanded(!showOdcExpanded)}
-                  aria-expanded={showOdcExpanded}
-                  aria-controls="odcs-expanded-content"
-                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
                 >
                   <div className="flex items-center gap-2">
                     <Package className="w-3.5 h-3.5 text-gray-500" />
@@ -1814,7 +1843,7 @@ if (editingSub) {
                 </button>
                 
                 {showOdcExpanded && (
-                  <div id="odcs-expanded-content" className="mt-2 ml-5 space-y-1.5">
+                  <div className="mt-2 ml-5 space-y-1.5">
                     {odcs.map((odc) => (
                       <div key={odc.id} className="group flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
@@ -1825,13 +1854,12 @@ if (editingSub) {
                           <span className="text-gray-700">
                             {odc.quantity > 1 ? `${odc.quantity} × ` : ''}{formatCurrency(odc.unitCost)}/yr
                           </span>
-                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button 
                               variant="ghost" 
                               size="sm" 
                               onClick={() => handleEditOdc(odc)} 
-                              aria-label={`Edit ${odc.description}`}
-                              className="h-5 w-5 p-0 text-gray-500 hover:text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                              className="h-5 w-5 p-0 text-gray-500 hover:text-blue-600"
                             >
                               <Pencil className="w-3 h-3" />
                             </Button>
@@ -1839,8 +1867,7 @@ if (editingSub) {
                               variant="ghost" 
                               size="sm" 
                               onClick={() => handleDeleteOdc(odc.id)} 
-                              aria-label={`Remove ${odc.description}`}
-                              className="h-5 w-5 p-0 text-gray-500 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                              className="h-5 w-5 p-0 text-gray-500 hover:text-red-600"
                             >
                               <Trash2 className="w-3 h-3" />
                             </Button>
@@ -1856,13 +1883,11 @@ if (editingSub) {
                 )}
               </div>
 
-              {/* Travel (Per Diem) - Collapsible */}
+              {/* Travel - Collapsible */}
               <div className="border-t border-gray-100 pt-3">
                 <button
                   onClick={() => setShowTravelExpanded(!showTravelExpanded)}
-                  aria-expanded={showTravelExpanded}
-                  aria-controls="travel-expanded-content"
-                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                  className="w-full flex items-center justify-between py-1 hover:bg-gray-50 rounded -mx-1 px-1"
                 >
                   <div className="flex items-center gap-2">
                     <Plane className="w-3.5 h-3.5 text-gray-500" />
@@ -1875,20 +1900,19 @@ if (editingSub) {
                 </button>
                 
                 {showTravelExpanded && (
-                  <div id="travel-expanded-content" className="mt-2 ml-5 space-y-2">
+                  <div className="mt-2 ml-5 space-y-2">
                     {perDiem.map((pd) => (
                       <div key={pd.id} className="group text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-gray-700 font-medium">{pd.location}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-gray-900 font-medium">{formatCurrency(pd.totalCost)}/yr</span>
-                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
                                 onClick={() => handleEditTravel(pd)} 
-                                aria-label={`Edit travel to ${pd.location}`}
-                                className="h-5 w-5 p-0 text-gray-500 hover:text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                className="h-5 w-5 p-0 text-gray-500 hover:text-blue-600"
                               >
                                 <Pencil className="w-3 h-3" />
                               </Button>
@@ -1896,8 +1920,7 @@ if (editingSub) {
                                 variant="ghost" 
                                 size="sm" 
                                 onClick={() => handleDeleteTravel(pd.id)} 
-                                aria-label={`Remove travel to ${pd.location}`}
-                                className="h-5 w-5 p-0 text-gray-500 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                                className="h-5 w-5 p-0 text-gray-500 hover:text-red-600"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </Button>
@@ -1993,7 +2016,7 @@ if (editingSub) {
                         baseSalary: icLevelRates[newLevel] || prev.baseSalary,
                       }))
                     }}
-                    className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm"
                   >
                     {icLevelOptions.map(level => (
                       <option key={level} value={level}>{level}</option>
@@ -2028,7 +2051,7 @@ if (editingSub) {
                     id="role-fte"
                     value={roleFormData.ftePerPerson}
                     onChange={(e) => setRoleFormData(prev => ({ ...prev, ftePerPerson: Number(e.target.value) }))}
-                    className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm"
                   >
                     {fteOptions.map(fte => (
                       <option key={fte} value={fte}>{fte}</option>
@@ -2104,7 +2127,7 @@ if (editingSub) {
                     id="odc-category"
                     value={odcFormData.category}
                     onChange={(e) => setOdcFormData(prev => ({ ...prev, category: e.target.value as ODCItem['category'] }))}
-                    className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm"
                   >
                     {Object.entries(odcCategoryLabels).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
@@ -2135,26 +2158,27 @@ if (editingSub) {
                 />
               </div>
 
-  <div className="space-y-2">
-  <Label>Applicable Years</Label>
-  <div className="flex flex-wrap gap-2">
-    {contractYears.map((year) => {
-      const isActive = odcFormData.years.includes(year.id)
-      return (
-        <button
-          key={year.id}
-          type="button"
-          onClick={() => toggleOdcFormYear(year.id)}
-          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-            isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-          }`}
-        >
-          {year.label}
-        </button>
-      )
-    })}
-  </div>
-</div>
+              <div className="space-y-2">
+                <Label>Applicable Years</Label>
+                <div className="flex flex-wrap gap-2">
+                  {contractYears.map((year) => {
+                    const isActive = odcFormData.years.includes(year.id)
+                    return (
+                      <button
+                        key={year.id}
+                        type="button"
+                        onClick={() => toggleOdcFormYear(year.id)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                          isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        {year.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               {odcFormData.unitCost > 0 && odcFormData.years.length > 0 && (
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <div className="flex justify-between items-center text-sm">
@@ -2164,6 +2188,7 @@ if (editingSub) {
                 </div>
               )}
             </div>
+
             <DialogFooter>
               <Button variant="outline" onClick={() => setOdcDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleSaveOdc} disabled={!odcFormData.description || odcFormData.unitCost <= 0}>
@@ -2173,7 +2198,7 @@ if (editingSub) {
           </DialogContent>
         </Dialog>
 
-        {/* Travel (Per Diem) Dialog */}
+        {/* Travel Dialog */}
         <Dialog open={travelDialogOpen} onOpenChange={setTravelDialogOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
@@ -2225,6 +2250,28 @@ if (editingSub) {
                   />
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <Label>Applicable Years</Label>
+                <div className="flex flex-wrap gap-2">
+                  {contractYears.map((year) => {
+                    const isActive = travelFormData.years.includes(year.id)
+                    return (
+                      <button
+                        key={year.id}
+                        type="button"
+                        onClick={() => toggleTravelFormYear(year.id)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                          isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        {year.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               {travelFormData.ratePerDay > 0 && travelFormData.years.length > 0 && (
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <div className="flex justify-between items-center text-sm">
@@ -2257,7 +2304,6 @@ if (editingSub) {
             </DialogHeader>
 
             <div className="space-y-4 py-4">
-              {/* Partner Selection */}
               <div className="space-y-2">
                 <Label>Teaming Partner <span className="text-red-500">*</span></Label>
                 <Select 
@@ -2307,7 +2353,6 @@ if (editingSub) {
                 </Select>
               </div>
 
-              {/* New Partner Name (if adding new) */}
               {subFormData.partnerId === 'new' && (
                 <div className="space-y-2">
                   <Label htmlFor="sub-new-partner">Company Name <span className="text-red-500">*</span></Label>
@@ -2340,122 +2385,123 @@ if (editingSub) {
                   onChange={(e) => setSubFormData(prev => ({ ...prev, laborCategory: e.target.value }))}
                 />
               </div>
-             <div className="grid grid-cols-2 gap-4">
-  <div className="space-y-2">
-    <Label htmlFor="sub-rate">Their Rate/hr <span className="text-red-500">*</span></Label>
-    <Input
-      id="sub-rate"
-      type="number"
-      min={0}
-      placeholder="0.00"
-      value={subFormData.theirRate || ''}
-      onChange={(e) => setSubFormData(prev => ({ ...prev, theirRate: Number(e.target.value) }))}
-    />
-  </div>
-  <div className="space-y-2">
-    <Label htmlFor="sub-markup">Markup %</Label>
-    <Input
-      id="sub-markup"
-      type="number"
-      min={0}
-      max={100}
-      value={subFormData.markupPercent}
-      onChange={(e) => setSubFormData(prev => ({ ...prev, markupPercent: Number(e.target.value) }))}
-    />
-  </div>
-</div>
 
-<div className="space-y-3">
-  <Label>Year Allocations</Label>
-  <div className="space-y-2">
-    {contractYears.map((year) => {
-      const allocation = subFormData.allocations[year.id] || { enabled: false, fte: 1 }
-      return (
-        <div key={year.id} className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => {
-              setSubFormData(prev => ({
-                ...prev,
-                allocations: {
-                  ...prev.allocations,
-                  [year.id]: {
-                    ...allocation,
-                    enabled: !allocation.enabled,
-                    fte: !allocation.enabled ? (allocation.fte || 1) : allocation.fte
-                  }
-                }
-              }))
-            }}
-            className={`w-16 px-2 py-1.5 text-sm font-medium rounded-md transition-all ${
-              allocation.enabled ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-            }`}
-          >
-            {year.label}
-          </button>
-        
-            <div className="flex items-center gap-2">
-              <Label htmlFor={`sub-fte-${year.id}`} className="text-xs text-gray-500">FTE:</Label>
-              <Input
-                id={`sub-fte-${year.id}`}
-                type="number"
-                min={0.25}
-                max={10}
-                step={0.25}
-                value={allocation.fte}
-                onChange={(e) => {
-                  setSubFormData(prev => ({
-                    ...prev,
-                    allocations: {
-                      ...prev.allocations,
-                      [year.id]: {
-                        ...allocation,
-                        fte: Number(e.target.value)
-                      }
-                    }
-                  }))
-                }}
-                className="w-20 h-8 text-sm"
-              />
-              <span className="text-xs text-gray-400">({(allocation.fte *  billableHours).toLocaleString()} hrs)</span>
-            </div>
-        </div>
-      )
-    })}
-  </div>
-</div>
-        
-             {subFormData.theirRate > 0 && Object.values(subFormData.allocations).some(a => a.enabled) && (
-  <div className="p-3 bg-gray-50 rounded-lg space-y-2">
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Their Rate:</span>
-      <span className="text-gray-900">{formatCurrency(subFormData.theirRate)}/hr</span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Billed Rate (+{subFormData.markupPercent}%):</span>
-      <span className="text-gray-900">{formatCurrency(subFormData.theirRate * (1 + subFormData.markupPercent / 100))}/hr</span>
-    </div>
-    <div className="border-t border-gray-200 pt-2 mt-2 space-y-1">
-      <p className="text-xs font-medium text-gray-500 uppercase">Annual Cost by Period (1,920 hrs)</p>
-      {contractYears.map(year => {
-        const allocation = subFormData.allocations[year.id]
-        if (!allocation?.enabled) return null
-        const theirCost = subFormData.theirRate * allocation.fte *  billableHours
-        const billedCost = subFormData.theirRate * (1 + subFormData.markupPercent / 100) * allocation.fte *  billableHours
-        return (
-          <div key={year.id} className="flex justify-between text-xs">
-            <span className="text-gray-600">{year.label} ({allocation.fte} FTE):</span>
-            <div className="text-right">
-              <span className="text-gray-500">{formatCurrency(theirCost)}</span>
-              <span className="text-gray-400 mx-1">→</span>
-              <span className="font-medium text-gray-900">{formatCurrency(billedCost)}</span>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  </div>
-)}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="sub-rate">Their Rate/hr <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="sub-rate"
+                    type="number"
+                    min={0}
+                    placeholder="0.00"
+                    value={subFormData.theirRate || ''}
+                    onChange={(e) => setSubFormData(prev => ({ ...prev, theirRate: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sub-markup">Markup %</Label>
+                  <Input
+                    id="sub-markup"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={subFormData.markupPercent}
+                    onChange={(e) => setSubFormData(prev => ({ ...prev, markupPercent: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Year Allocations</Label>
+                <div className="space-y-2">
+                  {contractYears.map((year) => {
+                    const allocation = subFormData.allocations[year.id] || { enabled: false, fte: 1 }
+                    return (
+                      <div key={year.id} className="flex items-center gap-4">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSubFormData(prev => ({
+                              ...prev,
+                              allocations: {
+                                ...prev.allocations,
+                                [year.id]: {
+                                  ...allocation,
+                                  enabled: !allocation.enabled,
+                                  fte: !allocation.enabled ? (allocation.fte || 1) : allocation.fte
+                                }
+                              }
+                            }))
+                          }}
+                          className={`w-16 px-2 py-1.5 text-sm font-medium rounded-md transition-all ${
+                            allocation.enabled ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {year.label}
+                        </button>
+                      
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={`sub-fte-${year.id}`} className="text-xs text-gray-500">FTE:</Label>
+                          <Input
+                            id={`sub-fte-${year.id}`}
+                            type="number"
+                            min={0.25}
+                            max={10}
+                            step={0.25}
+                            value={allocation.fte}
+                            onChange={(e) => {
+                              setSubFormData(prev => ({
+                                ...prev,
+                                allocations: {
+                                  ...prev.allocations,
+                                  [year.id]: {
+                                    ...allocation,
+                                    fte: Number(e.target.value)
+                                  }
+                                }
+                              }))
+                            }}
+                            className="w-20 h-8 text-sm"
+                          />
+                          <span className="text-xs text-gray-400">({(allocation.fte * billableHours).toLocaleString()} hrs)</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {subFormData.theirRate > 0 && Object.values(subFormData.allocations).some(a => a.enabled) && (
+                <div className="p-3 bg-gray-50 rounded-lg space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Their Rate:</span>
+                    <span className="text-gray-900">{formatCurrency(subFormData.theirRate)}/hr</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Billed Rate (+{subFormData.markupPercent}%):</span>
+                    <span className="text-gray-900">{formatCurrency(subFormData.theirRate * (1 + subFormData.markupPercent / 100))}/hr</span>
+                  </div>
+                  <div className="border-t border-gray-200 pt-2 mt-2 space-y-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase">Annual Cost by Period ({billableHours.toLocaleString()} hrs)</p>
+                    {contractYears.map(year => {
+                      const allocation = subFormData.allocations[year.id]
+                      if (!allocation?.enabled) return null
+                      const theirCost = subFormData.theirRate * allocation.fte * billableHours
+                      const billedCost = subFormData.theirRate * (1 + subFormData.markupPercent / 100) * allocation.fte * billableHours
+                      return (
+                        <div key={year.id} className="flex justify-between text-xs">
+                          <span className="text-gray-600">{year.label} ({allocation.fte} FTE):</span>
+                          <div className="text-right">
+                            <span className="text-gray-500">{formatCurrency(theirCost)}</span>
+                            <span className="text-gray-400 mx-1">→</span>
+                            <span className="font-medium text-gray-900">{formatCurrency(billedCost)}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter>
@@ -2474,30 +2520,26 @@ if (editingSub) {
           </DialogContent>
         </Dialog>
 
-        {/* Assign Role to Subcontractor Dialog */}
+        {/* Assign Role to Sub Dialog */}
         <Dialog open={assignSubDialogOpen} onOpenChange={setAssignSubDialogOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Assign Role to Subcontractor</DialogTitle>
-              <DialogDescription>
-                Select a teaming partner to fill this role
-              </DialogDescription>
+              <DialogDescription>Select a teaming partner to fill this role</DialogDescription>
             </DialogHeader>
 
             {assigningRole && (
               <div className="space-y-4 py-4">
-                {/* Role Summary */}
                 <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-medium text-sm text-gray-900">{assigningRole.name}</span>
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{assigningRole.icLevel}</Badge>
                   </div>
                   <p className="text-xs text-gray-600">
-                    {assigningRole.quantity} position{assigningRole.quantity !== 1 ? 's' : ''} · {assigningRole.storyPoints} story points
+                    {assigningRole.quantity} position{assigningRole.quantity !== 1 ? 's' : ''}
                   </p>
                 </div>
 
-                {/* Partner Selection */}
                 <div className="space-y-2">
                   <Label>Teaming Partner <span className="text-red-500">*</span></Label>
                   <Select 
@@ -2535,7 +2577,6 @@ if (editingSub) {
                   </Select>
                 </div>
 
-                {/* New Partner Name (if adding new) */}
                 {assignSubFormData.partnerId === 'new' && (
                   <div className="space-y-2">
                     <Label htmlFor="new-partner-name">Company Name <span className="text-red-500">*</span></Label>
@@ -2545,11 +2586,10 @@ if (editingSub) {
                       value={assignSubFormData.newPartnerName}
                       onChange={(e) => setAssignSubFormData(prev => ({ ...prev, newPartnerName: e.target.value }))}
                     />
-                    <p className="text-xs text-gray-500">This will create a new teaming partner you can complete later</p>
+                    <p className="text-xs text-gray-500">This will create a new teaming partner</p>
                   </div>
                 )}
 
-                {/* Quantity and FTE */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="assign-qty">Quantity</Label>
@@ -2575,7 +2615,6 @@ if (editingSub) {
                   </div>
                 </div>
 
-                {/* Rate and Markup */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="assign-rate">Their Rate/hr <span className="text-red-500">*</span></Label>
@@ -2601,7 +2640,6 @@ if (editingSub) {
                   </div>
                 </div>
 
-                {/* Years */}
                 <div className="space-y-2">
                   <Label>Applicable Years</Label>
                   <div className="flex flex-wrap gap-2">
@@ -2623,7 +2661,6 @@ if (editingSub) {
                   </div>
                 </div>
 
-                {/* Cost Preview */}
                 {assignSubFormData.theirRate > 0 && assignSubFormData.years.length > 0 && (
                   <div className="p-3 bg-gray-50 rounded-lg space-y-1">
                     <div className="flex justify-between text-sm">
@@ -2637,7 +2674,7 @@ if (editingSub) {
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Annual Cost:</span>
                       <span className="font-semibold text-gray-900">
-                        {formatCurrency(assignSubFormData.theirRate * (1 + assignSubFormData.markupPercent / 100) * assignSubFormData.quantity * assignSubFormData.ftePerPerson *  billableHours)}
+                        {formatCurrency(assignSubFormData.theirRate * (1 + assignSubFormData.markupPercent / 100) * assignSubFormData.quantity * assignSubFormData.ftePerPerson * billableHours)}
                       </span>
                     </div>
                   </div>
@@ -2663,18 +2700,15 @@ if (editingSub) {
           </DialogContent>
         </Dialog>
 
-        {/* Manual Add Role Dialog (with destination choice) */}
+        {/* Manual Add Role Dialog */}
         <Dialog open={addRoleDialogOpen} onOpenChange={setAddRoleDialogOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Add Role</DialogTitle>
-              <DialogDescription>
-                Add a role that wasn't identified by AI analysis
-              </DialogDescription>
+              <DialogDescription>Add a role that wasn't identified by AI analysis</DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
-              {/* Role Details */}
               <div className="space-y-2">
                 <Label htmlFor="add-role-title">Role Title <span className="text-red-500">*</span></Label>
                 <Input
@@ -2715,19 +2749,8 @@ if (editingSub) {
                     onChange={(e) => setAddRoleFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="add-role-sp">Story Points</Label>
-                  <Input
-                    id="add-role-sp"
-                    type="number"
-                    min={0}
-                    value={addRoleFormData.storyPoints}
-                    onChange={(e) => setAddRoleFormData(prev => ({ ...prev, storyPoints: Number(e.target.value) }))}
-                  />
-                </div>
               </div>
 
-              {/* Destination Choice */}
               <div className="space-y-2">
                 <Label>Assign to</Label>
                 <div className="grid grid-cols-2 gap-3">
@@ -2772,7 +2795,6 @@ if (editingSub) {
                 </div>
               </div>
 
-              {/* Prime-specific fields */}
               {addRoleDestination === 'prime' && (
                 <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="grid grid-cols-2 gap-4">
@@ -2802,10 +2824,8 @@ if (editingSub) {
                 </div>
               )}
 
-              {/* Sub-specific fields */}
               {addRoleDestination === 'sub' && (
                 <div className="space-y-4 p-4 bg-orange-50 rounded-lg border border-orange-100">
-                  {/* Partner Selection */}
                   <div className="space-y-2">
                     <Label>Teaming Partner <span className="text-red-500">*</span></Label>
                     <Select 
@@ -2889,7 +2909,6 @@ if (editingSub) {
                 </div>
               )}
 
-              {/* Years */}
               <div className="space-y-2">
                 <Label>Applicable Years</Label>
                 <div className="flex flex-wrap gap-2">
@@ -3013,7 +3032,7 @@ if (editingSub) {
                         <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Annual Cost (Base Year)</h4>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">Billable Hours:</span>
-                        <span className="font-medium text-gray-900">{billableHours.toLocaleString()}</span>
+                          <span className="font-medium text-gray-900">{billableHours.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">× Quantity:</span>
@@ -3046,6 +3065,170 @@ if (editingSub) {
                             <><span className="font-medium">Tip:</span> Use this rate to estimate labor costs and ensure profitability.</>
                           )}
                         </p>
+                      </div>
+                      
+                      {/* ================================================================ */}
+                      {/* RATE JUSTIFICATION SECTION (Read-Only Summary)                  */}
+                      {/* ================================================================ */}
+                      <div className="space-y-3 pt-4 border-t border-gray-100">
+                        {(() => {
+                          const roleId = selectedRoleForBreakdown.id
+                          const justification = rateJustifications[roleId]
+                          const hasJustification = justification?.savedAt && justification.savedAt !== ''
+                          
+                          // Calculate BLS percentile for this role
+                          const blsData = findBLSData(selectedRoleForBreakdown.title)
+                          const salary = selectedRoleForBreakdown.baseSalary
+                          const percentile = blsData && salary > 0 ? calculateBLSPercentile(salary, blsData) : null
+                          
+                          // Determine status based on percentile
+                          const getPercentileColor = (p: number) => {
+                            if (p >= 75) return 'text-red-600 bg-red-50'
+                            if (p >= 50) return 'text-blue-600 bg-blue-50'
+                            if (p >= 25) return 'text-green-600 bg-green-50'
+                            return 'text-amber-600 bg-amber-50'
+                          }
+                          
+                          const getPercentileLabel = (p: number) => {
+                            if (p >= 75) return 'Premium Rate'
+                            if (p >= 50) return 'Competitive'
+                            if (p >= 25) return 'Market Rate'
+                            return 'Below Market'
+                          }
+                          
+                          return (
+                            <>
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Rate Justification</h4>
+                                {hasJustification ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    Documented
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600">
+                                    Not started
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {/* BLS Market Position */}
+                              {blsData && percentile !== null ? (
+                                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <TrendingUp className="w-4 h-4 text-gray-400" />
+                                      <span className="text-xs font-medium text-gray-700">BLS Market Position</span>
+                                    </div>
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${getPercentileColor(percentile)}`}>
+                                      {percentile.toFixed(0)}th percentile
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs text-gray-600">
+                                    <span>{getPercentileLabel(percentile)}</span>
+                                    <span>vs ${(blsData.median / 1000).toFixed(0)}k median</span>
+                                  </div>
+                                  {/* Mini percentile bar */}
+                                  <div className="mt-2 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                    <div 
+                                      className={`h-full rounded-full ${
+                                        percentile >= 75 ? 'bg-red-500' :
+                                        percentile >= 50 ? 'bg-blue-500' :
+                                        percentile >= 25 ? 'bg-green-500' :
+                                        'bg-amber-500'
+                                      }`}
+                                      style={{ width: `${Math.min(percentile, 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                  <p className="text-xs text-gray-500">
+                                    No BLS data available for this role title.
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {/* Summary of existing justification */}
+                              {hasJustification && justification && (
+                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                  <p className="text-xs font-medium text-blue-800 mb-1">Justification Summary</p>
+                                  {justification.selectedReasons && Object.keys(justification.selectedReasons).filter(k => justification.selectedReasons?.[k]).length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mb-2">
+                                      {justification.selectedReasons.clearance && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                                          <Shield className="w-2.5 h-2.5" />
+                                          {justification.selectedReasons.clearance}
+                                        </span>
+                                      )}
+                                      {justification.selectedReasons.location && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                                          <MapPin className="w-2.5 h-2.5" />
+                                          {justification.selectedReasons.location}
+                                        </span>
+                                      )}
+                                      {justification.selectedReasons.experience && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                                          <Award className="w-2.5 h-2.5" />
+                                          {justification.selectedReasons.experience}
+                                        </span>
+                                      )}
+                                      {justification.selectedReasons.keyPersonnel && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                                          Key Personnel
+                                        </span>
+                                      )}
+                                      {justification.selectedReasons.nicheSkills && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                                          Niche Skills
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {justification.notes && (
+                                    <p className="text-[10px] text-blue-700 line-clamp-2">{justification.notes}</p>
+                                  )}
+                                  <p className="text-[10px] text-blue-600 mt-1">
+                                    Last updated {new Date(justification.savedAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {/* Link to Rate Justification tab */}
+                              <button
+                                onClick={() => {
+                                  // Close slideout and navigate to Rate Justification tab
+                                  setSelectedRoleForBreakdown(null)
+                                  navigateToRateJustification(roleId)
+                                }}
+                                className="w-full flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <FileText className="w-4 h-4 text-gray-400 group-hover:text-blue-600" />
+                                  <span className="text-xs font-medium text-gray-700 group-hover:text-blue-700">
+                                    {hasJustification ? 'Edit in Rate Justification' : 'Add Rate Justification'}
+                                  </span>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600" />
+                              </button>
+                              
+                              {/* Warning for high percentile without justification */}
+                              {percentile !== null && percentile >= 75 && !hasJustification && (
+                                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                                  <div className="flex items-start gap-2">
+                                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                      <p className="text-xs font-medium text-amber-800">Premium rate needs justification</p>
+                                      <p className="text-[10px] text-amber-700 mt-0.5">
+                                        This rate is above the 75th percentile. Document justification for DCAA audit defense.
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )
+                        })()}
                       </div>
                     </>
                   )

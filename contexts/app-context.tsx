@@ -206,6 +206,24 @@ export const calculateWBSQuality = (element: WBSElement): QualityResult => {
   return { grade, score: Math.max(0, score), issues };
 };
 
+// ==================== PRICING SETTINGS TYPE ====================
+
+export interface PricingSettings {
+  billableHours: number;        // Default: 1920
+  profitMargin: number;         // Default: 8 (percent)
+  escalationEnabled: boolean;   // Default: true
+  laborEscalation: number;      // Default: 3 (percent/yr)
+  odcEscalation: number;        // Default: 2 (percent/yr)
+}
+
+export const defaultPricingSettings: PricingSettings = {
+  billableHours: 1920,
+  profitMargin: 8,
+  escalationEnabled: true,
+  laborEscalation: 3,
+  odcEscalation: 2
+};
+
 // ==================== SOLICITATION TYPES ====================
 // These types define the RFP/solicitation data that flows across all tabs
 
@@ -273,6 +291,9 @@ export interface SolicitationInfo {
   bidDecisionDate?: string
   bidDecisionRationale?: string
   
+  // Pricing Settings (centralized for all tabs)
+  pricingSettings?: PricingSettings
+  
   // Metadata
   createdAt: string
   updatedAt: string
@@ -311,6 +332,7 @@ export const emptySolicitation: SolicitationInfo = {
     locations: [],
     travelRequired: false
   },
+  pricingSettings: defaultPricingSettings,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString()
 }
@@ -348,11 +370,55 @@ export const setAsideLabels: Record<string, string> = {
 
 // ==================== RATE JUSTIFICATION TYPES ====================
 
+// ==================== RATE JUSTIFICATION TYPES ====================
+
+export type JustificationStrength = 'strong' | 'adequate' | 'weak' | 'missing'
+
+export interface RateComparison {
+  id: string
+  source: string // e.g., "BLS OES (May 2024)", "GSA IT Schedule 70"
+  sourceUrl?: string
+  comparisonType: 'salary' | 'hourly'
+  medianValue: number // Median salary or hourly rate from source
+  ourValue: number // Our base salary or bill rate
+  percentile?: number // Where our rate falls (e.g., 68th percentile)
+  delta: number // Percentage difference from median
+  status: 'below' | 'at' | 'above' | 'justified-above'
+  notes?: string
+}
+
+export interface PremiumFactor {
+  id: string
+  type: 'location' | 'clearance' | 'certification' | 'experience' | 'specialized' | 'scarcity' | 'other'
+  label: string
+  percentage: number
+  justification?: string // Tie to SOO requirement or rationale
+  sourceReference?: string // e.g., "SOO 3.2.1", "BLS locality data"
+}
+
 export interface RoleJustification {
   roleId: string
   roleTitle: string
-  percentile: number
-  selectedReasons: {
+  
+  // Market comparisons (BLS, GSA, etc.)
+  comparisons: RateComparison[]
+  
+  // Premium factors that justify above-median rates
+  premiumFactors: PremiumFactor[]
+  
+  // Calculated strength based on comparisons and documentation
+  strength: JustificationStrength
+  
+  // Free-form notes for additional rationale
+  notes: string
+  
+  // Timestamps
+  savedAt: string
+  lastUpdated?: string
+  
+  // Legacy fields for backward compatibility
+  percentile?: number
+  selectedReasons?: {
     // High rate justifications (≥75th percentile)
     clearance?: string
     location?: string
@@ -369,8 +435,30 @@ export interface RoleJustification {
     volumeDiscount?: boolean
     provenDelivery?: boolean
   }
-  notes: string
-  savedAt: string
+}
+
+// Helper function to calculate justification strength
+export function calculateJustificationStrength(justification: Partial<RoleJustification>): JustificationStrength {
+  const hasComparisons = (justification.comparisons?.length || 0) > 0
+  const hasPremiumFactors = (justification.premiumFactors?.length || 0) > 0
+  const hasNotes = (justification.notes?.trim().length || 0) > 0
+  
+  // Check if any comparison shows unjustified above-market
+  const hasUnjustifiedAbove = justification.comparisons?.some(c => c.status === 'above')
+  
+  if (!hasComparisons) {
+    return 'missing'
+  }
+  
+  if (hasUnjustifiedAbove && !hasPremiumFactors) {
+    return 'weak'
+  }
+  
+  if (hasComparisons && (hasPremiumFactors || hasNotes)) {
+    return 'strong'
+  }
+  
+  return 'adequate'
 }
 
 // ==================== SCOPING TYPES (Legacy - kept for backward compatibility) ====================
@@ -792,12 +880,38 @@ export interface GSAContractInfo {
 
 // ==================== CONTEXT INTERFACE ====================
 
+// Main application tab type for navigation (matches tabs-navigation.tsx TabType)
+export type MainTabId = 
+  | 'upload' 
+  | 'roles'  // Roles & Pricing
+  | 'estimate' 
+  | 'rate-justification' 
+  | 'teaming-partners' 
+  | 'export' 
+  | 'gsa-bid' 
+  | 'sub-rates';
+
 interface AppContextType {
+  // Main Tab Navigation
+  activeMainTab: MainTabId;
+  setActiveMainTab: (tab: MainTabId) => void;
+  navigateToRateJustification: (roleId?: string) => void;
+  selectedRoleIdForJustification: string | null;
+  clearSelectedRoleForJustification: () => void;
+  
   // Solicitation (RFP Details)
   solicitation: SolicitationInfo;
   setSolicitation: (sol: SolicitationInfo) => void;
   updateSolicitation: (updates: Partial<SolicitationInfo>) => void;
   resetSolicitation: () => void;
+  
+  // Solicitation Editor Slideout Control (for cross-component access)
+  isSolicitationEditorOpen: boolean;
+  openSolicitationEditor: () => void;
+  closeSolicitationEditor: () => void;
+  
+  // Helper to get pricing settings with defaults
+  getPricingSettings: () => PricingSettings;
   
   // Company Profile (SaaS)
   companyProfile: CompanyProfile;
@@ -998,6 +1112,21 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   
+  // ==================== MAIN TAB NAVIGATION ====================
+  const [activeMainTab, setActiveMainTab] = useState<MainTabId>('upload');
+  const [selectedRoleIdForJustification, setSelectedRoleIdForJustification] = useState<string | null>(null);
+  
+  const navigateToRateJustification = (roleId?: string) => {
+    if (roleId) {
+      setSelectedRoleIdForJustification(roleId);
+    }
+    setActiveMainTab('rate-justification');
+  };
+  
+  const clearSelectedRoleForJustification = () => {
+    setSelectedRoleIdForJustification(null);
+  };
+  
   // ==================== SOLICITATION STATE ====================
   const [solicitation, setSolicitation] = useState<SolicitationInfo>(emptySolicitation);
 
@@ -1015,6 +1144,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+  };
+
+  // ==================== SOLICITATION EDITOR SLIDEOUT CONTROL ====================
+  const [isSolicitationEditorOpen, setIsSolicitationEditorOpen] = useState(false);
+  
+  const openSolicitationEditor = () => setIsSolicitationEditorOpen(true);
+  const closeSolicitationEditor = () => setIsSolicitationEditorOpen(false);
+  
+  // Helper to get pricing settings with defaults
+  const getPricingSettings = (): PricingSettings => {
+    return solicitation.pricingSettings ?? defaultPricingSettings;
   };
 
   // ==================== COMPANY PROFILE (SaaS) ====================
@@ -1670,11 +1810,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ==================== CONTEXT VALUE ====================
 
   const value: AppContextType = {
+    // Main Tab Navigation
+    activeMainTab,
+    setActiveMainTab,
+    navigateToRateJustification,
+    selectedRoleIdForJustification,
+    clearSelectedRoleForJustification,
+    
     // Solicitation
     solicitation,
     setSolicitation,
     updateSolicitation,
     resetSolicitation,
+    
+    // Solicitation Editor Slideout Control
+    isSolicitationEditorOpen,
+    openSolicitationEditor,
+    closeSolicitationEditor,
+    getPricingSettings,
     
     // Company Profile
     companyProfile,
