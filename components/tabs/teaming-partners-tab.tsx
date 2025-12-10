@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAppContext, TeamingPartner, TeamingPartnerCertifications } from '@/contexts/app-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -38,10 +38,12 @@ import {
   Award,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Shield,
   Handshake,
   Clock,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
 
 // ==================== TYPES ====================
@@ -52,7 +54,7 @@ interface TeamingPartnersTabProps {
 
 type FilterType = 'all' | 'active' | 'expiring' | 'needs-attention'
 
-// ==================== CAPABILITY OPTIONS (NAICS 541511/541512/541519) ====================
+// ==================== CAPABILITY OPTIONS ====================
 
 const capabilityOptions = [
   { id: 'ux-ui', label: 'UX/UI Design', category: 'Design' },
@@ -98,27 +100,21 @@ const getExpirationStatus = (dateString: string): 'expired' | 'warning' | 'ok' =
   return 'ok'
 }
 
-// Helper to get FTE from subcontractor (handles both old and new allocation structure)
 const getSubcontractorFte = (sub: any, period: 'base' | 'option1' | 'option2'): number => {
-  // New allocation structure
   if (sub.allocations && sub.allocations[period]) {
     return sub.allocations[period].enabled ? sub.allocations[period].fte : 0
   }
-  // Legacy structure - years is an object { base: boolean, option1: boolean, ... }
   if (sub.years && typeof sub.years === 'object') {
     if (!sub.years[period]) return 0
   }
-  // Fall back to single fte value
   return sub.fte || 0
 }
 
-// Helper to calculate total contract cost for a subcontractor across all periods
 const calculateSubContractorTotalCost = (
   sub: any, 
   billableHours: number,
   laborEscalation: number
 ): { totalCost: number; periodCosts: { base: number; opt1: number; opt2: number } } => {
-  // Use the stored billedRate (theirRate + markup already calculated)
   const billedRate = sub.billedRate || (sub.theirRate * (1 + (sub.markupPercent || 0) / 100))
   
   const baseFte = getSubcontractorFte(sub, 'base')
@@ -135,40 +131,13 @@ const calculateSubContractorTotalCost = (
   }
 }
 
-// Helper to get average FTE across enabled periods
-const getAverageFte = (sub: any): number => {
-  const baseFte = getSubcontractorFte(sub, 'base')
-  const opt1Fte = getSubcontractorFte(sub, 'option1')
-  const opt2Fte = getSubcontractorFte(sub, 'option2')
-  
-  // Count enabled periods
-  let enabledCount = 0
-  let totalFte = 0
-  
-  if (sub.allocations) {
-    if (sub.allocations.base?.enabled) { enabledCount++; totalFte += baseFte }
-    if (sub.allocations.option1?.enabled) { enabledCount++; totalFte += opt1Fte }
-    if (sub.allocations.option2?.enabled) { enabledCount++; totalFte += opt2Fte }
-  } else if (sub.years) {
-    // Legacy structure
-    if (sub.years.includes(0)) { enabledCount++; totalFte += baseFte }
-    if (sub.years.includes(1)) { enabledCount++; totalFte += opt1Fte }
-    if (sub.years.includes(2)) { enabledCount++; totalFte += opt2Fte }
-  } else {
-    // Single year assumed
-    return sub.fte || 0
-  }
-  
-  return enabledCount > 0 ? totalFte / enabledCount : 0
-}
-
 // Plain language agreement status labels
 const agreementStatusLabels: Record<string, string> = {
   'none': 'No Agreement',
-  'draft': 'Draft in Progress',
+  'draft': 'Draft',
   'under-review': 'Under Review',
   'signed': 'Signed',
-  'executed': 'Fully Executed',
+  'executed': 'Active',
 }
 
 const agreementStatusColors: Record<string, string> = {
@@ -179,19 +148,25 @@ const agreementStatusColors: Record<string, string> = {
   'executed': 'bg-green-50 text-green-700 border-green-200',
 }
 
-// Business size colors
+// Business size - plain language
+const businessSizeLabels: Record<string, string> = {
+  'small': 'Small Business',
+  'other-than-small': 'Large Business',
+  '': 'Not Specified',
+}
+
 const businessSizeColors: Record<string, string> = {
   'small': 'bg-purple-50 text-purple-700 border-purple-200',
   'other-than-small': 'bg-gray-100 text-gray-600 border-gray-200',
   '': 'bg-gray-50 text-gray-500 border-gray-200',
 }
 
-// Filter definitions with icons and colors (using orange to match subcontractors)
-const filterOptions: { id: FilterType; label: string; icon: typeof Building2; color: string }[] = [
-  { id: 'all', label: 'All Partners', icon: Building2, color: 'text-gray-600' },
-  { id: 'active', label: 'Active Agreements', icon: CheckCircle2, color: 'text-green-600' },
-  { id: 'expiring', label: 'Expiring Soon', icon: Clock, color: 'text-orange-600' },
-  { id: 'needs-attention', label: 'Needs Attention', icon: AlertCircle, color: 'text-red-600' },
+// Filter definitions
+const filterOptions: { id: FilterType; label: string; icon: typeof Building2 }[] = [
+  { id: 'all', label: 'All Partners', icon: Building2 },
+  { id: 'active', label: 'Active Agreements', icon: CheckCircle2 },
+  { id: 'expiring', label: 'Expiring Soon', icon: Clock },
+  { id: 'needs-attention', label: 'Needs Attention', icon: AlertCircle },
 ]
 
 // Empty partner template
@@ -219,8 +194,7 @@ const emptyPartner: Omit<TeamingPartner, 'id' | 'createdAt' | 'updatedAt'> = {
   notes: '',
 }
 
-// ==================== FAR TOOLTIPS ====================
-
+// FAR Tooltips
 const farTooltips = {
   uei: {
     clause: 'FAR 52.204-7',
@@ -247,12 +221,16 @@ const farTooltips = {
     title: 'Joint Venture Agreements',
     description: 'Joint ventures allow small businesses to team for larger contracts while maintaining small business status under specific conditions.',
   },
+  cageCode: {
+    clause: 'DFARS 204.7202',
+    title: 'Commercial and Government Entity Code',
+    description: 'A 5-character identifier assigned by the DLA to entities doing business with the federal government.',
+  },
 }
 
 // ==================== COMPONENT ====================
 
 export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
-  // Use AppContext for persistent state
   const { 
     teamingPartners: partners,
     addTeamingPartner,
@@ -263,46 +241,90 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
     uiLaborEscalation,
   } = useAppContext()
 
-  // Default values if context values are undefined
   const billableHours = uiBillableHours ?? 1920
   const laborEscalation = uiLaborEscalation ?? 2
 
   // UI State
   const [searchQuery, setSearchQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
+  const [isLoading, setIsLoading] = useState(false)
   
   // Panel State
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState(emptyPartner)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
-  
-  // Local JV state (until we update the context type)
   const [formJV, setFormJV] = useState(false)
-  
-  // Selected capabilities for form
   const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([])
+  
+  // Delete confirmation state (replaces window.confirm)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   
   // Accordion state for form sections
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     company: true,
     certifications: true,
     capabilities: false,
-    agreements: false,
+    agreements: true,
     rates: false,
     contact: false,
   })
 
+  // Refs for focus management
+  const slideoutRef = useRef<HTMLDivElement>(null)
+  const slideoutCloseRef = useRef<HTMLButtonElement>(null)
+  const lastFocusedElement = useRef<HTMLElement | null>(null)
+
+  // ==================== FOCUS TRAP FOR SLIDEOUT ====================
+  
+  useEffect(() => {
+    if (isPanelOpen && slideoutRef.current) {
+      lastFocusedElement.current = document.activeElement as HTMLElement
+      setTimeout(() => {
+        slideoutCloseRef.current?.focus()
+      }, 100)
+    } else if (!isPanelOpen && lastFocusedElement.current) {
+      lastFocusedElement.current.focus()
+    }
+  }, [isPanelOpen])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isPanelOpen) return
+      
+      if (e.key === 'Escape') {
+        closePanel()
+      }
+      
+      if (e.key === 'Tab' && slideoutRef.current) {
+        const focusableElements = slideoutRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        const firstElement = focusableElements[0] as HTMLElement
+        const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement
+        
+        if (e.shiftKey && document.activeElement === firstElement) {
+          e.preventDefault()
+          lastElement?.focus()
+        } else if (!e.shiftKey && document.activeElement === lastElement) {
+          e.preventDefault()
+          firstElement?.focus()
+        }
+      }
+    }
+    
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isPanelOpen])
+
   // ==================== CALCULATIONS ====================
 
-  // Enrich partners with role data from subcontractors
   const partnersWithRoles = partners.map(partner => {
     const partnerSubs = subcontractors.filter(s => 
       s.partnerId === partner.id || 
       s.companyName.toLowerCase() === partner.companyName.toLowerCase()
     )
     
-    // Calculate total contract cost using new allocation structure
     let totalContractCost = 0
     let totalBaseFte = 0
     
@@ -312,7 +334,6 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
       totalBaseFte += getSubcontractorFte(sub, 'base')
     })
     
-    // Determine if partner needs attention
     const hasNoAgreement = partner.teamingAgreementStatus === 'none'
     const hasExpiredAgreement = partner.teamingAgreementExpiration && getExpirationStatus(partner.teamingAgreementExpiration) === 'expired'
     const needsAttention = hasNoAgreement || hasExpiredAgreement
@@ -327,7 +348,6 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
     }
   })
 
-  // Count partners by filter type
   const filterCounts = {
     all: partners.length,
     active: partners.filter(p => p.teamingAgreementStatus === 'signed' || p.teamingAgreementStatus === 'executed').length,
@@ -335,17 +355,15 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
     'needs-attention': partnersWithRoles.filter(p => p.needsAttention).length,
   }
 
-  // Certification counts for sidebar
+  // Certification counts for stats
   const certificationCounts = {
-    sb: partners.filter(p => p.certifications.sb).length,
+    sb: partners.filter(p => p.certifications.sb || p.businessSize === 'small').length,
     wosb: partners.filter(p => p.certifications.wosb).length,
     sdvosb: partners.filter(p => p.certifications.sdvosb).length,
     hubzone: partners.filter(p => p.certifications.hubzone).length,
     eightA: partners.filter(p => p.certifications.eightA).length,
-    jv: partners.filter(p => (p as any).isJointVenture).length,
   }
 
-  // Total subcontractor FTE and cost
   const totalSubFte = partnersWithRoles.reduce((sum, p) => sum + p.totalBaseFte, 0)
   const totalSubContractCost = partnersWithRoles.reduce((sum, p) => sum + p.totalContractCost, 0)
 
@@ -396,7 +414,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
     setFormJV(false)
     setSelectedCapabilities([])
     setFormErrors({})
-    setExpandedSections({ company: true, certifications: true, capabilities: false, agreements: false, rates: false, contact: false })
+    setExpandedSections({ company: true, certifications: true, capabilities: false, agreements: true, rates: false, contact: false })
     setIsPanelOpen(true)
   }
 
@@ -444,11 +462,9 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
-    
     if (!formData.companyName.trim()) {
       errors.companyName = 'Company name is required'
     }
-
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -478,209 +494,223 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
     closePanel()
   }
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to remove this partner? This will also unlink any subcontractor roles.')) {
-      removeTeamingPartner(id)
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDeleteConfirmId(id)
+  }
+
+  const handleDeleteConfirm = () => {
+    if (deleteConfirmId) {
+      removeTeamingPartner(deleteConfirmId)
+      setDeleteConfirmId(null)
     }
+  }
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmId(null)
+  }
+
+  const refreshData = async () => {
+    setIsLoading(true)
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    setIsLoading(false)
+  }
+
+  // Build aria-label for partner cards
+  const getPartnerAriaLabel = (partner: typeof partnersWithRoles[0]) => {
+    const parts = [partner.companyName]
+    
+    if (partner.businessSize) {
+      parts.push(businessSizeLabels[partner.businessSize])
+    }
+    
+    const status = agreementStatusLabels[partner.teamingAgreementStatus]
+    parts.push(`Agreement: ${status}`)
+    
+    if (partner.roleCount > 0) {
+      parts.push(`${partner.roleCount} role${partner.roleCount !== 1 ? 's' : ''} assigned`)
+    } else {
+      parts.push('No roles assigned')
+    }
+    
+    if (partner.needsAttention) {
+      parts.push('Needs attention')
+    }
+    
+    parts.push('Click to edit')
+    
+    return parts.join('. ')
   }
 
   // ==================== RENDER ====================
 
   return (
     <TooltipProvider>
-      <div className="flex gap-6">
-        {/* ==================== LEFT SIDEBAR ==================== */}
-        <div className="w-56 flex-shrink-0">
-          <div className="sticky top-6">
-            {/* Header */}
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">Teaming Partners</h2>
-              <p className="text-xs text-gray-600">
-                Manage partner compliance and agreements
-              </p>
+      <div className="space-y-6">
+        {/* ==================== HEADER ==================== */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold text-gray-900">Teaming Partners</h1>
+            <Badge variant="outline" className="text-xs">
+              {partners.length} Partner{partners.length !== 1 ? 's' : ''}
+            </Badge>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" aria-label="Learn about FAR limitations on subcontracting">
+                  <Shield className="w-4 h-4 text-gray-400 hover:text-blue-600" aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="text-xs font-medium mb-1">{farTooltips.limitations.clause}: {farTooltips.limitations.title}</p>
+                <p className="text-xs">{farTooltips.limitations.description}</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          
+          {/* Stats Summary */}
+          <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 rounded-lg text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">Active</span>
+              <span className="font-semibold text-green-600">{filterCounts.active}</span>
             </div>
-
-            {/* Quick Filters - Navigation Style */}
-            <nav className="space-y-1 mb-6" aria-label="Partner filters">
-              {filterOptions.map((filter) => {
-                const Icon = filter.icon
-                const count = filterCounts[filter.id]
-                const isActive = activeFilter === filter.id
-                
-                return (
-                  <button
-                    key={filter.id}
-                    onClick={() => setActiveFilter(filter.id)}
-                    className={`
-                      w-full flex items-center justify-between px-3 py-2 rounded-lg 
-                      text-sm font-medium transition-colors
-                      ${isActive 
-                        ? 'bg-gray-100 text-gray-900' 
-                        : 'text-gray-700 hover:bg-gray-50'
-                      }
-                    `}
-                    aria-current={isActive ? 'page' : undefined}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Icon className={`w-4 h-4 ${isActive ? filter.color : 'text-gray-400'}`} />
-                      <span>{filter.label}</span>
-                    </div>
-                    {count > 0 && (
-                      <Badge 
-                        variant="secondary" 
-                        className={`text-[10px] px-1.5 py-0 h-5 ${
-                          filter.id === 'needs-attention' && count > 0 
-                            ? 'bg-red-100 text-red-700' 
-                            : ''
-                        }`}
-                      >
-                        {count}
-                      </Badge>
-                    )}
-                  </button>
-                )
-              })}
-            </nav>
-
-            {/* Summary Stats */}
-            <div className="space-y-3 mb-6 p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Total Partners</span>
-                <span className="text-sm font-semibold text-gray-900">{partners.length}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Active Roles</span>
-                <span className="text-sm font-semibold text-gray-900">{subcontractors.length}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Base Year FTE</span>
-                <span className="text-sm font-semibold text-gray-900">{totalSubFte.toFixed(2)}</span>
-              </div>
-              {totalSubContractCost > 0 && (
-                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-                  <span className="text-xs text-gray-600">Total Contract</span>
-                  <span className="text-sm font-semibold text-green-700">{formatCurrency(totalSubContractCost)}</span>
-                </div>
-              )}
+            <span className="text-gray-300">·</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">Roles</span>
+              <span className="font-semibold text-gray-900">{subcontractors.length}</span>
             </div>
-
-            {/* Small Business Certifications */}
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <Award className="w-4 h-4 text-purple-600" />
-                <span className="text-sm font-medium text-gray-900">SB Certifications</span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label="Learn about small business certification tracking">
-                      <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-xs font-medium mb-1">FAR 19.704 - Subcontracting Plan</p>
-                    <p className="text-xs">Track teaming partners' small business certifications to meet subcontracting plan goals.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between items-center py-1 px-2 rounded hover:bg-gray-50">
-                  <span className="text-gray-600">Small Business</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-                    {certificationCounts.sb}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center py-1 px-2 rounded hover:bg-gray-50">
-                  <span className="text-gray-600">WOSB</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-                    {certificationCounts.wosb}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center py-1 px-2 rounded hover:bg-gray-50">
-                  <span className="text-gray-600">SDVOSB</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-                    {certificationCounts.sdvosb}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center py-1 px-2 rounded hover:bg-gray-50">
-                  <span className="text-gray-600">HUBZone</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-                    {certificationCounts.hubzone}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center py-1 px-2 rounded hover:bg-gray-50">
-                  <span className="text-gray-600">8(a)</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-                    {certificationCounts.eightA}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center py-1 px-2 rounded hover:bg-gray-50 border-t border-gray-100 mt-1 pt-2">
-                  <div className="flex items-center gap-1.5">
-                    <Handshake className="w-3 h-3 text-gray-500" />
-                    <span className="text-gray-600">Joint Venture</span>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-                    {certificationCounts.jv}
-                  </Badge>
-                </div>
-              </div>
+            <span className="text-gray-300">·</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">Base FTE</span>
+              <span className="font-semibold text-gray-900">{totalSubFte.toFixed(1)}</span>
             </div>
+            {totalSubContractCost > 0 && (
+              <>
+                <span className="text-gray-300">·</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-500">Total Value</span>
+                  <span className="font-semibold text-green-600">{formatCurrency(totalSubContractCost)}</span>
+                </div>
+              </>
+            )}
+            {filterCounts['needs-attention'] > 0 && (
+              <>
+                <span className="text-gray-300">·</span>
+                <div className="flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-500" aria-hidden="true" />
+                  <span className="font-semibold text-red-600">{filterCounts['needs-attention']} need attention</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* ==================== MAIN CONTENT ==================== */}
-        <div className="flex-1 min-w-0 space-y-4">
-          {/* Header with Actions */}
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-semibold text-gray-900">Partner Directory</h3>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label="FAR compliance information">
-                      <Shield className="w-4 h-4 text-gray-400 hover:text-blue-600 cursor-help" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-xs font-medium mb-1">{farTooltips.limitations.clause}: {farTooltips.limitations.title}</p>
-                    <p className="text-xs">{farTooltips.limitations.description}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <p className="text-sm text-gray-600">
-                {filteredPartners.length} partner{filteredPartners.length !== 1 ? 's' : ''}
-                {activeFilter !== 'all' && ` · Filtered: ${filterOptions.find(f => f.id === activeFilter)?.label}`}
-              </p>
-            </div>
-            <Button onClick={openAddPanel}>
-              <Plus className="w-4 h-4 mr-2" />
+        {/* ==================== FILTER TABS + ACTIONS ==================== */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Filter partners">
+            {filterOptions.map((filter) => {
+              const Icon = filter.icon
+              const count = filterCounts[filter.id]
+              const isActive = activeFilter === filter.id
+              
+              return (
+                <button
+                  key={filter.id}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls="partner-list"
+                  onClick={() => setActiveFilter(filter.id)}
+                  className={`
+                    flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                    ${isActive 
+                      ? 'bg-white text-gray-900 shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }
+                  `}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${
+                    isActive && filter.id === 'needs-attention' ? 'text-red-500' :
+                    isActive && filter.id === 'active' ? 'text-green-500' :
+                    isActive && filter.id === 'expiring' ? 'text-orange-500' :
+                    ''
+                  }`} aria-hidden="true" />
+                  {filter.label}
+                  {count > 0 && (
+                    <Badge 
+                      variant="secondary" 
+                      className={`text-[10px] px-1.5 py-0 h-4 ml-1 ${
+                        filter.id === 'needs-attention' && count > 0 
+                          ? 'bg-red-100 text-red-700' 
+                          : ''
+                      }`}
+                    >
+                      {count}
+                    </Badge>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={refreshData} disabled={isLoading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+              Refresh
+            </Button>
+            <Button size="sm" onClick={openAddPanel}>
+              <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
               Add Partner
             </Button>
           </div>
+        </div>
 
-          {/* Search Bar */}
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  placeholder="Search by company name, UEI, or legal name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9"
-                  aria-label="Search partners"
-                />
-              </div>
+        {/* ==================== SEARCH ==================== */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" aria-hidden="true" />
+          <Input
+            placeholder="Search by company name, UEI, or legal name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9"
+            aria-label="Search partners"
+          />
+        </div>
+
+        {/* ==================== CERTIFICATION SUMMARY (Collapsible) ==================== */}
+        {partners.length > 0 && (
+          <div className="flex items-center gap-3 text-xs text-gray-600 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <Award className="w-4 h-4 text-purple-600 flex-shrink-0" aria-hidden="true" />
+            <span className="font-medium text-purple-700">Small Business Certifications:</span>
+            <div className="flex items-center gap-3">
+              <span>SB: <strong>{certificationCounts.sb}</strong></span>
+              <span>WOSB: <strong>{certificationCounts.wosb}</strong></span>
+              <span>SDVOSB: <strong>{certificationCounts.sdvosb}</strong></span>
+              <span>HUBZone: <strong>{certificationCounts.hubzone}</strong></span>
+              <span>8(a): <strong>{certificationCounts.eightA}</strong></span>
             </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" aria-label="Learn about subcontracting plan requirements">
+                  <HelpCircle className="w-3.5 h-3.5 text-purple-400 hover:text-purple-600 ml-auto" aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="text-xs font-medium mb-1">{farTooltips.businessSize.clause}: {farTooltips.businessSize.title}</p>
+                <p className="text-xs">{farTooltips.businessSize.description}</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
+        )}
 
-          {/* Partner Cards Grid */}
+        {/* ==================== PARTNER CARDS ==================== */}
+        <div id="partner-list" role="tabpanel" aria-label="Partner list">
           {filteredPartners.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-gray-200 rounded-lg">
-              <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <div className="text-center py-16 border border-dashed border-gray-200 rounded-lg bg-white">
+              <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" aria-hidden="true" />
               <p className="text-sm text-gray-600 mb-2">
                 {searchQuery 
                   ? 'No partners match your search' 
                   : activeFilter !== 'all'
-                    ? `No partners in "${filterOptions.find(f => f.id === activeFilter)?.label}" category`
+                    ? `No partners match the "${filterOptions.find(f => f.id === activeFilter)?.label}" filter`
                     : 'No teaming partners added yet'
                 }
               </p>
@@ -692,13 +722,13 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
               </p>
               {!searchQuery && activeFilter === 'all' && (
                 <Button variant="outline" size="sm" onClick={openAddPanel}>
-                  <Plus className="w-4 h-4 mr-2" />
+                  <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
                   Add Your First Partner
                 </Button>
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4" role="list" aria-label="Teaming partners">
               {filteredPartners.map(partner => {
                 const taExpStatus = partner.teamingAgreementExpiration 
                   ? getExpirationStatus(partner.teamingAgreementExpiration)
@@ -707,37 +737,54 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                   ? getDaysUntilExpiration(partner.teamingAgreementExpiration)
                   : null
 
-                // Determine card accent color based on status (using orange to match subcontractors)
                 const getCardAccent = () => {
                   if (partner.needsAttention) return 'border-l-red-500'
                   if (taExpStatus === 'warning') return 'border-l-orange-500'
                   if (partner.teamingAgreementStatus === 'executed' || partner.teamingAgreementStatus === 'signed') return 'border-l-green-500'
-                  return 'border-l-gray-300'
+                  return 'border-l-orange-300'
                 }
+
+                const isDeleting = deleteConfirmId === partner.id
 
                 return (
                   <div
                     key={partner.id}
+                    role="listitem"
                     className={`
-                      group border border-gray-200 border-l-4 rounded-lg p-4 
+                      group relative border border-gray-200 border-l-4 rounded-lg p-4 
                       hover:border-gray-300 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] 
-                      transition-all cursor-pointer bg-white
+                      transition-all cursor-pointer bg-white min-h-[180px]
                       ${getCardAccent()}
                     `}
-                    onClick={() => openEditPanel(partner.id)}
-                    role="button"
+                    onClick={() => !isDeleting && openEditPanel(partner.id)}
+                    onKeyDown={(e) => e.key === 'Enter' && !isDeleting && openEditPanel(partner.id)}
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === 'Enter' && openEditPanel(partner.id)}
-                    aria-label={`Edit ${partner.companyName}`}
+                    aria-label={getPartnerAriaLabel(partner)}
                   >
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-3">
+                    {/* Delete Confirmation Overlay */}
+                    {isDeleting && (
+                      <div className="absolute inset-0 bg-white/95 rounded-lg flex items-center justify-center z-10" onClick={(e) => e.stopPropagation()}>
+                        <div className="text-center p-4">
+                          <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-2" aria-hidden="true" />
+                          <p className="text-sm font-medium text-gray-900 mb-1">Remove {partner.companyName}?</p>
+                          <p className="text-xs text-gray-500 mb-3">This will also unlink any assigned roles.</p>
+                          <div className="flex gap-2 justify-center">
+                            <Button variant="outline" size="sm" onClick={handleDeleteCancel}>
+                              Cancel
+                            </Button>
+                            <Button variant="destructive" size="sm" onClick={handleDeleteConfirm}>
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Card Header */}
+                    <div className="flex items-start justify-between mb-2">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                          <h4 className="font-medium text-sm text-gray-900">
-                            {partner.companyName}
-                          </h4>
-                          {/* Business Size Badge */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-medium text-sm text-gray-900 truncate">{partner.companyName}</h4>
                           {partner.businessSize && (
                             <Badge 
                               variant="outline" 
@@ -746,91 +793,80 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                               {partner.businessSize === 'small' ? 'SB' : 'Large'}
                             </Badge>
                           )}
-                          {/* Needs Attention Indicator */}
                           {partner.needsAttention && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="flex items-center">
-                                  <AlertCircle className="w-4 h-4 text-red-500" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs">This partner needs attention - missing agreement or expired</p>
-                              </TooltipContent>
-                            </Tooltip>
+                            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" aria-hidden="true" />
                           )}
                         </div>
                         {partner.uei && (
-                          <p className="text-xs text-gray-500">UEI: {partner.uei}</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">UEI: {partner.uei}</p>
                         )}
                       </div>
                       
-                      {/* Action Buttons */}
-                      <div className="flex gap-1 ml-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => { e.stopPropagation(); openEditPanel(partner.id); }}
-                              aria-label={`Edit ${partner.companyName}`}
-                              className="text-gray-400 hover:text-orange-600 hover:bg-orange-50 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs">Edit partner details</p></TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => { e.stopPropagation(); handleDelete(partner.id); }}
-                              aria-label={`Remove ${partner.companyName}`}
-                              className="text-gray-400 hover:text-red-600 hover:bg-red-50 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs">Remove this partner</p></TooltipContent>
-                        </Tooltip>
+                      {/* Actions */}
+                      <div className="flex gap-0.5 ml-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); openEditPanel(partner.id); }}
+                          aria-label={`Edit ${partner.companyName}`}
+                          className="text-gray-400 hover:text-orange-600 hover:bg-orange-50 h-7 w-7 p-0"
+                        >
+                          <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => handleDeleteClick(partner.id, e)}
+                          aria-label={`Remove ${partner.companyName}`}
+                          className="text-gray-400 hover:text-red-600 hover:bg-red-50 h-7 w-7 p-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                        </Button>
                       </div>
                     </div>
 
-                    {/* Certifications Row - SB only shows if businessSize isn't already 'small' */}
-                    {((partner.certifications.sb && partner.businessSize !== 'small') || 
-                      partner.certifications.wosb || partner.certifications.sdvosb || 
-                      partner.certifications.hubzone || partner.certifications.eightA || (partner as any).isJointVenture) && (
-                      <div className="flex flex-wrap gap-1.5 mb-3">
-                        {partner.certifications.sb && partner.businessSize !== 'small' && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">SB</Badge>
-                        )}
-                        {partner.certifications.wosb && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">WOSB</Badge>
-                        )}
-                        {partner.certifications.sdvosb && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">SDVOSB</Badge>
-                        )}
-                        {partner.certifications.hubzone && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">HUBZone</Badge>
-                        )}
-                        {partner.certifications.eightA && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">8(a)</Badge>
-                        )}
-                        {(partner as any).isJointVenture && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-blue-50 text-blue-700 border-blue-200">
-                            <Handshake className="w-3 h-3 mr-1" />
-                            JV
-                          </Badge>
-                        )}
+                    {/* Certifications + Agreement Row */}
+                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                      {partner.certifications.wosb && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">WOSB</Badge>
+                      )}
+                      {partner.certifications.sdvosb && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">SDVOSB</Badge>
+                      )}
+                      {partner.certifications.hubzone && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">HUBZone</Badge>
+                      )}
+                      {partner.certifications.eightA && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">8(a)</Badge>
+                      )}
+                      {(partner as any).isJointVenture && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-blue-50 text-blue-700 border-blue-200">JV</Badge>
+                      )}
+                      <Badge 
+                        variant="outline" 
+                        className={`text-[10px] px-1.5 py-0 h-5 ${agreementStatusColors[partner.teamingAgreementStatus]}`}
+                      >
+                        {agreementStatusLabels[partner.teamingAgreementStatus]}
+                      </Badge>
+                      {partner.ndaStatus === 'signed' && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-50 text-green-700 border-green-200">NDA</Badge>
+                      )}
+                    </div>
+
+                    {/* Expiration Warning */}
+                    {taExpStatus && taExpStatus !== 'ok' && daysUntilExp !== null && (
+                      <div className={`flex items-center gap-1.5 text-[11px] mb-2 px-2 py-1 rounded ${
+                        taExpStatus === 'expired' ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700'
+                      }`}>
+                        <AlertTriangle className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
+                        <span>{taExpStatus === 'expired' ? 'Expired' : `Expires in ${daysUntilExp}d`}</span>
                       </div>
                     )}
 
-                    {/* Capabilities Preview */}
+                    {/* Capabilities (compact) */}
                     {partner.capabilities && partner.capabilities.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {partner.capabilities.slice(0, 3).map(capId => {
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {partner.capabilities.slice(0, 2).map(capId => {
                           const cap = capabilityOptions.find(c => c.id === capId)
                           return cap ? (
                             <Badge key={capId} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-orange-50 text-orange-700 border-0">
@@ -838,100 +874,26 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                             </Badge>
                           ) : null
                         })}
-                        {partner.capabilities.length > 3 && (
+                        {partner.capabilities.length > 2 && (
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-gray-100 text-gray-600 border-0">
-                            +{partner.capabilities.length - 3} more
+                            +{partner.capabilities.length - 2}
                           </Badge>
                         )}
                       </div>
                     )}
 
-                    {/* Agreement Status Row */}
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5 text-gray-400" />
-                        <Badge 
-                          variant="outline" 
-                          className={`text-[10px] px-1.5 py-0 h-5 ${agreementStatusColors[partner.teamingAgreementStatus]}`}
-                        >
-                          {agreementStatusLabels[partner.teamingAgreementStatus]}
-                        </Badge>
-                      </div>
-                      {partner.ndaStatus !== 'none' && (
-                        <Badge 
-                          variant="outline" 
-                          className={`text-[10px] px-1.5 py-0 h-5 ${
-                            partner.ndaStatus === 'signed' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                          }`}
-                        >
-                          NDA {partner.ndaStatus === 'signed' ? 'Signed' : 'Draft'}
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Expiration Warning */}
-                    {taExpStatus && taExpStatus !== 'ok' && daysUntilExp !== null && (
-                      <div className={`flex items-center gap-2 text-xs mb-3 px-2.5 py-2 rounded-md ${
-                        taExpStatus === 'expired' ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700'
-                      }`}>
-                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span>
-                          {taExpStatus === 'expired' 
-                            ? 'Teaming agreement has expired' 
-                            : `Agreement expires in ${daysUntilExp} days`
-                          }
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Current Bid Roles */}
-                    <div className="pt-3 border-t border-gray-100">
+                    {/* Footer: Roles Summary */}
+                    <div className="pt-2 mt-auto border-t border-gray-100">
                       {partner.roles.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">No roles assigned on this bid</p>
+                        <p className="text-[11px] text-gray-400 italic">No roles assigned</p>
                       ) : (
-                        <div className="space-y-1.5">
-                          <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-2">
-                            Current Bid Roles
-                          </p>
-                          {partner.roles.slice(0, 3).map((role) => {
-                            // Get FTE display - show per-period if available
-                            const baseFte = getSubcontractorFte(role, 'base')
-                            const opt1Fte = getSubcontractorFte(role, 'option1')
-                            const opt2Fte = getSubcontractorFte(role, 'option2')
-                            
-                            // Check if FTEs vary by period
-                            const hasVaryingFte = role.allocations && (
-                              baseFte !== opt1Fte || baseFte !== opt2Fte || opt1Fte !== opt2Fte
-                            )
-                            
-                            return (
-                              <div key={role.id} className="flex items-center justify-between text-xs">
-                                <span className="text-gray-700 truncate flex-1">{role.role}</span>
-                                <span className="text-gray-500 ml-2 whitespace-nowrap">
-                                  {hasVaryingFte ? (
-                                    // Show per-period FTEs
-                                    <span className="text-[10px]">
-                                      {baseFte > 0 && `Base:${baseFte.toFixed(1)}`}
-                                      {opt1Fte > 0 && ` OP1:${opt1Fte.toFixed(1)}`}
-                                      {opt2Fte > 0 && ` OP2:${opt2Fte.toFixed(1)}`}
-                                    </span>
-                                  ) : (
-                                    `${baseFte.toFixed(2)} FTE`
-                                  )}
-                                  {' · '}${role.theirRate.toFixed(0)}/hr
-                                </span>
-                              </div>
-                            )
-                          })}
-                          {partner.roles.length > 3 && (
-                            <p className="text-xs text-gray-400">
-                              +{partner.roles.length - 3} more role{partner.roles.length - 3 !== 1 ? 's' : ''}
-                            </p>
-                          )}
-                          <div className="flex items-center justify-between text-xs pt-2 mt-2 border-t border-gray-100">
-                            <span className="font-medium text-gray-600">{partner.totalBaseFte.toFixed(2)} FTE (Base)</span>
-                            <span className="font-semibold text-gray-900">{formatCurrency(partner.totalContractCost)} total</span>
-                          </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-gray-600">
+                            {partner.roleCount} role{partner.roleCount !== 1 ? 's' : ''} · {partner.totalBaseFte.toFixed(1)} FTE
+                          </span>
+                          <span className="text-xs font-semibold text-gray-900">
+                            {formatCurrency(partner.totalContractCost)}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -941,589 +903,602 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
             </div>
           )}
         </div>
+      </div>
 
-        {/* ==================== SLIDE-OUT PANEL ==================== */}
-        {isPanelOpen && (
-          <>
-            {/* Overlay */}
-            <div 
-              className="fixed inset-0 bg-black/20 z-40"
-              onClick={closePanel}
-              aria-hidden="true"
-            />
+      {/* ==================== SLIDE-OUT PANEL ==================== */}
+      {isPanelOpen && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/20 z-40"
+            onClick={closePanel}
+            aria-hidden="true"
+          />
 
-            {/* Panel */}
-            <div 
-              className="fixed inset-y-0 right-0 w-[600px] bg-white shadow-2xl border-l border-gray-200 overflow-y-auto z-50 animate-in slide-in-from-right"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="panel-title"
-            >
-              {/* Header */}
-              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
-                <div>
-                  <h3 id="panel-title" className="text-lg font-semibold text-gray-900">
-                    {editingId ? 'Edit Partner' : 'Add Partner'}
-                  </h3>
-                  <p className="text-sm text-gray-600 mt-0.5">
-                    {editingId ? 'Update partner information and agreements' : 'Enter partner company details'}
-                  </p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={closePanel}
-                  aria-label="Close panel"
-                  className="h-8 w-8 p-0"
-                >
-                  <X className="w-5 h-5" />
-                </Button>
+          <div 
+            ref={slideoutRef}
+            className="fixed inset-y-0 right-0 w-[600px] bg-white shadow-2xl border-l border-gray-200 overflow-y-auto z-50 animate-in slide-in-from-right"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="panel-title"
+          >
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h3 id="panel-title" className="text-lg font-semibold text-gray-900">
+                  {editingId ? 'Edit Partner' : 'Add Partner'}
+                </h3>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  {editingId ? 'Update partner information and agreements' : 'Enter partner company details'}
+                </p>
               </div>
+              <Button 
+                ref={slideoutCloseRef}
+                variant="ghost" 
+                size="sm"
+                onClick={closePanel}
+                aria-label="Close panel"
+                className="h-8 w-8 p-0"
+              >
+                <X className="w-5 h-5" aria-hidden="true" />
+              </Button>
+            </div>
 
-              {/* Form Content */}
-              <div className="p-6 space-y-4">
+            {/* Form Content */}
+            <div className="p-6 space-y-4">
+              
+              {/* ===== Company Information Section ===== */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSection('company')}
+                  aria-expanded={expandedSections.company}
+                  aria-controls="section-company"
+                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-gray-600" aria-hidden="true" />
+                    <span className="font-medium text-sm text-gray-900">Company Information</span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-red-100 text-red-700">Required</Badge>
+                  </div>
+                  {expandedSections.company ? <ChevronUp className="w-4 h-4 text-gray-500" aria-hidden="true" /> : <ChevronDown className="w-4 h-4 text-gray-500" aria-hidden="true" />}
+                </button>
                 
-                {/* ===== Company Information Section ===== */}
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleSection('company')}
-                    aria-expanded={expandedSections.company}
-                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-gray-600" />
-                      <span className="font-medium text-sm text-gray-900">Company Information</span>
+                {expandedSections.company && (
+                  <div id="section-company" className="p-4 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="companyName">
+                        Company Name <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="companyName"
+                        placeholder="e.g., Acme Consulting LLC"
+                        value={formData.companyName}
+                        onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                        className={formErrors.companyName ? 'border-red-500' : ''}
+                      />
+                      {formErrors.companyName && (
+                        <p className="text-xs text-red-500">{formErrors.companyName}</p>
+                      )}
                     </div>
-                    {expandedSections.company ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-                  </button>
-                  
-                  {expandedSections.company && (
-                    <div className="p-4 space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="companyName">
-                          Company Name <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          id="companyName"
-                          placeholder="e.g., Acme Consulting LLC"
-                          value={formData.companyName}
-                          onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                          className={formErrors.companyName ? 'border-red-500' : ''}
-                        />
-                        {formErrors.companyName && (
-                          <p className="text-xs text-red-500">{formErrors.companyName}</p>
-                        )}
-                      </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="legalName">Legal Name (if different)</Label>
-                        <Input
-                          id="legalName"
-                          placeholder="Full legal entity name"
-                          value={formData.legalName}
-                          onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
-                        />
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="legalName">Legal Name (if different)</Label>
+                      <Input
+                        id="legalName"
+                        placeholder="Full legal entity name"
+                        value={formData.legalName}
+                        onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
+                      />
+                    </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-1">
-                            <Label htmlFor="uei">UEI</Label>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button type="button" aria-label="Learn about UEI requirements">
-                                  <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs">
-                                <p className="text-xs font-medium mb-1">{farTooltips.uei.clause}: {farTooltips.uei.title}</p>
-                                <p className="text-xs">{farTooltips.uei.description}</p>
-                                <a href="https://sam.gov" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 flex items-center gap-1 mt-1">
-                                  Verify on SAM.gov <ExternalLink className="w-3 h-3" />
-                                </a>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <Input
-                            id="uei"
-                            placeholder="12-character UEI"
-                            value={formData.uei}
-                            onChange={(e) => setFormData({ ...formData, uei: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cageCode">CAGE Code</Label>
-                          <Input
-                            id="cageCode"
-                            placeholder="5-character code"
-                            value={formData.cageCode}
-                            onChange={(e) => setFormData({ ...formData, cageCode: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <div className="flex items-center gap-1">
-                          <Label>Business Size</Label>
+                          <Label htmlFor="uei">UEI (Unique Entity ID)</Label>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <button type="button" aria-label="Learn about business size standards">
-                                <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
+                              <button type="button" aria-label="Learn about UEI requirements">
+                                <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" aria-hidden="true" />
                               </button>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                              <p className="text-xs font-medium mb-1">{farTooltips.businessSize.clause}: {farTooltips.businessSize.title}</p>
-                              <p className="text-xs">{farTooltips.businessSize.description}</p>
+                              <p className="text-xs font-medium mb-1">{farTooltips.uei.clause}: {farTooltips.uei.title}</p>
+                              <p className="text-xs">{farTooltips.uei.description}</p>
+                              <a href="https://sam.gov" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 flex items-center gap-1 mt-1">
+                                Verify on SAM.gov <ExternalLink className="w-3 h-3" aria-hidden="true" />
+                                <span className="sr-only">(opens in new tab)</span>
+                              </a>
                             </TooltipContent>
                           </Tooltip>
                         </div>
+                        <Input
+                          id="uei"
+                          placeholder="12-character UEI"
+                          value={formData.uei}
+                          onChange={(e) => setFormData({ ...formData, uei: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-1">
+                          <Label htmlFor="cageCode">CAGE Code</Label>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button type="button" aria-label="Learn about CAGE codes">
+                                <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" aria-hidden="true" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p className="text-xs font-medium mb-1">{farTooltips.cageCode.clause}: {farTooltips.cageCode.title}</p>
+                              <p className="text-xs">{farTooltips.cageCode.description}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                        <Input
+                          id="cageCode"
+                          placeholder="5-character code"
+                          value={formData.cageCode}
+                          onChange={(e) => setFormData({ ...formData, cageCode: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1">
+                        <Label>Business Size</Label>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button type="button" aria-label="Learn about business size standards">
+                              <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" aria-hidden="true" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="text-xs font-medium mb-1">{farTooltips.businessSize.clause}: {farTooltips.businessSize.title}</p>
+                            <p className="text-xs">{farTooltips.businessSize.description}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <Select 
+                        value={formData.businessSize} 
+                        onValueChange={(v: 'small' | 'other-than-small' | '') => setFormData({ ...formData, businessSize: v })}
+                      >
+                        <SelectTrigger aria-label="Select business size">
+                          <SelectValue placeholder="Select business size" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="small">Small Business</SelectItem>
+                          <SelectItem value="other-than-small">Large Business</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ===== Certifications Section ===== */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSection('certifications')}
+                  aria-expanded={expandedSections.certifications}
+                  aria-controls="section-certifications"
+                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4 text-purple-600" aria-hidden="true" />
+                    <span className="font-medium text-sm text-gray-900">Small Business Certifications</span>
+                  </div>
+                  {expandedSections.certifications ? <ChevronUp className="w-4 h-4 text-gray-500" aria-hidden="true" /> : <ChevronDown className="w-4 h-4 text-gray-500" aria-hidden="true" />}
+                </button>
+                
+                {expandedSections.certifications && (
+                  <div id="section-certifications" className="p-4 space-y-3">
+                    <p className="text-xs text-gray-500 mb-2">
+                      Select certifications this partner holds. These count toward your subcontracting plan goals.
+                    </p>
+                    
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="cert-sb"
+                        checked={formData.certifications.sb}
+                        onCheckedChange={(checked) => 
+                          setFormData({ ...formData, certifications: { ...formData.certifications, sb: checked as boolean } })
+                        }
+                      />
+                      <Label htmlFor="cert-sb" className="text-sm font-normal cursor-pointer">
+                        Small Business (SB)
+                      </Label>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="cert-wosb"
+                        checked={formData.certifications.wosb}
+                        onCheckedChange={(checked) => 
+                          setFormData({ ...formData, certifications: { ...formData.certifications, wosb: checked as boolean } })
+                        }
+                      />
+                      <Label htmlFor="cert-wosb" className="text-sm font-normal cursor-pointer">
+                        Woman-Owned Small Business (WOSB)
+                      </Label>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="cert-sdvosb"
+                        checked={formData.certifications.sdvosb}
+                        onCheckedChange={(checked) => 
+                          setFormData({ ...formData, certifications: { ...formData.certifications, sdvosb: checked as boolean } })
+                        }
+                      />
+                      <Label htmlFor="cert-sdvosb" className="text-sm font-normal cursor-pointer">
+                        Service-Disabled Veteran-Owned SB (SDVOSB)
+                      </Label>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="cert-hubzone"
+                        checked={formData.certifications.hubzone}
+                        onCheckedChange={(checked) => 
+                          setFormData({ ...formData, certifications: { ...formData.certifications, hubzone: checked as boolean } })
+                        }
+                      />
+                      <Label htmlFor="cert-hubzone" className="text-sm font-normal cursor-pointer">
+                        HUBZone
+                      </Label>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="cert-8a"
+                        checked={formData.certifications.eightA}
+                        onCheckedChange={(checked) => 
+                          setFormData({ ...formData, certifications: { ...formData.certifications, eightA: checked as boolean } })
+                        }
+                      />
+                      <Label htmlFor="cert-8a" className="text-sm font-normal cursor-pointer">
+                        8(a) Business Development Program
+                      </Label>
+                    </div>
+
+                    {/* Joint Venture */}
+                    <div className="pt-3 mt-3 border-t border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="cert-jv"
+                          checked={formJV}
+                          onCheckedChange={(checked) => setFormJV(checked as boolean)}
+                        />
+                        <Label htmlFor="cert-jv" className="text-sm font-normal cursor-pointer flex items-center gap-1.5">
+                          <Handshake className="w-3.5 h-3.5 text-gray-500" aria-hidden="true" />
+                          Joint Venture (JV) Partner
+                        </Label>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button type="button" aria-label="Learn about joint ventures">
+                              <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" aria-hidden="true" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="text-xs font-medium mb-1">{farTooltips.jointVenture.clause}: {farTooltips.jointVenture.title}</p>
+                            <p className="text-xs">{farTooltips.jointVenture.description}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ===== Agreements Section ===== */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSection('agreements')}
+                  aria-expanded={expandedSections.agreements}
+                  aria-controls="section-agreements"
+                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-600" aria-hidden="true" />
+                    <span className="font-medium text-sm text-gray-900">Agreements</span>
+                  </div>
+                  {expandedSections.agreements ? <ChevronUp className="w-4 h-4 text-gray-500" aria-hidden="true" /> : <ChevronDown className="w-4 h-4 text-gray-500" aria-hidden="true" />}
+                </button>
+                
+                {expandedSections.agreements && (
+                  <div id="section-agreements" className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Teaming Agreement</Label>
                         <Select 
-                          value={formData.businessSize} 
-                          onValueChange={(v: 'small' | 'other-than-small' | '') => setFormData({ ...formData, businessSize: v })}
+                          value={formData.teamingAgreementStatus} 
+                          onValueChange={(v: TeamingPartner['teamingAgreementStatus']) => setFormData({ ...formData, teamingAgreementStatus: v })}
                         >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select size standard" />
+                          <SelectTrigger aria-label="Select teaming agreement status">
+                            <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="small">Small Business</SelectItem>
-                            <SelectItem value="other-than-small">Large Business (Other Than Small)</SelectItem>
+                            <SelectItem value="none">No Agreement</SelectItem>
+                            <SelectItem value="draft">Draft</SelectItem>
+                            <SelectItem value="under-review">Under Review</SelectItem>
+                            <SelectItem value="signed">Signed</SelectItem>
+                            <SelectItem value="executed">Active</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="taExpiration">Expiration Date</Label>
+                        <Input
+                          id="taExpiration"
+                          type="date"
+                          value={formData.teamingAgreementExpiration || ''}
+                          onChange={(e) => setFormData({ ...formData, teamingAgreementExpiration: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>NDA Status</Label>
+                        <Select 
+                          value={formData.ndaStatus} 
+                          onValueChange={(v: TeamingPartner['ndaStatus']) => setFormData({ ...formData, ndaStatus: v })}
+                        >
+                          <SelectTrigger aria-label="Select NDA status">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No NDA</SelectItem>
+                            <SelectItem value="draft">Draft</SelectItem>
+                            <SelectItem value="signed">Signed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="ndaExpiration">NDA Expiration</Label>
+                        <Input
+                          id="ndaExpiration"
+                          type="date"
+                          value={formData.ndaExpiration || ''}
+                          onChange={(e) => setFormData({ ...formData, ndaExpiration: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ===== Capabilities Section ===== */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSection('capabilities')}
+                  aria-expanded={expandedSections.capabilities}
+                  aria-controls="section-capabilities"
+                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4 text-orange-600" aria-hidden="true" />
+                    <span className="font-medium text-sm text-gray-900">Capabilities</span>
+                    {selectedCapabilities.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
+                        {selectedCapabilities.length} selected
+                      </Badge>
+                    )}
+                  </div>
+                  {expandedSections.capabilities ? <ChevronUp className="w-4 h-4 text-gray-500" aria-hidden="true" /> : <ChevronDown className="w-4 h-4 text-gray-500" aria-hidden="true" />}
+                </button>
+                
+                {expandedSections.capabilities && (
+                  <div id="section-capabilities" className="p-4 space-y-4">
+                    <p className="text-xs text-gray-500">
+                      Select capabilities relevant to IT services (NAICS 541511/541512/541519)
+                    </p>
+                    
+                    {['Design', 'Engineering', 'Management', 'Data', 'Security', 'Compliance', 'Support'].map(category => {
+                      const categoryCapabilities = capabilityOptions.filter(c => c.category === category)
+                      if (categoryCapabilities.length === 0) return null
+                      
+                      return (
+                        <div key={category} className="space-y-2">
+                          <p className="text-xs font-medium text-gray-700 uppercase tracking-wide">{category}</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {categoryCapabilities.map(cap => (
+                              <div key={cap.id} className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`cap-${cap.id}`}
+                                  checked={selectedCapabilities.includes(cap.id)}
+                                  onCheckedChange={() => toggleCapability(cap.id)}
+                                />
+                                <Label htmlFor={`cap-${cap.id}`} className="text-sm font-normal cursor-pointer">
+                                  {cap.label}
+                                </Label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ===== Rate Information Section ===== */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSection('rates')}
+                  aria-expanded={expandedSections.rates}
+                  aria-controls="section-rates"
+                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-gray-600" aria-hidden="true" />
+                    <span className="font-medium text-sm text-gray-900">Rate History</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span onClick={(e) => e.stopPropagation()} className="cursor-help">
+                          <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" aria-hidden="true" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="text-xs font-medium mb-1">{farTooltips.rateJustification.clause}: {farTooltips.rateJustification.title}</p>
+                        <p className="text-xs">{farTooltips.rateJustification.description}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  {expandedSections.rates ? <ChevronUp className="w-4 h-4 text-gray-500" aria-hidden="true" /> : <ChevronDown className="w-4 h-4 text-gray-500" aria-hidden="true" />}
+                </button>
+                
+                {expandedSections.rates && (
+                  <div id="section-rates" className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="defaultRate">Default Hourly Rate ($)</Label>
+                        <Input
+                          id="defaultRate"
+                          type="number"
+                          placeholder="150.00"
+                          value={formData.defaultRate || ''}
+                          onChange={(e) => setFormData({ ...formData, defaultRate: parseFloat(e.target.value) || undefined })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Rate Source</Label>
+                        <Select 
+                          value={formData.rateSource} 
+                          onValueChange={(v: TeamingPartner['rateSource']) => setFormData({ ...formData, rateSource: v })}
+                        >
+                          <SelectTrigger aria-label="Select rate source">
+                            <SelectValue placeholder="Select source" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="quote">Direct Quote</SelectItem>
+                            <SelectItem value="prior-agreement">Prior Agreement</SelectItem>
+                            <SelectItem value="gsa-schedule">GSA Schedule</SelectItem>
+                            <SelectItem value="market-research">Market Research</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
-                  )}
-                </div>
 
-                {/* ===== Certifications Section ===== */}
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleSection('certifications')}
-                    aria-expanded={expandedSections.certifications}
-                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Award className="w-4 h-4 text-purple-600" />
-                      <span className="font-medium text-sm text-gray-900">Small Business Certifications</span>
-                    </div>
-                    {expandedSections.certifications ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-                  </button>
-                  
-                  {expandedSections.certifications && (
-                    <div className="p-4 space-y-3">
-                      <p className="text-xs text-gray-500 mb-2">
-                        Select all certifications this partner holds. These count toward your subcontracting plan goals.
-                      </p>
-                      
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="cert-sb"
-                          checked={formData.certifications.sb}
-                          onCheckedChange={(checked) => 
-                            setFormData({ ...formData, certifications: { ...formData.certifications, sb: checked as boolean } })
-                          }
-                        />
-                        <Label htmlFor="cert-sb" className="text-sm font-normal cursor-pointer">
-                          Small Business (SB)
-                        </Label>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="cert-wosb"
-                          checked={formData.certifications.wosb}
-                          onCheckedChange={(checked) => 
-                            setFormData({ ...formData, certifications: { ...formData.certifications, wosb: checked as boolean } })
-                          }
-                        />
-                        <Label htmlFor="cert-wosb" className="text-sm font-normal cursor-pointer">
-                          Woman-Owned Small Business (WOSB)
-                        </Label>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="cert-sdvosb"
-                          checked={formData.certifications.sdvosb}
-                          onCheckedChange={(checked) => 
-                            setFormData({ ...formData, certifications: { ...formData.certifications, sdvosb: checked as boolean } })
-                          }
-                        />
-                        <Label htmlFor="cert-sdvosb" className="text-sm font-normal cursor-pointer">
-                          Service-Disabled Veteran-Owned SB (SDVOSB)
-                        </Label>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="cert-hubzone"
-                          checked={formData.certifications.hubzone}
-                          onCheckedChange={(checked) => 
-                            setFormData({ ...formData, certifications: { ...formData.certifications, hubzone: checked as boolean } })
-                          }
-                        />
-                        <Label htmlFor="cert-hubzone" className="text-sm font-normal cursor-pointer">
-                          HUBZone
-                        </Label>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="cert-8a"
-                          checked={formData.certifications.eightA}
-                          onCheckedChange={(checked) => 
-                            setFormData({ ...formData, certifications: { ...formData.certifications, eightA: checked as boolean } })
-                          }
-                        />
-                        <Label htmlFor="cert-8a" className="text-sm font-normal cursor-pointer">
-                          8(a) Business Development Program
-                        </Label>
-                      </div>
-
-                      {/* Joint Venture Option */}
-                      <div className="pt-3 mt-3 border-t border-gray-100">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id="cert-jv"
-                            checked={formJV}
-                            onCheckedChange={(checked) => setFormJV(checked as boolean)}
-                          />
-                          <Label htmlFor="cert-jv" className="text-sm font-normal cursor-pointer flex items-center gap-1.5">
-                            <Handshake className="w-3.5 h-3.5 text-gray-500" />
-                            Joint Venture (JV) Partner
-                          </Label>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button type="button" aria-label="Learn about joint ventures">
-                                <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                              <p className="text-xs font-medium mb-1">{farTooltips.jointVenture.clause}: {farTooltips.jointVenture.title}</p>
-                              <p className="text-xs">{farTooltips.jointVenture.description}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ===== Capabilities Section ===== */}
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleSection('capabilities')}
-                    aria-expanded={expandedSections.capabilities}
-                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Award className="w-4 h-4 text-orange-600" />
-                      <span className="font-medium text-sm text-gray-900">Capabilities</span>
-                      {selectedCapabilities.length > 0 && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
-                          {selectedCapabilities.length} selected
-                        </Badge>
-                      )}
-                    </div>
-                    {expandedSections.capabilities ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-                  </button>
-                  
-                  {expandedSections.capabilities && (
-                    <div className="p-4 space-y-4">
-                      <p className="text-xs text-gray-500">
-                        Select capabilities relevant to NAICS 541511/541512/541519 (Custom Computer Programming & Design Services)
-                      </p>
-                      
-                      {/* Group capabilities by category */}
-                      {['Design', 'Engineering', 'Management', 'Data', 'Security', 'Compliance', 'Support'].map(category => {
-                        const categoryCapabilities = capabilityOptions.filter(c => c.category === category)
-                        if (categoryCapabilities.length === 0) return null
-                        
-                        return (
-                          <div key={category} className="space-y-2">
-                            <p className="text-xs font-medium text-gray-700 uppercase tracking-wide">{category}</p>
-                            <div className="grid grid-cols-2 gap-2">
-                              {categoryCapabilities.map(cap => (
-                                <div key={cap.id} className="flex items-center gap-2">
-                                  <Checkbox
-                                    id={`cap-${cap.id}`}
-                                    checked={selectedCapabilities.includes(cap.id)}
-                                    onCheckedChange={() => toggleCapability(cap.id)}
-                                  />
-                                  <Label htmlFor={`cap-${cap.id}`} className="text-sm font-normal cursor-pointer">
-                                    {cap.label}
-                                  </Label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* ===== Agreements Section ===== */}
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleSection('agreements')}
-                    aria-expanded={expandedSections.agreements}
-                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-gray-600" />
-                      <span className="font-medium text-sm text-gray-900">Agreements</span>
-                    </div>
-                    {expandedSections.agreements ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-                  </button>
-                  
-                  {expandedSections.agreements && (
-                    <div className="p-4 space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Teaming Agreement Status</Label>
-                          <Select 
-                            value={formData.teamingAgreementStatus} 
-                            onValueChange={(v: TeamingPartner['teamingAgreementStatus']) => setFormData({ ...formData, teamingAgreementStatus: v })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">No Agreement</SelectItem>
-                              <SelectItem value="draft">Draft in Progress</SelectItem>
-                              <SelectItem value="under-review">Under Review</SelectItem>
-                              <SelectItem value="signed">Signed</SelectItem>
-                              <SelectItem value="executed">Fully Executed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="taExpiration">Agreement Expiration</Label>
-                          <Input
-                            id="taExpiration"
-                            type="date"
-                            value={formData.teamingAgreementExpiration || ''}
-                            onChange={(e) => setFormData({ ...formData, teamingAgreementExpiration: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>NDA Status</Label>
-                          <Select 
-                            value={formData.ndaStatus} 
-                            onValueChange={(v: TeamingPartner['ndaStatus']) => setFormData({ ...formData, ndaStatus: v })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">No NDA</SelectItem>
-                              <SelectItem value="draft">Draft</SelectItem>
-                              <SelectItem value="signed">Signed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="ndaExpiration">NDA Expiration</Label>
-                          <Input
-                            id="ndaExpiration"
-                            type="date"
-                            value={formData.ndaExpiration || ''}
-                            onChange={(e) => setFormData({ ...formData, ndaExpiration: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Document Upload Placeholder */}
-                      <div className="p-4 border border-dashed border-gray-300 rounded-lg text-center">
-                        <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600">Document upload coming soon</p>
-                        <p className="text-xs text-gray-500">Upload teaming agreements, NDAs, and rate quotes</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ===== Rate Information Section ===== */}
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleSection('rates')}
-                    aria-expanded={expandedSections.rates}
-                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-gray-600" />
-                      <span className="font-medium text-sm text-gray-900">Rate Documentation</span>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span onClick={(e) => e.stopPropagation()} className="cursor-help">
-                            <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          <p className="text-xs font-medium mb-1">{farTooltips.rateJustification.clause}: {farTooltips.rateJustification.title}</p>
-                          <p className="text-xs">{farTooltips.rateJustification.description}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    {expandedSections.rates ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-                  </button>
-                  
-                  {expandedSections.rates && (
-                    <div className="p-4 space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="defaultRate">Default Hourly Rate ($)</Label>
-                          <Input
-                            id="defaultRate"
-                            type="number"
-                            placeholder="150.00"
-                            value={formData.defaultRate || ''}
-                            onChange={(e) => setFormData({ ...formData, defaultRate: parseFloat(e.target.value) || undefined })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Rate Source</Label>
-                          <Select 
-                            value={formData.rateSource} 
-                            onValueChange={(v: TeamingPartner['rateSource']) => setFormData({ ...formData, rateSource: v })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select source" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="quote">Direct Quote</SelectItem>
-                              <SelectItem value="prior-agreement">Prior Agreement</SelectItem>
-                              <SelectItem value="gsa-schedule">GSA Schedule</SelectItem>
-                              <SelectItem value="market-research">Market Research</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="quoteDate">Quote Date</Label>
-                          <Input
-                            id="quoteDate"
-                            type="date"
-                            value={formData.quoteDate || ''}
-                            onChange={(e) => setFormData({ ...formData, quoteDate: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="quoteReference">Quote Reference #</Label>
-                          <Input
-                            id="quoteReference"
-                            placeholder="e.g., Q-2024-001"
-                            value={formData.quoteReference || ''}
-                            onChange={(e) => setFormData({ ...formData, quoteReference: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ===== Contact Information Section ===== */}
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleSection('contact')}
-                    aria-expanded={expandedSections.contact}
-                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-gray-600" />
-                      <span className="font-medium text-sm text-gray-900">Contact & Notes</span>
-                    </div>
-                    {expandedSections.contact ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-                  </button>
-                  
-                  {expandedSections.contact && (
-                    <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="primaryContact">Primary Contact</Label>
+                        <Label htmlFor="quoteDate">Quote Date</Label>
                         <Input
-                          id="primaryContact"
-                          placeholder="Contact name"
-                          value={formData.primaryContact || ''}
-                          onChange={(e) => setFormData({ ...formData, primaryContact: e.target.value })}
+                          id="quoteDate"
+                          type="date"
+                          value={formData.quoteDate || ''}
+                          onChange={(e) => setFormData({ ...formData, quoteDate: e.target.value })}
                         />
                       </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="contactEmail">Email</Label>
-                          <Input
-                            id="contactEmail"
-                            type="email"
-                            placeholder="email@company.com"
-                            value={formData.contactEmail || ''}
-                            onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="contactPhone">Phone</Label>
-                          <Input
-                            id="contactPhone"
-                            placeholder="(555) 123-4567"
-                            value={formData.contactPhone || ''}
-                            onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
                       <div className="space-y-2">
-                        <Label htmlFor="pastPerformance">Past Performance Notes</Label>
-                        <Textarea
-                          id="pastPerformance"
-                          placeholder="Describe partner's relevant past performance and contract history..."
-                          value={formData.pastPerformance || ''}
-                          onChange={(e) => setFormData({ ...formData, pastPerformance: e.target.value })}
-                          rows={3}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="notes">Internal Notes</Label>
-                        <Textarea
-                          id="notes"
-                          placeholder="Any additional notes about this partner..."
-                          value={formData.notes || ''}
-                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                          rows={2}
+                        <Label htmlFor="quoteReference">Quote Reference</Label>
+                        <Input
+                          id="quoteReference"
+                          placeholder="e.g., Q-2024-001"
+                          value={formData.quoteReference || ''}
+                          onChange={(e) => setFormData({ ...formData, quoteReference: e.target.value })}
                         />
                       </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
-              {/* Footer */}
-              <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex gap-3">
-                <Button variant="outline" onClick={closePanel} className="flex-1">
-                  Cancel
-                </Button>
-                <Button onClick={handleSave} className="flex-1">
-                  {editingId ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Save Changes
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Partner
-                    </>
-                  )}
-                </Button>
+              {/* ===== Contact Information Section ===== */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSection('contact')}
+                  aria-expanded={expandedSections.contact}
+                  aria-controls="section-contact"
+                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-gray-600" aria-hidden="true" />
+                    <span className="font-medium text-sm text-gray-900">Contact & Notes</span>
+                  </div>
+                  {expandedSections.contact ? <ChevronUp className="w-4 h-4 text-gray-500" aria-hidden="true" /> : <ChevronDown className="w-4 h-4 text-gray-500" aria-hidden="true" />}
+                </button>
+                
+                {expandedSections.contact && (
+                  <div id="section-contact" className="p-4 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="primaryContact">Primary Contact</Label>
+                      <Input
+                        id="primaryContact"
+                        placeholder="Contact name"
+                        value={formData.primaryContact || ''}
+                        onChange={(e) => setFormData({ ...formData, primaryContact: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="contactEmail">Email</Label>
+                        <Input
+                          id="contactEmail"
+                          type="email"
+                          placeholder="email@company.com"
+                          value={formData.contactEmail || ''}
+                          onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="contactPhone">Phone</Label>
+                        <Input
+                          id="contactPhone"
+                          placeholder="(555) 123-4567"
+                          value={formData.contactPhone || ''}
+                          onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="pastPerformance">Past Performance Notes</Label>
+                      <Textarea
+                        id="pastPerformance"
+                        placeholder="Describe partner's relevant past performance and contract history..."
+                        value={formData.pastPerformance || ''}
+                        onChange={(e) => setFormData({ ...formData, pastPerformance: e.target.value })}
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="notes">Internal Notes</Label>
+                      <Textarea
+                        id="notes"
+                        placeholder="Any additional notes about this partner..."
+                        value={formData.notes || ''}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          </>
-        )}
-      </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex gap-3">
+              <Button variant="outline" onClick={closePanel} className="flex-1">
+                Cancel
+              </Button>
+              <Button onClick={handleSave} className="flex-1">
+                {editingId ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 mr-2" aria-hidden="true" />
+                    Save Changes
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
+                    Add Partner
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
     </TooltipProvider>
   )
 }
