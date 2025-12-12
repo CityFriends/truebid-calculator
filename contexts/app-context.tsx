@@ -107,6 +107,48 @@ export const emptyEstimateData: EstimateData = {
   lastUpdated: new Date().toISOString()
 };
 
+// ==================== ENHANCED WBS ELEMENT (Shared between Estimate & Roles tabs) ====================
+
+// This interface matches what the Estimate tab uses internally
+// and allows sharing WBS data with Roles & Pricing tab
+export interface EstimateWBSElement {
+  id: string;
+  wbsNumber: string;
+  title: string;
+  description?: string;
+  
+  // Labor estimates with period-based hours
+  laborEstimates: Array<{
+    id: string;
+    roleId: string;
+    roleName: string;
+    hoursByPeriod: {
+      base: number;
+      option1: number;
+      option2: number;
+      option3: number;
+      option4: number;
+    };
+    rationale: string;
+    confidence: 'high' | 'medium' | 'low';
+    isAISuggested?: boolean;
+    isOrphaned?: boolean;
+  }>;
+  
+  // Status tracking
+  status?: 'draft' | 'review' | 'approved';
+  storyPoints?: number;
+  totalHours?: number;
+  
+  // Quality tracking
+  qualityGrade?: QualityGrade;
+  qualityScore?: number;
+  
+  // Metadata
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // ==================== QUALITY CALCULATION UTILITY ====================
 
 export interface QualityResult {
@@ -221,7 +263,7 @@ export const defaultPricingSettings: PricingSettings = {
   profitMargin: 8,
   escalationEnabled: true,
   laborEscalation: 3,
-  odcEscalation: 2
+  odcEscalation: 0
 };
 
 // ==================== SOLICITATION TYPES ====================
@@ -241,7 +283,7 @@ export interface SolicitationInfo {
   anticipatedAwardDate?: string
   
   // Contract Details
-  contractType: 'FFP' | 'T&M' | 'CPFF' | 'CPAF' | 'IDIQ' | 'BPA' | 'hybrid' | ''
+  contractType: 'FFP' | 'T&M' | 'GSA' | 'CPFF' | 'CPAF' | 'IDIQ' | 'BPA' | 'hybrid' | ''
   contractVehicle?: string
   naicsCode?: string
   psc?: string
@@ -351,6 +393,7 @@ export const getSolicitationDisplayName = (sol: SolicitationInfo): string => {
 export const contractTypeLabels: Record<string, string> = {
   'FFP': 'Firm Fixed Price',
   'T&M': 'Time & Materials',
+  'GSA': 'GSA Schedule',
   'CPFF': 'Cost Plus Fixed Fee',
   'CPAF': 'Cost Plus Award Fee',
   'IDIQ': 'Indefinite Delivery/Indefinite Quantity',
@@ -881,15 +924,16 @@ export interface GSAContractInfo {
 // ==================== CONTEXT INTERFACE ====================
 
 // Main application tab type for navigation (matches tabs-navigation.tsx TabType)
+// Note: 'sub-rates' is now a utility tool in the Tools menu, not a main tab
+// Note: 'gsa-bid' functionality merged into Upload tab (contract type selection)
+// Workflow order: Upload → Estimate → Roles → Teaming → Rate Justification → Export
 export type MainTabId = 
   | 'upload' 
+  | 'estimate'
   | 'roles'  // Roles & Pricing
-  | 'estimate' 
+  | 'teaming-partners'
   | 'rate-justification' 
-  | 'teaming-partners' 
-  | 'export' 
-  | 'gsa-bid' 
-  | 'sub-rates';
+  | 'export';
 
 interface AppContextType {
   // Main Tab Navigation
@@ -1035,6 +1079,13 @@ interface AppContextType {
   getEstimateTotalHours: () => number;
   getEstimateHoursByRole: () => Record<string, number>;
   getEstimateReadiness: () => { score: number; complete: number; total: number };
+  
+  // ==================== SHARED WBS ELEMENTS (Estimate ↔ Roles & Pricing) ====================
+  
+  // Enhanced WBS elements shared between Estimate tab and Roles & Pricing tab
+  // This is the primary data source for role hours in the Roles & Pricing tab
+  estimateWbsElements: EstimateWBSElement[];
+  setEstimateWbsElements: (elements: EstimateWBSElement[]) => void;
   
   // ODCs
   odcs: ODCItem[];
@@ -1306,12 +1357,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ==================== BID-SPECIFIC DATA ====================
   const [recommendedRoles, setRecommendedRoles] = useState<Role[]>([]);
-  const [selectedRoles, setSelectedRoles] = useState<Role[]>([]);
+  const [selectedRoles, setSelectedRoles] = useState<Role[]>([])
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
   const [teamingPartners, setTeamingPartners] = useState<TeamingPartner[]>([]);
   const [odcs, setODCs] = useState<ODCItem[]>([]);
   const [perDiem, setPerDiem] = useState<PerDiemCalculation[]>([]);
   const [gsaContractInfo, setGSAContractInfo] = useState<GSAContractInfo | null>(null);
+  
+  // ==================== SHARED WBS ELEMENTS (Estimate ↔ Roles & Pricing) ====================
+  // This state is shared between the Estimate tab and Roles & Pricing tab
+  // The Estimate tab writes to it, and the Roles & Pricing tab reads from it
+  const [estimateWbsElements, setEstimateWbsElements] = useState<EstimateWBSElement[]>([]);
   
   // ==================== RATE JUSTIFICATIONS (Persist across tab switches) ====================
   const [rateJustifications, setRateJustifications] = useState<Record<string, RoleJustification>>({});
@@ -1653,6 +1709,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addRole = (role: Role) => {
+    console.trace('🔴 addRole called with:', role.name) 
     setSelectedRoles([...selectedRoles, role]);
   };
 
@@ -1932,6 +1989,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getEstimateTotalHours,
     getEstimateHoursByRole,
     getEstimateReadiness,
+    
+    // Shared WBS Elements (Estimate ↔ Roles & Pricing)
+    estimateWbsElements,
+    setEstimateWbsElements,
     
     // ODCs
     odcs,

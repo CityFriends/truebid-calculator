@@ -54,6 +54,8 @@ import {
   Award,
   ExternalLink,
   FileText,
+Clock,
+BarChart3,
 } from 'lucide-react'
 
 // ==================== LOCAL TYPES ====================
@@ -81,6 +83,27 @@ interface RateBreakdown {
   profitAmount: number
   billedRate: number
 }
+// WBS Hours data structure (mock - will integrate with Estimate tab)
+interface WBSRoleHours {
+roleId: string
+roleName: string
+hoursByPeriod: {
+base: number
+option1?: number
+option2?: number
+option3?: number
+option4?: number
+}
+wbsBreakdown: Array<{
+wbsNumber: string
+wbsTitle: string
+hours: number
+}>
+totalHours: number
+suggestedFte: number
+}
+
+
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -318,9 +341,11 @@ export function RolesAndPricingTab() {
     // Rate Justifications
     rateJustifications,
     updateRateJustification,
-    // Tab Navigation
+     // Tab Navigation
     navigateToRateJustification,
-  } = useAppContext()
+    // WBS Data from Estimate tab (replaces scopingData)
+  estimateWbsElements,
+} = useAppContext()
   
   // Get pricing settings from solicitation (centralized source of truth)
   const pricingSettings = getPricingSettings()
@@ -345,11 +370,130 @@ export function RolesAndPricingTab() {
     gAndA: normalizeRate(indirectRates?.ga, 19.83),
   }
   
+// ==================== WBS HOURS FROM CONTEXT ====================
+  // Build WBS hours data from scopingData.epics instead of mock data
+  
+// ==================== WBS HOURS FROM ESTIMATE TAB ====================
+// Build WBS hours data from estimateWbsElements (shared via AppContext)
+
+const wbsHoursByRole = useMemo((): WBSRoleHours[] => {
+  // Debug logging - remove after confirming data flow works
+  console.log('DEBUG estimateWbsElements:', {
+    hasData: !!estimateWbsElements,
+    count: estimateWbsElements?.length || 0,
+    firstElement: estimateWbsElements?.[0] ? {
+      title: estimateWbsElements[0].title,
+      wbsNumber: estimateWbsElements[0].wbsNumber,
+      laborEstimatesCount: estimateWbsElements[0].laborEstimates?.length || 0
+    } : null
+  })
+  
+  // If no estimate data, return empty array
+  if (!estimateWbsElements || estimateWbsElements.length === 0) {
+    return []
+  }
+  
+  // Group hours by role across all WBS elements
+  const roleHoursMap: Record<string, {
+    roleId: string
+    roleName: string
+    totalHours: number
+    hoursByPeriod: {
+      base: number
+      option1: number
+      option2: number
+      option3: number
+      option4: number
+    }
+    wbsBreakdown: Array<{ wbsNumber: string; wbsTitle: string; hours: number }>
+  }> = {}
+  
+  estimateWbsElements.forEach((element) => {
+    // Skip if no labor estimates
+    if (!element.laborEstimates || !Array.isArray(element.laborEstimates)) return
+    
+    element.laborEstimates.forEach(labor => {
+      if (!labor.roleName) return // Skip if no role name
+      
+      // Normalize key for matching (case-insensitive)
+      const key = labor.roleName.toLowerCase().trim()
+      
+      if (!roleHoursMap[key]) {
+        roleHoursMap[key] = {
+          roleId: labor.roleId || `role-${key.replace(/\s+/g, '-')}`,
+          roleName: labor.roleName,
+          totalHours: 0,
+          hoursByPeriod: {
+            base: 0,
+            option1: 0,
+            option2: 0,
+            option3: 0,
+            option4: 0
+          },
+          wbsBreakdown: []
+        }
+      }
+      
+      // Sum hours by period
+      const periods = labor.hoursByPeriod || {}
+      roleHoursMap[key].hoursByPeriod.base += periods.base || 0
+      roleHoursMap[key].hoursByPeriod.option1 += periods.option1 || 0
+      roleHoursMap[key].hoursByPeriod.option2 += periods.option2 || 0
+      roleHoursMap[key].hoursByPeriod.option3 += periods.option3 || 0
+      roleHoursMap[key].hoursByPeriod.option4 += periods.option4 || 0
+      
+      // Calculate total hours for this labor estimate
+      const laborTotal = 
+        (periods.base || 0) + 
+        (periods.option1 || 0) + 
+        (periods.option2 || 0) +
+        (periods.option3 || 0) +
+        (periods.option4 || 0)
+      
+      roleHoursMap[key].totalHours += laborTotal
+      
+      // Add to WBS breakdown
+      roleHoursMap[key].wbsBreakdown.push({
+        wbsNumber: element.wbsNumber,
+        wbsTitle: element.title,
+        hours: laborTotal
+      })
+    })
+  })
+  
+  // Convert to WBSRoleHours array
+  return Object.values(roleHoursMap).map(data => ({
+    roleId: data.roleId,
+    roleName: data.roleName,
+    hoursByPeriod: data.hoursByPeriod,
+    wbsBreakdown: data.wbsBreakdown,
+    totalHours: data.totalHours,
+    suggestedFte: Math.round((data.totalHours / (billableHours || 1920)) * 100) / 100
+  }))
+}, [estimateWbsElements, billableHours])
+      
+  
+  // Helper to find WBS hours for a role
+  const getWBSHoursForRole = (roleName: string): WBSRoleHours | null => {
+    if (!wbsHoursByRole || wbsHoursByRole.length === 0) return null
+    
+    return wbsHoursByRole.find(w =>
+      w.roleName.toLowerCase() === roleName.toLowerCase() ||
+      roleName.toLowerCase().includes(w.roleName.toLowerCase().split(' ')[0]) ||
+      w.roleName.toLowerCase().includes(roleName.toLowerCase().split(' ')[0])
+    ) || null
+  }
+
   // Panel states
   const [selectedRoleForBreakdown, setSelectedRoleForBreakdown] = useState<TeamRole | null>(null)
   const [showSubsExpanded, setShowSubsExpanded] = useState(false)
   const [showOdcExpanded, setShowOdcExpanded] = useState(false)
   const [showTravelExpanded, setShowTravelExpanded] = useState(false)
+// WBS expansion state for Column 1 role cards
+const [expandedWbsRoles, setExpandedWbsRoles] = useState<Record<string, boolean>>({})
+const toggleWbsExpanded = (roleId: string) => {
+setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
+}
   
   // Role edit dialog
   const [editRoleDialogOpen, setEditRoleDialogOpen] = useState(false)
@@ -1269,83 +1413,105 @@ export function RolesAndPricingTab() {
         {/* Three column layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Column 1: Recommended Roles */}
+          {/* Column 1: Roles From Estimate */}
           <div className="border border-gray-100 rounded-lg p-4 bg-white">
             <div className="space-y-4">
               <div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-gray-400" />
-                    <h2 className="font-medium text-gray-900">Recommended Roles</h2>
+                    <BarChart3 className="w-4 h-4 text-gray-400" />
+                    <h2 className="font-medium text-gray-900">Roles From Estimate</h2>
                   </div>
                   <Button variant="ghost" size="sm" onClick={handleOpenAddRole} className="h-7 text-xs">
                     <Plus className="w-3.5 h-3.5 mr-1" />
                     Add Role
                   </Button>
                 </div>
-                <p className="text-xs text-gray-500 mt-1 ml-6">Assign to Prime or Subcontractor</p>
+                <p className="text-xs text-gray-500 mt-1 ml-6">Hours from WBS · Assign to Prime or Sub</p>
               </div>
 
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-gray-400" />
-                  <span className="font-medium text-gray-900">{totalRecommendedFTE}</span>
-                  <span className="text-gray-500">FTE</span>
+                  <span className="font-medium text-gray-900">{wbsHoursByRole.reduce((sum, r) => sum + r.suggestedFte, 0).toFixed(1)}</span>
+                  <span className="text-gray-500">FTE (suggested)</span>
                 </div>
               </div>
 
               <div className="space-y-2">
-                {recommendedRoles.length === 0 ? (
+                {wbsHoursByRole.length === 0 ? (
                   <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center">
-                    <Sparkles className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600">No roles extracted yet</p>
-                    <p className="text-xs text-gray-500 mt-1">Upload an RFP to get AI recommendations</p>
+                    <BarChart3 className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">No roles in Estimate yet</p>
+                    <p className="text-xs text-gray-500 mt-1">Add WBS elements with labor hours in the Estimate tab</p>
                   </div>
                 ) : (
-                  recommendedRoles.map((role) => {
-                    const assignment = getRoleAssignment(role.name)
-                    const priority = getPriorityFromConfidence(role.confidence)
+                  wbsHoursByRole.map((wbsRole) => {
+                    const assignment = getRoleAssignment(wbsRole.roleName)
+                    const isExpanded = expandedWbsRoles[wbsRole.roleId]
+                    
+                    // Create a mock Role object for the handlers
+                    const mockRole: Role = {
+                      id: wbsRole.roleId,
+                      name: wbsRole.roleName,
+                      description: `${wbsRole.totalHours.toLocaleString()} hours across ${wbsRole.wbsBreakdown.length} WBS elements`,
+                      icLevel: 'IC4',
+                      baseSalary: 120000,
+                      quantity: Math.max(1, Math.round(wbsRole.suggestedFte)),
+                      fte: 1,
+                      storyPoints: 0,
+                      years: { base: true, option1: true, option2: true, option3: false, option4: false },
+                    }
+                    
                     return (
                       <div
-                        key={role.id}
+                        key={wbsRole.roleId}
                         className={`border rounded-lg p-3 transition-all ${
                           assignment ? 'border-gray-100 bg-gray-50' : 'border-gray-100 bg-white hover:border-gray-200'
                         }`}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm text-gray-900">{role.name}</span>
-                              {role.isKeyPersonnel && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-0">
-                                  Key
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>
+                            <span className="font-medium text-sm text-gray-900">{wbsRole.roleName}</span>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {wbsRole.wbsBreakdown.length} WBS element{wbsRole.wbsBreakdown.length !== 1 ? 's' : ''}
+                            </p>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 text-xs text-gray-600 mb-3">
-                          <span>IC: <span className="font-medium text-gray-900">{role.icLevel}</span></span>
-                          <span>Qty: <span className="font-medium text-gray-900">{role.quantity}</span></span>
-                          <Badge 
-                            variant="outline" 
-                            className={`text-[10px] px-1.5 py-0 h-4 ${
-                              priority === 'high' ? 'bg-red-50 text-red-700 border-red-200' 
-                              : priority === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                              : 'bg-gray-50 text-gray-600 border-gray-200'
-                            }`}
+                        {/* WBS Hours Display */}
+                        <div className="mb-3 p-2 bg-blue-50 rounded border border-blue-100">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleWbsExpanded(wbsRole.roleId)
+                            }}
+                            className="w-full flex items-center justify-between text-xs"
                           >
-                            {priority}
-                          </Badge>
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-3 h-3 text-blue-500" />
+                              <span className="font-semibold text-blue-700">{wbsRole.totalHours.toLocaleString()} hrs</span>
+                              <span className="text-gray-400">·</span>
+                              <span className="text-gray-600">~{wbsRole.suggestedFte} FTE</span>
+                            </div>
+                            {isExpanded ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+                          </button>
+                          
+                          {isExpanded && (
+                            <div className="mt-2 pt-2 border-t border-blue-100 space-y-1">
+                              {wbsRole.wbsBreakdown.map((wbs, idx) => (
+                                <div key={idx} className="flex justify-between text-[10px]">
+                                  <span className="text-gray-600">{wbs.wbsNumber} {wbs.wbsTitle}</span>
+                                  <span className="text-gray-800 font-medium">{wbs.hours.toLocaleString()} hrs</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         {assignment ? (
                           <div className={`flex items-center justify-center gap-2 py-1.5 text-sm rounded-md ${
-                            assignment === 'prime' 
-                              ? 'text-blue-600 bg-blue-50' 
-                              : 'text-orange-600 bg-orange-50'
+                            assignment === 'prime' ? 'text-blue-600 bg-blue-50' : 'text-orange-600 bg-orange-50'
                           }`}>
                             <Check className="w-4 h-4" />
                             {assignment === 'prime' ? 'Added to Prime' : 'Assigned to Sub'}
@@ -1353,7 +1519,7 @@ export function RolesAndPricingTab() {
                         ) : (
                           <div className="flex gap-2">
                             <Button 
-                              onClick={() => handleAddToTeam(role)} 
+                              onClick={() => handleAddToTeam(mockRole)} 
                               variant="outline"
                               className="flex-1 h-8 text-sm border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-300"
                             >
@@ -1361,7 +1527,7 @@ export function RolesAndPricingTab() {
                               Prime
                             </Button>
                             <Button 
-                              onClick={() => handleAssignToSub(role)} 
+                              onClick={() => handleAssignToSub(mockRole)} 
                               variant="outline"
                               className="flex-1 h-8 text-sm border-orange-200 text-orange-700 hover:bg-orange-50 hover:border-orange-300"
                             >
@@ -1377,6 +1543,8 @@ export function RolesAndPricingTab() {
               </div>
             </div>
           </div>
+
+          {/* Column 2: Team Summary */}
 
           {/* Column 2: Team Summary */}
           <div className="border border-gray-100 rounded-lg p-4 bg-white">

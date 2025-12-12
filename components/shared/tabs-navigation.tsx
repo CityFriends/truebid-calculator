@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { 
   Upload, 
   Target, 
@@ -19,7 +19,9 @@ import {
   Shield, 
   AlertCircle,
   Layers,
-  HelpCircle
+  HelpCircle,
+  Wrench,
+  ChevronRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -39,7 +41,6 @@ import { RateJustificationTab } from '@/components/tabs/rate-justification-tab'
 import { TeamingPartnersTab } from '@/components/tabs/teaming-partners-tab'
 import { SubRatesTab } from '@/components/tabs/sub-rates-tab'
 import { ExportTab } from '@/components/tabs/export-tab'
-import GSABidTab from '@/components/tabs/gsa-bid-tab'
 
 // ==================== CONSTANTS ====================
 
@@ -51,7 +52,8 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
   'CPAF': 'Cost Plus Award Fee',
   'IDIQ': 'IDIQ',
   'BPA': 'BPA',
-  'hybrid': 'Hybrid'
+  'hybrid': 'Hybrid',
+  'GSA': 'GSA Schedule',
 } as const
 
 const SET_ASIDE_LABELS: Record<string, string> = {
@@ -77,16 +79,17 @@ const EVALUATION_METHOD_LABELS: Record<string, string> = {
   'tradeoff': 'Tradeoff'
 } as const
 
-// Tab type definition - renamed 'scoping' to 'estimate'
+// Tab type definition - main flow only (utilities are separate)
 type TabType = 
   | 'upload' 
+  | 'estimate'
   | 'roles' 
-  | 'estimate'  // Changed from 'scoping'
-  | 'rate-justification' 
+  | 'rate-justification'
   | 'teaming-partners' 
-  | 'export' 
-  | 'gsa-bid' 
-  | 'sub-rates'
+  | 'export'
+
+// Utility tool type - accessed via Tools menu
+type UtilityToolType = 'sub-rates'
 
 // Tab configuration with accessibility metadata
 interface TabConfig {
@@ -96,10 +99,22 @@ interface TabConfig {
   description: string // For screen readers
 }
 
+// Utility tool configuration
+interface UtilityToolConfig {
+  id: UtilityToolType
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  description: string
+}
+
 // ==================== MAIN COMPONENT ====================
 
 export function TabsNavigation() {
   const [showSolicitationExpanded, setShowSolicitationExpanded] = useState(false)
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false)
+  const [activeUtilityTool, setActiveUtilityTool] = useState<UtilityToolType | null>(null)
+  const toolsMenuRef = useRef<HTMLDivElement>(null)
+  
   const { 
     solicitation, 
     updateSolicitation,
@@ -115,15 +130,25 @@ export function TabsNavigation() {
   
   // Use context state for tabs (allows child components to navigate)
   const activeTab = activeMainTab as TabType
-  const setActiveTab = (tab: TabType) => setActiveMainTab(tab)
+  const setActiveTab = (tab: TabType) => {
+    setActiveMainTab(tab)
+    setActiveUtilityTool(null) // Clear utility tool when switching to main tab
+  }
 
   // Main bid flow tabs - ordered by workflow sequence
+  // Upload → Estimate → Roles & Pricing → Rate Justification → Teaming Partners → Export
   const bidFlowTabs: TabConfig[] = [
     { 
       id: 'upload', 
       label: 'Upload', 
       icon: Upload,
-      description: 'Upload and analyze RFP documents'
+      description: 'Upload and analyze RFP documents, select contract type'
+    },
+    { 
+      id: 'estimate',
+      label: 'Estimate',
+      icon: Layers,
+      description: 'Build your Basis of Estimate with WBS elements and labor hours'
     },
     { 
       id: 'roles', 
@@ -138,16 +163,10 @@ export function TabsNavigation() {
       description: 'Document rate justifications for audit defense'
     },
     { 
-      id: 'estimate',
-      label: 'Estimate',
-      icon: Layers,
-      description: 'Build your Basis of Estimate with WBS elements and labor hours'
-    },
-    { 
       id: 'teaming-partners', 
       label: 'Teaming Partners', 
       icon: Building2,
-      description: 'Manage subcontractors and teaming arrangements'
+      description: 'Manage subcontractor companies and teaming arrangements'
     },
     { 
       id: 'export', 
@@ -157,24 +176,35 @@ export function TabsNavigation() {
     },
   ]
 
-  // Utility tools (standalone features, not part of main flow)
-  const utilityTabs: TabConfig[] = [
-    { 
-      id: 'gsa-bid', 
-      label: 'GSA Bid', 
-      icon: FileSpreadsheet,
-      description: 'GSA Schedule pricing calculator'
-    },
+  // Utility tools (accessible via Tools menu, not part of main flow)
+  const utilityTools: UtilityToolConfig[] = [
     { 
       id: 'sub-rates', 
-      label: 'Sub Rates', 
+      label: 'Sub Rates Calculator', 
       icon: Calculator,
-      description: 'Subcontractor rate analysis tool'
+      description: 'Evaluate rates when you are a subcontractor to another prime'
     },
   ]
 
-  // Check if current tab is a utility tab
-  const isUtilityTab = ['gsa-bid', 'sub-rates'].includes(activeTab)
+  // Check if a utility tool is active
+  const isUtilityToolActive = activeUtilityTool !== null
+
+  // ==================== CLICK OUTSIDE HANDLER ====================
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (toolsMenuRef.current && !toolsMenuRef.current.contains(event.target as Node)) {
+        setIsToolsMenuOpen(false)
+      }
+    }
+
+    if (isToolsMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isToolsMenuOpen])
 
   // ==================== DATE CALCULATIONS ====================
 
@@ -210,30 +240,51 @@ export function TabsNavigation() {
           closeSolicitationEditor()
         } else if (showSolicitationExpanded) {
           setShowSolicitationExpanded(false)
+        } else if (isToolsMenuOpen) {
+          setIsToolsMenuOpen(false)
         }
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isSolicitationEditorOpen, closeSolicitationEditor, showSolicitationExpanded])
+  }, [isSolicitationEditorOpen, closeSolicitationEditor, showSolicitationExpanded, isToolsMenuOpen])
 
   // ==================== TAB CHANGE HANDLER ====================
 
   const handleTabChange = useCallback((tabId: TabType) => {
     setActiveTab(tabId)
     // Announce tab change to screen readers
-    const tab = [...bidFlowTabs, ...utilityTabs].find(t => t.id === tabId)
+    const tab = bidFlowTabs.find(t => t.id === tabId)
     if (tab) {
       const announcement = document.getElementById('tab-announcement')
       if (announcement) {
         announcement.textContent = `${tab.label} tab selected. ${tab.description}`
       }
     }
-  }, [bidFlowTabs, utilityTabs])
+  }, [bidFlowTabs])
 
-  // Show solicitation bar on main bid flow tabs (not upload, not utility)
-  const showSolicitationBar = !isUtilityTab && activeTab !== 'upload' && solicitation?.solicitationNumber
+  // ==================== UTILITY TOOL HANDLER ====================
+
+  const handleUtilityToolSelect = useCallback((toolId: UtilityToolType) => {
+    setActiveUtilityTool(toolId)
+    setIsToolsMenuOpen(false)
+    // Announce tool selection to screen readers
+    const tool = utilityTools.find(t => t.id === toolId)
+    if (tool) {
+      const announcement = document.getElementById('tab-announcement')
+      if (announcement) {
+        announcement.textContent = `${tool.label} opened. ${tool.description}`
+      }
+    }
+  }, [utilityTools])
+
+  const handleBackToMainFlow = useCallback(() => {
+    setActiveUtilityTool(null)
+  }, [])
+
+  // Show solicitation bar on main bid flow tabs (not upload, not utility tools)
+  const showSolicitationBar = !isUtilityToolActive && activeTab !== 'upload' && solicitation?.solicitationNumber
 
   // ==================== RENDER ====================
 
@@ -263,7 +314,7 @@ export function TabsNavigation() {
             {/* Main Bid Flow Tabs */}
             {bidFlowTabs.map((tab, index) => {
               const Icon = tab.icon
-              const isActive = activeTab === tab.id
+              const isActive = !isUtilityToolActive && activeTab === tab.id
               
               return (
                 <button
@@ -300,45 +351,109 @@ export function TabsNavigation() {
               )
             })}
 
-            {/* Divider between main tabs and utility tabs */}
-            <div 
-              className="h-6 w-px bg-gray-300 mx-3 flex-shrink-0" 
-              role="separator" 
-              aria-orientation="vertical"
-            />
+            {/* Spacer to push Tools menu to the right */}
+            <div className="flex-1" />
 
-            {/* Utility Tools */}
-            {utilityTabs.map((tab) => {
-              const Icon = tab.icon
-              const isActive = activeTab === tab.id
-              
-              return (
-                <button
-                  key={tab.id}
-                  role="tab"
-                  id={`tab-${tab.id}`}
-                  aria-selected={isActive}
-                  aria-controls={`tabpanel-${tab.id}`}
-                  tabIndex={isActive ? 0 : -1}
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`
-                    flex items-center gap-2 px-3 py-2 my-1 text-sm font-medium whitespace-nowrap 
-                    rounded-md transition-colors focus:outline-none focus-visible:ring-2 
-                    focus-visible:ring-amber-500 focus-visible:ring-offset-2
-                    ${isActive 
-                      ? 'bg-amber-100 text-amber-800 border border-amber-300' 
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-transparent'
-                    }
-                  `}
+            {/* Tools Dropdown Menu */}
+            <div className="relative" ref={toolsMenuRef}>
+              <button
+                onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)}
+                aria-expanded={isToolsMenuOpen}
+                aria-haspopup="true"
+                aria-label="Tools menu"
+                className={`
+                  flex items-center gap-2 px-3 py-2 my-1 text-sm font-medium whitespace-nowrap 
+                  rounded-md transition-colors focus:outline-none focus-visible:ring-2 
+                  focus-visible:ring-amber-500 focus-visible:ring-offset-2
+                  ${isUtilityToolActive || isToolsMenuOpen
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300' 
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-transparent'
+                  }
+                `}
+              >
+                <Wrench className="w-4 h-4" aria-hidden="true" />
+                <span>Tools</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isToolsMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {isToolsMenuOpen && (
+                <div 
+                  className="absolute right-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+                  role="menu"
+                  aria-orientation="vertical"
+                  aria-labelledby="tools-menu-button"
                 >
-                  <Icon className="w-4 h-4" aria-hidden="true" />
-                  <span>{tab.label}</span>
-                </button>
-              )
-            })}
+                  <div className="px-3 py-2 border-b border-gray-100">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Utility Tools</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Standalone tools, not part of bid flow</p>
+                  </div>
+                  
+                  {utilityTools.map((tool) => {
+                    const Icon = tool.icon
+                    const isActive = activeUtilityTool === tool.id
+                    
+                    return (
+                      <button
+                        key={tool.id}
+                        role="menuitem"
+                        onClick={() => handleUtilityToolSelect(tool.id)}
+                        className={`
+                          w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors
+                          ${isActive 
+                            ? 'bg-amber-50 text-amber-800' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                          }
+                        `}
+                      >
+                        <Icon className={`w-4 h-4 ${isActive ? 'text-amber-600' : 'text-gray-400'}`} aria-hidden="true" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{tool.label}</p>
+                          <p className="text-xs text-gray-500 truncate">{tool.description}</p>
+                        </div>
+                        {isActive && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700">
+                            Active
+                          </Badge>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </nav>
+
+      {/* Utility Tool Header Bar - shown when a utility tool is active */}
+      {isUtilityToolActive && (
+        <div className="bg-amber-50 border-b border-amber-200">
+          <div className="container mx-auto px-6 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300">
+                <Wrench className="w-3 h-3 mr-1" aria-hidden="true" />
+                Utility Tool
+              </Badge>
+              <span className="text-sm font-medium text-amber-900">
+                {utilityTools.find(t => t.id === activeUtilityTool)?.label}
+              </span>
+              <span className="text-xs text-amber-700">
+                — Not part of bid workflow
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBackToMainFlow}
+              className="text-amber-700 hover:text-amber-900 hover:bg-amber-100"
+            >
+              <ChevronRight className="w-4 h-4 mr-1 rotate-180" aria-hidden="true" />
+              Back to Bid Flow
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Solicitation Bar - Own row below tabs */}
       {showSolicitationBar && (
@@ -473,7 +588,7 @@ export function TabsNavigation() {
                         <dt className="text-xs text-gray-600">Annual Increases</dt>
                         <dd className="text-sm font-semibold text-gray-900">
                           {(solicitation.pricingSettings?.escalationEnabled ?? true) 
-                            ? `Labor ${solicitation.pricingSettings?.laborEscalation ?? 3}%, ODCs ${solicitation.pricingSettings?.odcEscalation ?? 2}%`
+                            ? `Labor ${solicitation.pricingSettings?.laborEscalation ?? 3}%, ODCs ${solicitation.pricingSettings?.odcEscalation ?? 0}%`
                             : 'None'
                           }
                         </dd>
@@ -658,24 +773,25 @@ export function TabsNavigation() {
 
       {/* Tab Content */}
       <main className="container mx-auto px-6 py-6">
-        {/* Main Bid Flow */}
-        <div
-          role="tabpanel"
-          id={`tabpanel-${activeTab}`}
-          aria-labelledby={`tab-${activeTab}`}
-          tabIndex={0}
-        >
-          {activeTab === 'upload' && <UploadTab onContinue={() => handleTabChange('roles')} />}
-          {activeTab === 'roles' && <RolesAndPricingTab />}
-          {activeTab === 'estimate' && <EstimateTab />}
-          {activeTab === 'rate-justification' && <RateJustificationTab />}
-        {activeTab === 'teaming-partners' && <TeamingPartnersTab />}    
-          {activeTab === 'export' && <ExportTab />}
-          
-          {/* Utility Tools */}
-          {activeTab === 'gsa-bid' && <GSABidTab />}
-          {activeTab === 'sub-rates' && <SubRatesTab />}
-        </div>
+        {/* Utility Tools (shown when active) */}
+        {activeUtilityTool === 'sub-rates' && <SubRatesTab />}
+        
+        {/* Main Bid Flow (hidden when utility tool is active) */}
+        {!isUtilityToolActive && (
+          <div
+            role="tabpanel"
+            id={`tabpanel-${activeTab}`}
+            aria-labelledby={`tab-${activeTab}`}
+            tabIndex={0}
+          >
+            {activeTab === 'upload' && <UploadTab onContinue={() => handleTabChange('estimate')} />}
+            {activeTab === 'estimate' && <EstimateTab />}
+            {activeTab === 'roles' && <RolesAndPricingTab />}
+            {activeTab === 'rate-justification' && <RateJustificationTab />}
+            {activeTab === 'teaming-partners' && <TeamingPartnersTab />}
+            {activeTab === 'export' && <ExportTab />}
+          </div>
+        )}
       </main>
     </div>
   )
@@ -837,8 +953,9 @@ function EditSolicitationSlideout({
                   className="w-full h-9 px-3 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Type</option>
-                  <option value="FFP">Firm Fixed Price (FFP)</option>
                   <option value="T&M">Time & Materials (T&M)</option>
+                  <option value="FFP">Firm Fixed Price (FFP)</option>
+                  <option value="GSA">GSA Schedule</option>
                   <option value="CPFF">Cost Plus Fixed Fee (CPFF)</option>
                   <option value="CPAF">Cost Plus Award Fee (CPAF)</option>
                   <option value="IDIQ">IDIQ</option>
@@ -1106,11 +1223,11 @@ function EditSolicitationSlideout({
                         min="0"
                         max="10"
                         step="0.5"
-                        value={solicitation?.pricingSettings?.odcEscalation ?? 2}
+                        value={solicitation?.pricingSettings?.odcEscalation ?? 0}
                         onChange={(e) => updateSolicitation({ 
                           pricingSettings: { 
                             ...solicitation?.pricingSettings,
-                            odcEscalation: parseFloat(e.target.value) || 2
+                            odcEscalation: parseFloat(e.target.value) || 0
                           }
                         })}
                         placeholder="2"
@@ -1132,7 +1249,7 @@ function EditSolicitationSlideout({
                 </span>
                 {(solicitation?.pricingSettings?.escalationEnabled ?? true) ? (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
-                    +{solicitation?.pricingSettings?.laborEscalation ?? 3}% labor, +{solicitation?.pricingSettings?.odcEscalation ?? 2}% ODCs yearly
+                    +{solicitation?.pricingSettings?.laborEscalation ?? 3}% labor, +{solicitation?.pricingSettings?.odcEscalation ?? 0}% ODCs yearly
                   </span>
                 ) : (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
