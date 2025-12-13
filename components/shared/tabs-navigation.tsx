@@ -19,6 +19,7 @@ import {
   HelpCircle,
   Wrench,
   ChevronRight,
+  ChevronLeft,
   History,
   Save,
   RotateCcw,
@@ -277,6 +278,9 @@ export function TabsNavigation() {
   // Show solicitation bar on main bid flow tabs (not upload, not utility tools)
   const showSolicitationBar = !isUtilityToolActive && activeTab !== 'upload' && solicitation?.solicitationNumber
 
+  // Get proposal display name
+  const proposalName = solicitation?.title || solicitation?.solicitationNumber || 'New Proposal'
+
   // ==================== RENDER ====================
 
   return (
@@ -290,9 +294,39 @@ export function TabsNavigation() {
         aria-atomic="true"
       />
 
+      {/* Breadcrumb Header */}
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50 shrink-0">
+        <div className="container mx-auto px-4 md:px-6">
+          <div className="flex items-center justify-between h-12">
+            {/* Left: Breadcrumb */}
+            <nav className="flex items-center gap-2 min-w-0" aria-label="Breadcrumb">
+              <a 
+                href="/"
+                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors shrink-0"
+              >
+                <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+                <span>Dashboard</span>
+              </a>
+              <span className="text-gray-300 dark:text-gray-600" aria-hidden="true">/</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                {proposalName}
+              </span>
+            </nav>
+
+            {/* Right: Status indicator */}
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
+                Saved
+              </span>
+            </div>
+          </div>
+        </div>
+      </header>
+
       {/* Tab Navigation */}
       <nav 
-        className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 sticky top-12 md:top-14 z-40 shrink-0"
+        className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 sticky top-12 z-40 shrink-0"
         role="navigation"
         aria-label="Main navigation"
       >

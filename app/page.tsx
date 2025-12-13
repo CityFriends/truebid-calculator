@@ -1,9 +1,6 @@
-import { TabsNavigation } from '@/components/shared/tabs-navigation'
+// app/page.tsx
+import { Dashboard } from '@/components/dashboard'
 
 export default function Home() {
-  return (
-    <main>
-      <TabsNavigation />
-    </main>
-  )
+  return <Dashboard />
 }

@@ -3,7 +3,7 @@ import { GeistSans } from 'geist/font/sans'
 import './globals.css'
 import { AppProvider } from '@/contexts/app-context'
 import { ThemeProvider } from '@/components/shared/theme-provider'
-import { Header } from '@/components/shared/header'
+import { AppHeader } from '@/components/shared/app-header'  // ← Changed
 import { Footer } from '@/components/shared/footer'
 
 export const metadata: Metadata = {
@@ -21,7 +21,7 @@ export default function RootLayout({
       <body className={`${GeistSans.className} min-h-screen flex flex-col`}>
         <ThemeProvider>
           <AppProvider>
-            <Header />
+            <AppHeader />  {/* ← Changed */}
             <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950">
               {children}
             </div>
