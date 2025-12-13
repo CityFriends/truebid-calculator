@@ -1,23 +1,72 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useAppContext } from '@/contexts/app-context'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Shield, AlertTriangle, CheckCircle, XCircle, Calculator, Info, TrendingDown, TrendingUp, DollarSign, Users, Pencil, Clock, Calendar } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { 
+  Plus, 
+  Trash2, 
+  Pencil, 
+  X,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Clock,
+  Calendar,
+  Building2,
+  ChevronRight,
+  Target,
+  Info,
+  Copy,
+  Mail,
+  MessageSquare,
+  Search,
+  Filter,
+  Users,
+  FileText,
+  Check
+} from 'lucide-react'
 
-// Prime offer interface with year-by-year breakdown
+// ============================================================================
+// TYPES
+// ============================================================================
+
+interface NegotiationEntry {
+  id: string
+  date: string
+  type: 'prime-offer' | 'our-counter' | 'prime-counter' | 'accepted' | 'declined' | 'lost'
+  rate: number
+  notes: string
+}
+
 interface YearBreakdown {
   year: number
   salary: number
   loadedRate: number
   offeredRate: number
-  hourlyMargin: number
   annualProfit: number
   isProfitable: boolean
 }
@@ -35,27 +84,1127 @@ interface PrimeOffer {
   startingSalary: number
   contractYears: number
   hoursPerYear: number
+  // Current rate (latest in negotiation)
   offeredRate: number
+  // Negotiation history
+  negotiationHistory: NegotiationEntry[]
+  // Calculated fields (based on current rate)
   yearBreakdowns: YearBreakdown[]
   totalProfit: number
   avgMarginPercent: number
   isProfitable: boolean
+  breakEvenRate: number
+  targetMarginRate: number
+  // Tracking
+  notes: string
+  outcome: 'pending' | 'accepted' | 'countered' | 'declined' | 'lost'
+  createdAt: string
 }
 
-// Currency formatter
-const formatCurrency = (amount: number): string => {
-  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const HOURS_PRESETS = [
+  { label: '1.0 FTE', value: 1920, description: 'Full-time actual' },
+  { label: '0.9 FTE', value: 1880, description: 'Reduced availability' },
+  { label: '0.5 FTE', value: 960, description: 'Half-time' },
+  { label: '0.25 FTE', value: 520, description: 'Quarter-time' },
+]
+
+const OUTCOME_CONFIG = {
+  pending: { label: 'Pending', emoji: '⏳', color: 'bg-gray-100 text-gray-700 border-gray-200' },
+  countered: { label: 'Countered', emoji: '↩️', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  accepted: { label: 'Won', emoji: '✅', color: 'bg-green-50 text-green-700 border-green-200' },
+  declined: { label: 'Passed', emoji: '❌', color: 'bg-gray-100 text-gray-600 border-gray-200' },
+  lost: { label: 'Lost', emoji: '😞', color: 'bg-red-50 text-red-700 border-red-200' },
 }
 
-const formatCurrencyShort = (amount: number): string => {
-  if (Math.abs(amount) >= 1000000) {
-    return `$${(amount / 1000000).toFixed(1)}M`
-  }
-  if (Math.abs(amount) >= 1000) {
-    return `$${(amount / 1000).toFixed(0)}k`
-  }
-  return `$${amount.toFixed(0)}`
+const NEGOTIATION_TYPE_CONFIG = {
+  'prime-offer': { label: 'Prime offered', emoji: '📥', color: 'text-gray-700' },
+  'our-counter': { label: 'We countered', emoji: '📤', color: 'text-blue-700' },
+  'prime-counter': { label: 'Prime countered', emoji: '📥', color: 'text-gray-700' },
+  'accepted': { label: 'Accepted', emoji: '✅', color: 'text-green-700' },
+  'declined': { label: 'Declined', emoji: '❌', color: 'text-gray-600' },
+  'lost': { label: 'Lost', emoji: '😞', color: 'text-red-700' },
 }
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+const formatCurrency = (amount: number) => 
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount)
+
+const formatRate = (rate: number) => 
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rate) + '/hr'
+
+function getVerdict(offer: PrimeOffer): { text: string; description: string; color: string } {
+  if (offer.isProfitable && offer.avgMarginPercent >= 8) {
+    return { text: 'Good deal', description: 'Meets target margin', color: 'bg-green-50 text-green-700 border-green-200' }
+  } else if (offer.isProfitable) {
+    return { text: 'Below target', description: 'Covers costs but low profit', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' }
+  } else {
+    return { text: 'Loses money', description: "Doesn't cover costs", color: 'bg-red-50 text-red-700 border-red-200' }
+  }
+}
+
+// ============================================================================
+// OFFER CARD COMPONENT
+// ============================================================================
+
+interface OfferCardProps {
+  offer: PrimeOffer
+  onClick: () => void
+  onEdit: () => void
+  onDelete: () => void
+}
+
+function OfferCard({ offer, onClick, onEdit, onDelete }: OfferCardProps) {
+  const verdict = getVerdict(offer)
+  const profitableYears = offer.yearBreakdowns.filter(yb => yb.isProfitable).length
+  const roundCount = offer.negotiationHistory?.length || 0
+  const lastEntry = offer.negotiationHistory?.[0] // Most recent first
+  
+  // Format last activity date
+  const formatLastActivity = () => {
+    if (!lastEntry) return null
+    const date = new Date(lastEntry.date)
+    const now = new Date()
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+    if (diffDays === 0) return 'Today'
+    if (diffDays === 1) return 'Yesterday'
+    if (diffDays < 7) return `${diffDays} days ago`
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  return (
+    <div 
+      className="group bg-white border border-gray-100 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      aria-label={`${offer.primeName} offering ${formatRate(offer.offeredRate)} for ${offer.roleTitle}. ${verdict.text}.`}
+    >
+      {/* Status Banner - Top of card */}
+      {offer.outcome !== 'pending' && (
+        <div className={`px-4 py-2 border-b ${OUTCOME_CONFIG[offer.outcome].color} flex items-center justify-between`}>
+          <span className="text-sm font-medium flex items-center gap-1.5">
+            {OUTCOME_CONFIG[offer.outcome].emoji} {OUTCOME_CONFIG[offer.outcome].label}
+          </span>
+          {lastEntry && (
+            <span className="text-xs opacity-75">{formatLastActivity()}</span>
+          )}
+        </div>
+      )}
+
+      {/* Card Header */}
+      <div className="px-4 py-3 border-b border-gray-100">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <span className="text-sm font-semibold text-gray-900 truncate">{offer.primeName}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>{offer.roleTitle}</span>
+              <span>•</span>
+              <span>{offer.level} {offer.levelName}</span>
+            </div>
+          </div>
+          <div className="flex gap-1">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={(e) => { e.stopPropagation(); onEdit() }} 
+              className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+              aria-label="Edit offer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={(e) => { e.stopPropagation(); onDelete() }} 
+              className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Delete offer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Card Body */}
+      <div className="px-4 py-3">
+        {/* Verdict badge - only show if pending (otherwise status banner is visible) */}
+        {offer.outcome === 'pending' && (
+          <div className="flex items-center gap-2 mb-3">
+            <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${verdict.color}`}>
+              {verdict.text}
+            </Badge>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4 mb-3">
+          <div>
+            <div className="text-xs text-gray-500 mb-0.5">Current rate</div>
+            <div className="text-sm font-semibold text-gray-900">{formatRate(offer.offeredRate)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 mb-0.5">Target</div>
+            <div className={`text-sm font-semibold ${offer.isProfitable ? 'text-green-600' : 'text-red-600'}`}>
+              {formatRate(offer.targetMarginRate)}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-gray-500">
+            {offer.contractYears} yr × {offer.hoursPerYear.toLocaleString()} hrs
+          </span>
+          <span className={`font-semibold ${offer.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {offer.totalProfit >= 0 ? '+' : ''}{formatCurrency(offer.totalProfit)}
+          </span>
+        </div>
+      </div>
+
+      {/* Card Footer - Activity & Issues */}
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center gap-3">
+          {roundCount > 0 && (
+            <span className="flex items-center gap-1">
+              <MessageSquare className="w-3 h-3" />
+              {roundCount} {roundCount === 1 ? 'round' : 'rounds'}
+            </span>
+          )}
+          {offer.notes && (
+            <span className="flex items-center gap-1">
+              <FileText className="w-3 h-3" />
+              Notes
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {profitableYears < offer.contractYears && (
+            <span className="flex items-center gap-1 text-yellow-600">
+              <AlertTriangle className="w-3 h-3" />
+              {profitableYears}/{offer.contractYears} yrs
+            </span>
+          )}
+          {offer.hoursPerYear < 2080 && (
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {Math.round((offer.hoursPerYear / 2080) * 100)}%
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// OFFER SLIDEOUT PANEL
+// ============================================================================
+
+interface OfferSlideoutProps {
+  offer: PrimeOffer
+  isOpen: boolean
+  onClose: () => void
+  onUpdate: (updates: Partial<PrimeOffer>) => void
+  onEdit: () => void
+  targetMargin: number
+}
+
+function OfferSlideout({ offer, isOpen, onClose, onUpdate, onEdit, targetMargin }: OfferSlideoutProps) {
+  const [activeTab, setActiveTab] = useState('analysis')
+  const [showEmailDialog, setShowEmailDialog] = useState(false)
+  const [showAddEntryDialog, setShowAddEntryDialog] = useState(false)
+  const [copied, setCopied] = useState(false)
+  
+  // Local tracking state
+  const [localNotes, setLocalNotes] = useState(offer.notes || '')
+  const [localOutcome, setLocalOutcome] = useState(offer.outcome || 'pending')
+  const [localHistory, setLocalHistory] = useState<NegotiationEntry[]>(offer.negotiationHistory || [])
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  // New entry form state
+  const [newEntryType, setNewEntryType] = useState<NegotiationEntry['type']>('prime-counter')
+  const [newEntryRate, setNewEntryRate] = useState('')
+  const [newEntryNotes, setNewEntryNotes] = useState('')
+
+  // Reset local state when offer changes
+  useEffect(() => {
+    setLocalNotes(offer.notes || '')
+    setLocalOutcome(offer.outcome || 'pending')
+    setLocalHistory(offer.negotiationHistory || [])
+    setHasUnsavedChanges(false)
+  }, [offer.id, offer.notes, offer.outcome, offer.negotiationHistory])
+
+  // Track unsaved changes
+  useEffect(() => {
+    const notesChanged = localNotes !== (offer.notes || '')
+    const outcomeChanged = localOutcome !== (offer.outcome || 'pending')
+    const historyChanged = JSON.stringify(localHistory) !== JSON.stringify(offer.negotiationHistory || [])
+    setHasUnsavedChanges(notesChanged || outcomeChanged || historyChanged)
+  }, [localNotes, localOutcome, localHistory, offer.notes, offer.outcome, offer.negotiationHistory])
+
+  const verdict = getVerdict(offer)
+  const profitableYears = offer.yearBreakdowns.filter(yb => yb.isProfitable).length
+  const utilizationPercent = (offer.hoursPerYear / 2080) * 100
+
+  const handleCopyRate = () => {
+    navigator.clipboard.writeText(offer.targetMarginRate.toFixed(2))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSaveTracking = () => {
+    // Get latest rate from history to update offer
+    const latestRate = localHistory.length > 0 ? localHistory[0].rate : offer.offeredRate
+    onUpdate({ 
+      notes: localNotes, 
+      outcome: localOutcome,
+      negotiationHistory: localHistory,
+      offeredRate: latestRate
+    })
+    setHasUnsavedChanges(false)
+  }
+
+  const handleAddEntry = () => {
+    const rate = parseFloat(newEntryRate)
+    if (!rate || rate <= 0) return
+
+    const newEntry: NegotiationEntry = {
+      id: `entry-${Date.now()}`,
+      date: new Date().toISOString(),
+      type: newEntryType,
+      rate,
+      notes: newEntryNotes
+    }
+    
+    // Add to beginning (most recent first)
+    setLocalHistory([newEntry, ...localHistory])
+    
+    // Auto-update status based on entry type
+    if (newEntryType === 'accepted') {
+      setLocalOutcome('accepted')
+    } else if (newEntryType === 'declined') {
+      setLocalOutcome('declined')
+    } else if (newEntryType === 'lost') {
+      setLocalOutcome('lost')
+    } else if (newEntryType === 'our-counter' || newEntryType === 'prime-counter') {
+      setLocalOutcome('countered')
+    }
+    
+    // Reset form
+    setNewEntryType('prime-counter')
+    setNewEntryRate('')
+    setNewEntryNotes('')
+    setShowAddEntryDialog(false)
+  }
+
+  const handleDeleteEntry = (entryId: string) => {
+    setLocalHistory(localHistory.filter(e => e.id !== entryId))
+  }
+
+  const emailBody = `Hi,
+
+Thank you for considering our team for the ${offer.roleTitle} position on this effort.
+
+After reviewing the proposed rate of ${formatRate(offer.offeredRate)}, we'd like to discuss adjusting to ${formatRate(offer.targetMarginRate)} to account for our fully-loaded labor costs over the ${offer.contractYears}-year period of performance.
+
+This rate reflects annual salary progression and ensures we can provide the continuity and quality you expect throughout the contract.
+
+Happy to discuss at your convenience.
+
+Best regards`
+
+  if (!isOpen) return null
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} aria-hidden="true" />
+      <div 
+        className="fixed inset-y-0 right-0 w-[750px] bg-white shadow-2xl z-50 overflow-hidden flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="slideout-title"
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Building2 className="w-5 h-5 text-gray-400" />
+                <h3 id="slideout-title" className="text-lg font-semibold text-gray-900">{offer.primeName}</h3>
+                {/* Tracking status badge in header */}
+                {offer.outcome !== 'pending' && (
+                  <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${OUTCOME_CONFIG[offer.outcome].color}`}>
+                    {OUTCOME_CONFIG[offer.outcome].emoji} {OUTCOME_CONFIG[offer.outcome].label}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${verdict.color}`}>
+                  {verdict.text}
+                </Badge>
+                <span className="text-sm text-gray-600">{offer.roleTitle} • {offer.level}</span>
+                <span className="text-sm font-semibold text-gray-900 ml-auto">{formatRate(offer.offeredRate)}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={onEdit} className="h-8">
+                <Pencil className="w-4 h-4 mr-1" />
+                Edit
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onClose} className="text-2xl leading-none h-8 w-8 p-0" aria-label="Close panel">
+                ×
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="analysis" className="text-xs">Analysis</TabsTrigger>
+              <TabsTrigger value="breakdown" className="text-xs">Year Breakdown</TabsTrigger>
+              <TabsTrigger value="tracking" className="text-xs">
+                Tracking
+                {hasUnsavedChanges ? (
+                  <Badge variant="destructive" className="ml-1 text-[10px] px-1 py-0 h-4">•</Badge>
+                ) : offer.outcome !== 'pending' ? (
+                  <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 h-4">
+                    {OUTCOME_CONFIG[offer.outcome].emoji}
+                  </Badge>
+                ) : null}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* ANALYSIS TAB */}
+            <TabsContent value="analysis" className="space-y-6">
+              {/* Verdict Banner */}
+              <div className={`p-4 rounded-lg border ${
+                offer.isProfitable 
+                  ? 'bg-green-50 border-green-200' 
+                  : 'bg-red-50 border-red-200'
+              }`}>
+                <div className="flex items-start gap-3">
+                  {offer.isProfitable ? (
+                    <CheckCircle2 className="w-8 h-8 text-green-600 flex-shrink-0" />
+                  ) : (
+                    <XCircle className="w-8 h-8 text-red-600 flex-shrink-0" />
+                  )}
+                  <div className="flex-1">
+                    <h4 className={`text-lg font-semibold ${offer.isProfitable ? 'text-green-800' : 'text-red-800'}`}>
+                      {verdict.text}
+                    </h4>
+                    <p className={`text-sm ${offer.isProfitable ? 'text-green-700' : 'text-red-700'}`}>
+                      {offer.isProfitable 
+                        ? `This offer generates ${formatCurrency(offer.totalProfit)} profit over ${offer.contractYears} years.`
+                        : `This offer loses ${formatCurrency(Math.abs(offer.totalProfit))} over ${offer.contractYears} years.`
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Counter Rate Recommendations */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900">Counter rate recommendations</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="text-xs text-gray-500 mb-1">Break-even rate</div>
+                    <div className="text-xl font-bold text-gray-900">{formatRate(offer.breakEvenRate)}</div>
+                    <div className="text-xs text-gray-500 mt-1">Covers costs, zero profit</div>
+                  </div>
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="text-xs text-blue-600 mb-1">Recommended rate</div>
+                    <div className="text-xl font-bold text-blue-700">{formatRate(offer.targetMarginRate)}</div>
+                    <div className="text-xs text-blue-600 mt-1">Includes {(targetMargin * 100).toFixed(0)}% profit</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Advice */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-amber-800">
+                    {offer.offeredRate >= offer.targetMarginRate ? (
+                      <>Their rate of <strong>{formatRate(offer.offeredRate)}</strong> is good — it covers your costs plus profit.</>
+                    ) : offer.offeredRate >= offer.breakEvenRate ? (
+                      <>Their rate of <strong>{formatRate(offer.offeredRate)}</strong> only covers costs. Ask for <strong>{formatRate(offer.targetMarginRate)}</strong> to make a profit.</>
+                    ) : (
+                      <>Their rate of <strong>{formatRate(offer.offeredRate)}</strong> loses you money. Ask for at least <strong>{formatRate(offer.breakEvenRate)}</strong> to break even, or <strong>{formatRate(offer.targetMarginRate)}</strong> to profit.</>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleCopyRate} className="flex-1">
+                  {copied ? (
+                    <><Check className="w-4 h-4 mr-2 text-green-600" />Copied!</>
+                  ) : (
+                    <><Copy className="w-4 h-4 mr-2" />Copy Rate</>
+                  )}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowEmailDialog(true)} className="flex-1">
+                  <Mail className="w-4 h-4 mr-2" />
+                  Draft Email
+                </Button>
+              </div>
+
+              {/* Utilization Warning */}
+              {utilizationPercent < 100 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <Clock className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-900">Partial workload: {utilizationPercent.toFixed(0)}%</p>
+                      <p className="text-xs text-blue-800 mt-1">
+                        They're only buying {offer.hoursPerYear.toLocaleString()} hours/year. You'll need other work 
+                        to keep this person busy the rest of the time.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Offer Details */}
+              <div className="space-y-3 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-900">Offer details</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div className="text-xs text-gray-500">Role</div>
+                    <div className="font-medium text-gray-900">{offer.roleTitle}</div>
+                    <div className="text-xs text-gray-500">{offer.level} {offer.levelName}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500">Starting salary</div>
+                    <div className="font-medium text-gray-900">{formatCurrency(offer.startingSalary)}/yr</div>
+                    <div className="text-xs text-gray-500">Step {offer.startingStep}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500">Contract duration</div>
+                    <div className="font-medium text-gray-900">{offer.contractYears} years</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500">Hours per year</div>
+                    <div className="font-medium text-gray-900">{offer.hoursPerYear.toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* BREAKDOWN TAB */}
+            <TabsContent value="breakdown" className="space-y-4">
+              <div className="text-xs text-gray-500 mb-2">
+                Your costs go up each year as the employee gets raises. {profitableYears}/{offer.contractYears} years are profitable.
+              </div>
+              
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-600">Year</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-gray-600">Salary</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-gray-600">Your Cost</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-gray-600">They Pay</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-gray-600">You Make</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {offer.yearBreakdowns.map((yb, idx) => (
+                      <tr 
+                        key={yb.year} 
+                        className={`border-b border-gray-100 ${!yb.isProfitable ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                      >
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          Year {yb.year}
+                          {!yb.isProfitable && <span className="ml-1" title="Loses money">⚠️</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600">{formatCurrency(yb.salary)}</td>
+                        <td className="px-4 py-3 text-right text-gray-600">{formatRate(yb.loadedRate)}</td>
+                        <td className="px-4 py-3 text-right text-gray-900">{formatRate(yb.offeredRate)}</td>
+                        <td className={`px-4 py-3 text-right font-medium ${yb.isProfitable ? 'text-green-600' : 'text-red-600'}`}>
+                          {yb.annualProfit >= 0 ? '+' : ''}{formatCurrency(yb.annualProfit)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 border-t border-gray-200">
+                    <tr>
+                      <td className="px-4 py-3 font-semibold text-gray-900" colSpan={4}>Total</td>
+                      <td className={`px-4 py-3 text-right font-bold ${offer.isProfitable ? 'text-green-600' : 'text-red-600'}`}>
+                        {offer.totalProfit >= 0 ? '+' : ''}{formatCurrency(offer.totalProfit)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </TabsContent>
+
+            {/* TRACKING TAB */}
+            <TabsContent value="tracking" className="space-y-6">
+              {/* Unsaved changes banner */}
+              {hasUnsavedChanges && (
+                <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-amber-800">
+                    <AlertTriangle className="w-4 h-4" />
+                    You have unsaved changes
+                  </div>
+                  <Button size="sm" onClick={handleSaveTracking}>
+                    Save Changes
+                  </Button>
+                </div>
+              )}
+
+              {/* Status Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Status</Label>
+                </div>
+                <Select value={localOutcome} onValueChange={(v) => setLocalOutcome(v as PrimeOffer['outcome'])}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">{OUTCOME_CONFIG.pending.emoji} Pending — waiting on response</SelectItem>
+                    <SelectItem value="countered">{OUTCOME_CONFIG.countered.emoji} In Negotiation</SelectItem>
+                    <SelectItem value="accepted">{OUTCOME_CONFIG.accepted.emoji} Won — deal closed</SelectItem>
+                    <SelectItem value="declined">{OUTCOME_CONFIG.declined.emoji} Passed — we declined</SelectItem>
+                    <SelectItem value="lost">{OUTCOME_CONFIG.lost.emoji} Lost — they went elsewhere</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Negotiation History */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Negotiation History</Label>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setShowAddEntryDialog(true)}
+                    className="h-7 text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add Update
+                  </Button>
+                </div>
+                
+                {localHistory.length === 0 ? (
+                  <div className="text-center py-6 bg-gray-50 border border-gray-200 rounded-lg">
+                    <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">No history yet</p>
+                    <p className="text-xs text-gray-400 mt-1">Add entries as the negotiation progresses</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {localHistory.map((entry, idx) => (
+                      <div 
+                        key={entry.id}
+                        className={`p-3 border rounded-lg ${
+                          entry.type === 'accepted' ? 'bg-green-50 border-green-200' :
+                          entry.type === 'declined' || entry.type === 'lost' ? 'bg-gray-50 border-gray-200' :
+                          entry.type === 'our-counter' ? 'bg-blue-50 border-blue-200' :
+                          'bg-white border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-medium ${NEGOTIATION_TYPE_CONFIG[entry.type].color}`}>
+                              {NEGOTIATION_TYPE_CONFIG[entry.type].emoji} {NEGOTIATION_TYPE_CONFIG[entry.type].label}
+                            </span>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {formatRate(entry.rate)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteEntry(entry.id)}
+                              className="h-6 w-6 p-0 text-gray-400 hover:text-red-600"
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                        {entry.notes && (
+                          <p className="text-xs text-gray-600 mt-1">{entry.notes}</p>
+                        )}
+                        {idx === 0 && entry.type !== 'accepted' && entry.type !== 'declined' && entry.type !== 'lost' && (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <span className={`text-xs ${
+                              entry.rate >= offer.targetMarginRate ? 'text-green-600' : 
+                              entry.rate >= offer.breakEvenRate ? 'text-yellow-600' : 
+                              'text-red-600'
+                            }`}>
+                              {entry.rate >= offer.targetMarginRate ? '✓ Meets target margin' : 
+                               entry.rate >= offer.breakEvenRate ? '⚠ Profitable but below target' : 
+                               '✗ Below break-even'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* General Notes */}
+              <div className="space-y-2">
+                <Label htmlFor="notes" className="text-sm font-medium">General Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={localNotes}
+                  onChange={(e) => setLocalNotes(e.target.value)}
+                  placeholder="Overall notes about this opportunity..."
+                  rows={3}
+                />
+              </div>
+
+              {/* Save button at bottom */}
+              <div className="pt-4 border-t border-gray-200">
+                <Button 
+                  onClick={handleSaveTracking} 
+                  disabled={!hasUnsavedChanges}
+                  className="w-full"
+                >
+                  {hasUnsavedChanges ? 'Save Changes' : 'Saved'}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+
+      {/* Email Draft Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Counter Offer Email</DialogTitle>
+            <DialogDescription>Copy this template and customize for your email.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500">Subject</Label>
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                Re: {offer.roleTitle} Rate Discussion
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500">Body</Label>
+              <Textarea
+                value={emailBody}
+                readOnly
+                rows={12}
+                className="text-sm font-mono"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmailDialog(false)}>Close</Button>
+            <Button onClick={() => {
+              navigator.clipboard.writeText(emailBody)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2000)
+            }}>
+              {copied ? <><Check className="w-4 h-4 mr-2" />Copied!</> : <><Copy className="w-4 h-4 mr-2" />Copy to Clipboard</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Entry Dialog */}
+      <Dialog open={showAddEntryDialog} onOpenChange={setShowAddEntryDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Negotiation Update</DialogTitle>
+            <DialogDescription>Record a rate change or negotiation milestone.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">What happened?</Label>
+              <Select value={newEntryType} onValueChange={(v) => setNewEntryType(v as NegotiationEntry['type'])}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="prime-counter">📥 Prime countered with new rate</SelectItem>
+                  <SelectItem value="our-counter">📤 We countered with new rate</SelectItem>
+                  <SelectItem value="accepted">✅ Accepted / Deal won</SelectItem>
+                  <SelectItem value="declined">❌ We declined</SelectItem>
+                  <SelectItem value="lost">😞 Lost to competitor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {newEntryType === 'accepted' ? 'Final agreed rate' : 
+                 newEntryType === 'our-counter' ? 'Rate we proposed' :
+                 newEntryType === 'declined' || newEntryType === 'lost' ? 'Last offered rate' :
+                 'Rate they offered'}
+              </Label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  type="number"
+                  value={newEntryRate}
+                  onChange={(e) => setNewEntryRate(e.target.value)}
+                  className="pl-9 pr-12"
+                  placeholder={offer.targetMarginRate.toFixed(2)}
+                  step="0.01"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">/hr</span>
+              </div>
+              {newEntryRate && parseFloat(newEntryRate) > 0 && (
+                <p className={`text-xs mt-1 ${
+                  parseFloat(newEntryRate) >= offer.targetMarginRate ? 'text-green-600' : 
+                  parseFloat(newEntryRate) >= offer.breakEvenRate ? 'text-yellow-600' : 
+                  'text-red-600'
+                }`}>
+                  {parseFloat(newEntryRate) >= offer.targetMarginRate ? '✓ Meets target margin' : 
+                   parseFloat(newEntryRate) >= offer.breakEvenRate ? '⚠ Profitable but below target' : 
+                   '✗ Below break-even — loses money'}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Notes (optional)</Label>
+              <Textarea
+                value={newEntryNotes}
+                onChange={(e) => setNewEntryNotes(e.target.value)}
+                placeholder="Any context about this update..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddEntryDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={handleAddEntry}
+              disabled={!newEntryRate || parseFloat(newEntryRate) <= 0}
+            >
+              Add Update
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+// ============================================================================
+// ADD/EDIT OFFER DIALOG
+// ============================================================================
+
+interface OfferFormDialogProps {
+  isOpen: boolean
+  onClose: () => void
+  onSave: (offer: PrimeOffer) => void
+  editingOffer?: PrimeOffer | null
+  companyRoles: any[]
+  calculateOffer: (params: any) => any
+}
+
+function OfferFormDialog({ isOpen, onClose, onSave, editingOffer, companyRoles, calculateOffer }: OfferFormDialogProps) {
+  const [primeName, setPrimeName] = useState('')
+  const [roleId, setRoleId] = useState('')
+  const [levelIndex, setLevelIndex] = useState<number | null>(null)
+  const [stepIndex, setStepIndex] = useState<number | null>(null)
+  const [contractYears, setContractYears] = useState(3)
+  const [hoursPerYear, setHoursPerYear] = useState(1920)
+  const [offeredRate, setOfferedRate] = useState(150)
+
+  // Reset form when editing offer changes
+  useEffect(() => {
+    if (editingOffer) {
+      setPrimeName(editingOffer.primeName)
+      setRoleId(editingOffer.roleId)
+      setLevelIndex(editingOffer.levelIndex)
+      setStepIndex(editingOffer.startingStepIndex)
+      setContractYears(editingOffer.contractYears)
+      setHoursPerYear(editingOffer.hoursPerYear)
+      setOfferedRate(editingOffer.offeredRate)
+    } else {
+      setPrimeName('')
+      setRoleId('')
+      setLevelIndex(null)
+      setStepIndex(null)
+      setContractYears(3)
+      setHoursPerYear(1880)
+      setOfferedRate(150)
+    }
+  }, [editingOffer, isOpen])
+
+  const selectedRole = companyRoles.find((r: any) => r.id === roleId)
+  const selectedLevel = selectedRole?.levels?.[levelIndex ?? -1]
+  const selectedStep = selectedLevel?.steps?.[stepIndex ?? -1]
+
+  const preview = useMemo(() => {
+    if (!selectedRole || levelIndex === null || stepIndex === null) return null
+    return calculateOffer({
+      role: selectedRole,
+      levelIndex,
+      stepIndex,
+      contractYears,
+      hoursPerYear,
+      offeredRate
+    })
+  }, [selectedRole, levelIndex, stepIndex, contractYears, hoursPerYear, offeredRate, calculateOffer])
+
+  const handleSave = () => {
+    if (!selectedRole || levelIndex === null || stepIndex === null || !preview) return
+    
+    const level = selectedRole.levels[levelIndex]
+    const step = level.steps[stepIndex]
+    
+    // If creating new offer, add initial entry to negotiation history
+    const existingHistory = editingOffer?.negotiationHistory || []
+    const initialHistory: NegotiationEntry[] = existingHistory.length === 0 ? [{
+      id: `entry-${Date.now()}`,
+      date: new Date().toISOString(),
+      type: 'prime-offer',
+      rate: offeredRate,
+      notes: 'Initial offer'
+    }] : existingHistory
+    
+    const offer: PrimeOffer = {
+      id: editingOffer?.id || `offer-${Date.now()}`,
+      primeName,
+      roleTitle: selectedRole.title,
+      roleId,
+      level: level.level,
+      levelIndex,
+      levelName: level.levelName,
+      startingStep: step.step,
+      startingStepIndex: stepIndex,
+      startingSalary: step.salary,
+      notes: editingOffer?.notes || '',
+      outcome: editingOffer?.outcome || 'pending',
+      negotiationHistory: initialHistory,
+      createdAt: editingOffer?.createdAt || new Date().toISOString(),
+      ...preview
+    }
+    
+    onSave(offer)
+    onClose()
+  }
+
+  const canSave = primeName && selectedRole && levelIndex !== null && stepIndex !== null
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{editingOffer ? 'Edit' : 'Analyze'} Prime Offer</DialogTitle>
+          <DialogDescription>
+            Enter the details of the prime contractor's offer to see if it covers your costs.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          {/* Section 1: Who */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+              <Building2 className="w-4 h-4 text-gray-400" />
+              Who's making the offer?
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="prime-name">Prime contractor name <span className="text-red-500">*</span></Label>
+              <Input
+                id="prime-name"
+                value={primeName}
+                onChange={(e) => setPrimeName(e.target.value)}
+                placeholder="e.g., Booz Allen Hamilton"
+              />
+            </div>
+          </div>
+
+          {/* Section 2: What */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+              <Users className="w-4 h-4 text-gray-400" />
+              What role are they buying?
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Role <span className="text-red-500">*</span></Label>
+                <Select value={roleId} onValueChange={(v) => { setRoleId(v); setLevelIndex(null); setStepIndex(null) }}>
+                  <SelectTrigger><SelectValue placeholder="Select role..." /></SelectTrigger>
+                  <SelectContent>
+                    {companyRoles.map((role: any) => (
+                      <SelectItem key={role.id} value={role.id}>{role.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Level <span className="text-red-500">*</span></Label>
+                <Select 
+                  value={levelIndex !== null ? String(levelIndex) : ''} 
+                  onValueChange={(v) => { setLevelIndex(parseInt(v)); setStepIndex(null) }}
+                  disabled={!selectedRole}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select level..." /></SelectTrigger>
+                  <SelectContent>
+                    {selectedRole?.levels?.map((level: any, idx: number) => (
+                      <SelectItem key={idx} value={String(idx)}>{level.level} - {level.levelName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Step <span className="text-red-500">*</span></Label>
+                <Select 
+                  value={stepIndex !== null ? String(stepIndex) : ''} 
+                  onValueChange={(v) => setStepIndex(parseInt(v))}
+                  disabled={!selectedLevel}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select step..." /></SelectTrigger>
+                  <SelectContent>
+                    {selectedLevel?.steps?.map((step: any, idx: number) => (
+                      <SelectItem key={idx} value={String(idx)}>
+                        Step {step.step} - {formatCurrency(step.salary)}/yr
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Contract */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+              <Calendar className="w-4 h-4 text-gray-400" />
+              Contract details
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="years">Contract length (years)</Label>
+                <Input
+                  id="years"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={contractYears}
+                  onChange={(e) => setContractYears(parseInt(e.target.value) || 1)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Hours per year</Label>
+                <div className="flex gap-1">
+                  {HOURS_PRESETS.map((preset) => (
+                    <Tooltip key={preset.value}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant={hoursPerYear === preset.value ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setHoursPerYear(preset.value)}
+                          className="flex-1 text-xs"
+                        >
+                          {preset.label}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{preset.value.toLocaleString()} hrs — {preset.description}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Rate */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+              <DollarSign className="w-4 h-4 text-gray-400" />
+              What are they offering to pay?
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rate">Hourly rate <span className="text-red-500">*</span></Label>
+              <div className="relative max-w-xs">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  id="rate"
+                  type="number"
+                  value={offeredRate}
+                  onChange={(e) => setOfferedRate(parseFloat(e.target.value) || 0)}
+                  className="pl-9 pr-12"
+                  step="0.01"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">/hr</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Live Preview */}
+          {preview && (
+            <div className={`p-4 rounded-lg border ${preview.isProfitable ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  {preview.isProfitable ? (
+                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-600" />
+                  )}
+                  <span className={`font-semibold ${preview.isProfitable ? 'text-green-800' : 'text-red-800'}`}>
+                    {getVerdict({ ...preview, isProfitable: preview.isProfitable } as PrimeOffer).text}
+                  </span>
+                </div>
+                <span className={`text-lg font-bold ${preview.isProfitable ? 'text-green-700' : 'text-red-700'}`}>
+                  {preview.totalProfit >= 0 ? '+' : ''}{formatCurrency(preview.totalProfit)}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <div className="text-xs text-gray-500">Break-even</div>
+                  <div className="font-medium">{formatRate(preview.breakEvenRate)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Target</div>
+                  <div className="font-medium text-blue-700">{formatRate(preview.targetMarginRate)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Offered</div>
+                  <div className="font-medium">{formatRate(offeredRate)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!canSave}>
+            {editingOffer ? 'Save Changes' : 'Analyze Offer'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 
 export function SubRatesTab() {
   const {
@@ -63,961 +1212,298 @@ export function SubRatesTab() {
     calculateLoadedRate,
     calculateYearSalaries,
     costMultipliers,
-    profitMargin,
-    companyPolicy
+    profitMargin
   } = useAppContext()
 
-  // Prime offers state
   const [primeOffers, setPrimeOffers] = useState<PrimeOffer[]>([])
-
-  // Add offer dialog state
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [newPrimeName, setNewPrimeName] = useState('')
-  const [selectedRoleId, setSelectedRoleId] = useState('')
-  const [selectedLevelIndex, setSelectedLevelIndex] = useState<number | null>(null)
-  const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null)
-  const [contractYears, setContractYears] = useState<number>(3)
-  const [hoursPerYear, setHoursPerYear] = useState<number>(1880)
-  const [newOfferedRate, setNewOfferedRate] = useState<number>(150)
-
-  // Edit offer dialog state
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showAddDialog, setShowAddDialog] = useState(false)
   const [editingOffer, setEditingOffer] = useState<PrimeOffer | null>(null)
-  const [editPrimeName, setEditPrimeName] = useState('')
-  const [editRoleId, setEditRoleId] = useState('')
-  const [editLevelIndex, setEditLevelIndex] = useState<number | null>(null)
-  const [editStepIndex, setEditStepIndex] = useState<number | null>(null)
-  const [editContractYears, setEditContractYears] = useState<number>(3)
-  const [editHoursPerYear, setEditHoursPerYear] = useState<number>(1880)
-  const [editOfferedRate, setEditOfferedRate] = useState<number>(150)
 
-  // Get selected role data
-  const selectedRole = companyRoles.find(r => r.id === selectedRoleId)
-  const selectedLevel = selectedLevelIndex !== null ? selectedRole?.levels[selectedLevelIndex] : null
-  const selectedStep = selectedStepIndex !== null ? selectedLevel?.steps[selectedStepIndex] : null
+  const targetMarginPercent = (profitMargin || 10) / 100
 
-  // Calculate year-by-year breakdown
-  const calculateYearBreakdowns = (
-    roleId: string,
-    levelIndex: number,
-    stepIndex: number,
-    years: number,
-    offeredRate: number,
-    hoursPerYr: number
-  ): YearBreakdown[] => {
-    const role = companyRoles.find(r => r.id === roleId)
-    if (!role) return []
-
-    const yearSalaries = calculateYearSalaries(role, levelIndex, stepIndex, years)
+  // Calculate offer from form inputs
+  const calculateOffer = useCallback((params: {
+    role: any
+    levelIndex: number
+    stepIndex: number
+    contractYears: number
+    hoursPerYear: number
+    offeredRate: number
+  }) => {
+    const { role, levelIndex, stepIndex, contractYears, hoursPerYear, offeredRate } = params
     
-    return yearSalaries.map((salary, index) => {
-      const loadedRate = calculateLoadedRate(salary, true)
-      const hourlyMargin = offeredRate - loadedRate
-      const annualProfit = hourlyMargin * hoursPerYr
+    const yearlySalaries = calculateYearSalaries(role, levelIndex, stepIndex, contractYears)
+    
+    const yearBreakdowns: YearBreakdown[] = yearlySalaries.map((salary, idx) => {
+      // calculateLoadedRate takes annual salary and returns HOURLY loaded rate
+      // (It internally divides by 2080 and applies fringe/overhead/G&A)
+      const loadedHourlyRate = calculateLoadedRate(salary, false)
+      
+      // Annual cost = loaded hourly rate × hours worked
+      const annualCost = loadedHourlyRate * hoursPerYear
+      
+      // Annual revenue from prime
+      const annualRevenue = offeredRate * hoursPerYear
+      
+      // Profit = revenue - cost
+      const annualProfit = annualRevenue - annualCost
       
       return {
-        year: index + 1,
+        year: idx + 1,
         salary,
-        loadedRate,
+        loadedRate: loadedHourlyRate,
         offeredRate,
-        hourlyMargin,
         annualProfit,
-        isProfitable: hourlyMargin >= 0
+        isProfitable: annualProfit >= 0
       }
     })
-  }
-
-  const handleAddOffer = () => {
-    if (!newPrimeName.trim() || !selectedRole || selectedLevelIndex === null || selectedStepIndex === null) return
-
-    const yearBreakdowns = calculateYearBreakdowns(
-      selectedRoleId,
-      selectedLevelIndex,
-      selectedStepIndex,
-      contractYears,
-      newOfferedRate,
-      hoursPerYear
-    )
-
+    
     const totalProfit = yearBreakdowns.reduce((sum, yb) => sum + yb.annualProfit, 0)
-    const avgLoadedRate = yearBreakdowns.reduce((sum, yb) => sum + yb.loadedRate, 0) / yearBreakdowns.length
-    const avgMarginPercent = ((newOfferedRate - avgLoadedRate) / avgLoadedRate) * 100
-
-    const newOffer: PrimeOffer = {
-      id: `prime-${Date.now()}`,
-      primeName: newPrimeName,
-      roleTitle: selectedRole.title,
-      roleId: selectedRoleId,
-      level: selectedLevel!.level,
-      levelIndex: selectedLevelIndex,
-      levelName: selectedLevel!.levelName,
-      startingStep: selectedStep!.step,
-      startingStepIndex: selectedStepIndex,
-      startingSalary: selectedStep!.salary,
+    const totalRevenue = offeredRate * hoursPerYear * contractYears
+    const avgMarginPercent = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
+    const isProfitable = yearBreakdowns.every(yb => yb.isProfitable)
+    
+    // Break-even = highest loaded rate across all years (covers worst year)
+    const maxLoadedRate = Math.max(...yearBreakdowns.map(yb => yb.loadedRate))
+    const breakEvenRate = maxLoadedRate
+    const targetMarginRate = maxLoadedRate * (1 + targetMarginPercent)
+    
+    return {
       contractYears,
       hoursPerYear,
-      offeredRate: newOfferedRate,
+      offeredRate,
       yearBreakdowns,
       totalProfit,
       avgMarginPercent,
-      isProfitable: totalProfit >= 0
+      isProfitable,
+      breakEvenRate,
+      targetMarginRate
     }
+  }, [calculateYearSalaries, calculateLoadedRate, targetMarginPercent])
 
-    setPrimeOffers([...primeOffers, newOffer])
+  // Filter offers by tab
+  const filteredOffers = useMemo(() => {
+    let filtered = [...primeOffers]
     
-    // Reset form
-    setNewPrimeName('')
-    setSelectedRoleId('')
-    setSelectedLevelIndex(null)
-    setSelectedStepIndex(null)
-    setContractYears(3)
-    setHoursPerYear(1880)
-    setNewOfferedRate(150)
-    setIsAddDialogOpen(false)
-  }
+    // Search filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      filtered = filtered.filter(o => 
+        o.primeName.toLowerCase().includes(q) || 
+        o.roleTitle.toLowerCase().includes(q)
+      )
+    }
+    
+    // Tab filter
+    switch (activeTab) {
+      case 'profitable':
+        filtered = filtered.filter(o => o.isProfitable)
+        break
+      case 'needs-counter':
+        filtered = filtered.filter(o => !o.isProfitable)
+        break
+    }
+    
+    return filtered
+  }, [primeOffers, activeTab, searchQuery])
 
-  const openEditDialog = (offer: PrimeOffer) => {
-    setEditingOffer(offer)
-    setEditPrimeName(offer.primeName)
-    setEditRoleId(offer.roleId)
-    setEditLevelIndex(offer.levelIndex)
-    setEditStepIndex(offer.startingStepIndex)
-    setEditContractYears(offer.contractYears)
-    setEditHoursPerYear(offer.hoursPerYear)
-    setEditOfferedRate(offer.offeredRate)
-    setIsEditDialogOpen(true)
-  }
+  // Stats
+  const stats = useMemo(() => {
+    const total = primeOffers.length
+    const profitable = primeOffers.filter(o => o.isProfitable).length
+    const needsCounter = total - profitable
+    const totalPL = primeOffers.reduce((sum, o) => sum + o.totalProfit, 0)
+    return { total, profitable, needsCounter, totalPL }
+  }, [primeOffers])
 
-  const handleEditOffer = () => {
-    if (!editingOffer || editLevelIndex === null || editStepIndex === null) return
+  const selectedOffer = primeOffers.find(o => o.id === selectedOfferId)
 
-    const role = companyRoles.find(r => r.id === editRoleId)
-    if (!role) return
-
-    const level = role.levels[editLevelIndex]
-    const step = level?.steps[editStepIndex]
-    if (!level || !step) return
-
-    const yearBreakdowns = calculateYearBreakdowns(
-      editRoleId,
-      editLevelIndex,
-      editStepIndex,
-      editContractYears,
-      editOfferedRate,
-      editHoursPerYear
-    )
-
-    const totalProfit = yearBreakdowns.reduce((sum, yb) => sum + yb.annualProfit, 0)
-    const avgLoadedRate = yearBreakdowns.reduce((sum, yb) => sum + yb.loadedRate, 0) / yearBreakdowns.length
-    const avgMarginPercent = ((editOfferedRate - avgLoadedRate) / avgLoadedRate) * 100
-
-    setPrimeOffers(primeOffers.map(o => 
-      o.id === editingOffer.id 
-        ? {
-            ...o,
-            primeName: editPrimeName,
-            roleId: editRoleId,
-            roleTitle: role.title,
-            level: level.level,
-            levelIndex: editLevelIndex,
-            levelName: level.levelName,
-            startingStep: step.step,
-            startingStepIndex: editStepIndex,
-            startingSalary: step.salary,
-            contractYears: editContractYears,
-            hoursPerYear: editHoursPerYear,
-            offeredRate: editOfferedRate,
-            yearBreakdowns,
-            totalProfit,
-            avgMarginPercent,
-            isProfitable: totalProfit >= 0
-          }
-        : o
-    ))
-
-    setIsEditDialogOpen(false)
+  const handleSaveOffer = (offer: PrimeOffer) => {
+    setPrimeOffers(prev => {
+      const existing = prev.find(o => o.id === offer.id)
+      if (existing) {
+        return prev.map(o => o.id === offer.id ? offer : o)
+      }
+      return [...prev, offer]
+    })
     setEditingOffer(null)
   }
 
-  const removeOffer = (id: string) => {
-    setPrimeOffers(primeOffers.filter(o => o.id !== id))
+  const handleDeleteOffer = (id: string) => {
+    setPrimeOffers(prev => prev.filter(o => o.id !== id))
+    if (selectedOfferId === id) setSelectedOfferId(null)
   }
 
-  // Calculate summary stats
-  const profitableCount = primeOffers.filter(o => o.isProfitable).length
-  const unprofitableCount = primeOffers.filter(o => !o.isProfitable).length
-  const totalProfitAllOffers = primeOffers.reduce((sum, o) => sum + o.totalProfit, 0)
-
-  // Get preview data for add dialog
-  const getPreview = () => {
-    if (!selectedRole || selectedLevelIndex === null || selectedStepIndex === null) return null
-    
-    const yearBreakdowns = calculateYearBreakdowns(
-      selectedRoleId,
-      selectedLevelIndex,
-      selectedStepIndex,
-      contractYears,
-      newOfferedRate,
-      hoursPerYear
-    )
-    
-    if (yearBreakdowns.length === 0) return null
-
-    const totalProfit = yearBreakdowns.reduce((sum, yb) => sum + yb.annualProfit, 0)
-    const avgLoadedRate = yearBreakdowns.reduce((sum, yb) => sum + yb.loadedRate, 0) / yearBreakdowns.length
-    const avgMarginPercent = ((newOfferedRate - avgLoadedRate) / avgLoadedRate) * 100
-
-    return {
-      yearBreakdowns,
-      totalProfit,
-      avgMarginPercent,
-      isProfitable: totalProfit >= 0
-    }
+  const handleUpdateOffer = (id: string, updates: Partial<PrimeOffer>) => {
+    setPrimeOffers(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o))
   }
 
-  const preview = getPreview()
-
-  // Group company roles by labor category for display
-  const rolesByCategory = companyRoles.reduce((acc, role) => {
-    if (!acc[role.laborCategory]) {
-      acc[role.laborCategory] = []
+  // Handle keyboard shortcut to close slideout
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedOfferId) {
+        setSelectedOfferId(null)
+      }
     }
-    acc[role.laborCategory].push(role)
-    return acc
-  }, {} as Record<string, typeof companyRoles>)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectedOfferId])
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h2 className="text-3xl font-bold text-gray-900">Sub Rates</h2>
-            <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
-              Utility Tool
-            </Badge>
-          </div>
-          <p className="text-gray-600">Validate prime contractor offers with step increase projections</p>
-        </div>
-      </div>
-
-      {/* Info Banner */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <Shield className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-amber-900 mb-1">When You're the Subcontractor</p>
-            <p className="text-sm text-amber-800">
-              Compare the prime's offered rate against your fully-loaded costs (calculated using 2,080 hours — your PTO, 
-              holidays, and sick leave are captured in fringe). Hours offered affects total revenue and utilization risk.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Three Column Layout */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* LEFT: Add Prime Offer */}
-        <div className="col-span-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Analyze Prime Offer</CardTitle>
-              <CardDescription>Select role, level, step & contract duration</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="w-full">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Prime Offer
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Analyze Prime Contractor Offer</DialogTitle>
-                    <DialogDescription>
-                      Select role, level, and starting step to see year-by-year profitability
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Prime Contractor Name</Label>
-                      <Input
-                        value={newPrimeName}
-                        onChange={(e) => setNewPrimeName(e.target.value)}
-                        placeholder="e.g. Lockheed Martin"
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label>Your Role</Label>
-                      <Select 
-                        value={selectedRoleId} 
-                        onValueChange={(v) => {
-                          setSelectedRoleId(v)
-                          setSelectedLevelIndex(null)
-                          setSelectedStepIndex(null)
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {companyRoles.map(role => (
-                            <SelectItem key={role.id} value={role.id}>
-                              {role.title}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {selectedRole && (
-                      <div>
-                        <Label>Level</Label>
-                        <Select 
-                          value={selectedLevelIndex?.toString() ?? ''} 
-                          onValueChange={(v) => {
-                            setSelectedLevelIndex(parseInt(v))
-                            setSelectedStepIndex(null)
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select level" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {selectedRole.levels.map((level, index) => (
-                              <SelectItem key={level.level} value={index.toString()}>
-                                {level.level} - {level.levelName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    {selectedLevel && (
-                      <div>
-                        <Label>Starting Step</Label>
-                        <Select 
-                          value={selectedStepIndex?.toString() ?? ''} 
-                          onValueChange={(v) => setSelectedStepIndex(parseInt(v))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select starting step" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {selectedLevel.steps.map((step, index) => (
-                              <SelectItem key={step.step} value={index.toString()}>
-                                Step {step.step} - {formatCurrency(step.salary)}
-                                {step.monthsToNextStep && ` (${step.monthsToNextStep}mo to next)`}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label>Contract Years</Label>
-                        <Select 
-                          value={contractYears.toString()} 
-                          onValueChange={(v) => setContractYears(parseInt(v))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {[1, 2, 3, 4, 5].map(y => (
-                              <SelectItem key={y} value={y.toString()}>
-                                {y} Year{y > 1 ? 's' : ''}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>Hours Offered/Year</Label>
-                        <Input
-                          type="number"
-                          value={hoursPerYear}
-                          onChange={(e) => setHoursPerYear(parseFloat(e.target.value) || 0)}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Hours presets */}
-                    <div className="flex flex-wrap gap-1">
-                      {[
-                        { label: '1 FTE (1,920)', value: 1920 },
-                        { label: '1 FTE (1,880)', value: 1880 },
-                        { label: '0.5 FTE (960)', value: 960 },
-                        { label: 'Max (2,080)', value: 2080 },
-                      ].map(preset => (
-                        <button
-                          key={preset.value}
-                          type="button"
-                          onClick={() => setHoursPerYear(preset.value)}
-                          className={`px-2 py-1 text-xs rounded border transition-colors ${
-                            hoursPerYear === preset.value
-                              ? 'bg-blue-100 border-blue-300 text-blue-700'
-                              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div>
-                      <Label>Prime's Offered Rate ($/hr)</Label>
-                      <Input
-                        type="number"
-                        value={newOfferedRate}
-                        onChange={(e) => setNewOfferedRate(parseFloat(e.target.value) || 0)}
-                      />
-                    </div>
-                    
-                    {/* Year-by-Year Preview */}
-                    {preview && (
-                      <div className={`p-4 rounded-lg space-y-3 ${preview.isProfitable ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {preview.isProfitable ? (
-                              <CheckCircle className="w-5 h-5 text-green-600" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-600" />
-                            )}
-                            <span className={`font-semibold ${preview.isProfitable ? 'text-green-800' : 'text-red-800'}`}>
-                              {preview.isProfitable ? 'Profitable' : 'Unprofitable'}
-                            </span>
-                          </div>
-                          <span className={`text-lg font-bold ${preview.isProfitable ? 'text-green-600' : 'text-red-600'}`}>
-                            {preview.isProfitable ? '+' : ''}{formatCurrency(preview.totalProfit)}
-                          </span>
-                        </div>
-                        
-                        {/* Year breakdown table */}
-                        <div className="border rounded overflow-hidden">
-                          <table className="w-full text-xs">
-                            <thead className="bg-gray-100">
-                              <tr>
-                                <th className="px-2 py-1 text-left">Year</th>
-                                <th className="px-2 py-1 text-right">Salary</th>
-                                <th className="px-2 py-1 text-right">Your Rate</th>
-                                <th className="px-2 py-1 text-right">Profit</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {preview.yearBreakdowns.map(yb => (
-                                <tr key={yb.year} className={yb.isProfitable ? '' : 'bg-red-50'}>
-                                  <td className="px-2 py-1 font-medium">Year {yb.year}</td>
-                                  <td className="px-2 py-1 text-right">{formatCurrencyShort(yb.salary)}</td>
-                                  <td className="px-2 py-1 text-right">${yb.loadedRate.toFixed(2)}</td>
-                                  <td className={`px-2 py-1 text-right font-medium ${yb.isProfitable ? 'text-green-600' : 'text-red-600'}`}>
-                                    {yb.isProfitable ? '+' : ''}{formatCurrencyShort(yb.annualProfit)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        <p className="text-xs text-gray-600">
-                          Avg margin: {preview.avgMarginPercent >= 0 ? '+' : ''}{preview.avgMarginPercent.toFixed(1)}%
-                        </p>
-
-                        {/* Utilization note in preview */}
-                        {hoursPerYear < 2080 && (
-                          <p className="text-xs text-blue-700 mt-2">
-                            ℹ️ {hoursPerYear.toLocaleString()} hrs = {((hoursPerYear / 2080) * 100).toFixed(0)}% utilization
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    <Button 
-                      onClick={handleAddOffer} 
-                      className="w-full"
-                      disabled={!newPrimeName.trim() || !selectedRole || selectedLevelIndex === null || selectedStepIndex === null}
-                    >
-                      Add Analysis
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
-              {/* Quick Stats */}
-              <div className="mt-6 space-y-3">
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-600">Offers Analyzed</span>
-                    <span className="text-lg font-bold text-gray-900">{primeOffers.length}</span>
-                  </div>
-                </div>
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-green-700">Profitable</span>
-                    <span className="text-lg font-bold text-green-600">{profitableCount}</span>
-                  </div>
-                </div>
-                <div className="p-3 bg-red-50 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-red-700">Unprofitable</span>
-                    <span className="text-lg font-bold text-red-600">{unprofitableCount}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Rate Structure Reference */}
-              <div className="mt-6 p-3 bg-blue-50 rounded-lg">
-                <p className="text-xs font-medium text-blue-900 mb-2">Your Rate Structure</p>
-                <div className="space-y-1 text-xs text-blue-800">
-                  <div className="flex justify-between">
-                    <span>Fringe:</span>
-                    <span>{(costMultipliers.fringe * 100).toFixed(0)}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Overhead:</span>
-                    <span>{(costMultipliers.overhead * 100).toFixed(0)}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>G&A:</span>
-                    <span>{(costMultipliers.ga * 100).toFixed(0)}%</span>
-                  </div>
-                  <div className="flex justify-between pt-1 border-t border-blue-200">
-                    <span>Profit Margin:</span>
-                    <span>{profitMargin}%</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* MIDDLE: Prime Offer Analysis */}
-        <div className="col-span-5">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Calculator className="w-5 h-5" />
-                Prime Offer Analysis
-              </CardTitle>
-              <CardDescription>
-                {primeOffers.length} offers • Year-by-year breakdown with step increases
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {primeOffers.length === 0 ? (
-                <div className="text-center py-12">
-                  <Shield className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm text-gray-500 mb-4">No prime offers analyzed yet</p>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setIsAddDialogOpen(true)}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Analyze Your First Offer
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {primeOffers.map(offer => (
-                    <div 
-                      key={offer.id} 
-                      className={`p-4 border rounded-lg ${offer.isProfitable ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'}`}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-semibold text-sm">{offer.primeName}</h4>
-                            <Badge 
-                              variant={offer.isProfitable ? 'default' : 'destructive'}
-                              className={offer.isProfitable ? 'bg-green-600' : ''}
-                            >
-                              {offer.isProfitable ? 'Profitable' : 'Loss'}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-gray-600">
-                            {offer.roleTitle} • {offer.level} {offer.levelName}
-                          </p>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                            <span>Starting: Step {offer.startingStep} @ {formatCurrencyShort(offer.startingSalary)}</span>
-                            <span>•</span>
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {offer.contractYears} yr{offer.contractYears > 1 ? 's' : ''}
-                            </span>
-                            <span>•</span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {offer.hoursPerYear.toLocaleString()} hrs/yr
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700"
-                            onClick={() => openEditDialog(offer)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => removeOffer(offer.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Year-by-Year Table */}
-                      <div className="border rounded overflow-hidden mb-3">
-                        <table className="w-full text-xs">
-                          <thead className="bg-gray-100">
-                            <tr>
-                              <th className="px-2 py-1.5 text-left">Year</th>
-                              <th className="px-2 py-1.5 text-right">Salary</th>
-                              <th className="px-2 py-1.5 text-right">Your Rate</th>
-                              <th className="px-2 py-1.5 text-right">Prime</th>
-                              <th className="px-2 py-1.5 text-right">P/L ({(offer.hoursPerYear / 1000).toFixed(1)}k hrs)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {offer.yearBreakdowns.map(yb => (
-                              <tr key={yb.year} className={yb.isProfitable ? 'bg-white' : 'bg-red-50'}>
-                                <td className="px-2 py-1.5 font-medium">Year {yb.year}</td>
-                                <td className="px-2 py-1.5 text-right text-gray-600">{formatCurrencyShort(yb.salary)}</td>
-                                <td className="px-2 py-1.5 text-right">${yb.loadedRate.toFixed(2)}</td>
-                                <td className="px-2 py-1.5 text-right">${yb.offeredRate.toFixed(2)}</td>
-                                <td className={`px-2 py-1.5 text-right font-medium ${yb.isProfitable ? 'text-green-600' : 'text-red-600'}`}>
-                                  {yb.isProfitable ? '+' : ''}{formatCurrencyShort(yb.annualProfit)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Total Impact */}
-                      <div className={`p-3 rounded-lg ${offer.isProfitable ? 'bg-green-100' : 'bg-red-100'}`}>
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="text-xs text-gray-600">Total Contract Profit/Loss</p>
-                            <p className="text-xs text-gray-500">
-                              Avg margin: {offer.avgMarginPercent >= 0 ? '+' : ''}{offer.avgMarginPercent.toFixed(1)}%
-                            </p>
-                          </div>
-                          <p className={`text-xl font-bold ${offer.isProfitable ? 'text-green-700' : 'text-red-700'}`}>
-                            {offer.isProfitable ? '+' : ''}{formatCurrency(offer.totalProfit)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Warning for unprofitable years */}
-                      {offer.yearBreakdowns.some(yb => !yb.isProfitable) && (
-                        <div className="mt-3 p-2 bg-amber-100 rounded flex items-start gap-2">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                          <p className="text-xs text-amber-800">
-                            {offer.yearBreakdowns.filter(yb => !yb.isProfitable).length} of {offer.contractYears} years 
-                            are unprofitable due to step increases raising your costs.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Utilization warning for partial FTE */}
-                      {offer.hoursPerYear < 2080 && (
-                        <div className="mt-3 p-2 bg-blue-100 rounded flex items-start gap-2">
-                          <Clock className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                          <p className="text-xs text-blue-800">
-                            Prime is offering {offer.hoursPerYear.toLocaleString()} hours/year — this covers <strong>{((offer.hoursPerYear / 2080) * 100).toFixed(0)}%</strong> of 
-                            a full-time employee. {offer.hoursPerYear < 1040 
-                              ? "You'll need significant other work to fill the gap." 
-                              : "Ensure you have other work to maintain full utilization."}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* RIGHT: Summary */}
-        <div className="col-span-3 space-y-6">
-          {/* Profitability Summary */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
-                Summary
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {primeOffers.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">
-                  Add prime offers to see analysis
+    <TooltipProvider>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold text-gray-900">Prime Offers</h1>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-xs cursor-help">
+                  Utility Tool
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p className="text-sm mb-2">Check if prime contractor rate offers cover your fully-loaded costs.</p>
+                <p className="text-xs text-gray-500">
+                  Using: Fringe {((costMultipliers?.fringe || 0) * 100).toFixed(0)}%, 
+                  OH {((costMultipliers?.overhead || 0) * 100).toFixed(0)}%, 
+                  G&A {((costMultipliers?.ga || 0) * 100).toFixed(0)}%, 
+                  Profit {profitMargin || 10}%
                 </p>
-              ) : (
-                <>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-2">Profitable Offers</p>
-                    <p className="text-4xl font-bold text-gray-900">
-                      {profitableCount}/{primeOffers.length}
-                    </p>
-                  </div>
-
-                  <div className={`text-center p-4 rounded-lg ${totalProfitAllOffers >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-                    <p className={`text-sm mb-2 ${totalProfitAllOffers >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                      Total Potential Profit
-                    </p>
-                    <div className="flex items-center justify-center gap-2">
-                      {totalProfitAllOffers >= 0 ? (
-                        <TrendingUp className="w-6 h-6 text-green-600" />
-                      ) : (
-                        <TrendingDown className="w-6 h-6 text-red-600" />
-                      )}
-                      <p className={`text-2xl font-bold ${totalProfitAllOffers >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {totalProfitAllOffers >= 0 ? '+' : ''}{formatCurrency(totalProfitAllOffers)}
-                      </p>
-                    </div>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Company Role Library Preview */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                Your Rate Card
-              </CardTitle>
-              <CardDescription className="text-xs">{companyRoles.length} roles with step increases</CardDescription>
-            </CardHeader>
-            <CardContent className="max-h-48 overflow-y-auto">
-              <div className="space-y-2">
-                {companyRoles.slice(0, 5).map(role => (
-                  <div key={role.id} className="text-xs p-2 bg-gray-50 rounded">
-                    <span className="font-medium text-gray-900">{role.title}</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {role.levels.map(level => (
-                        <span key={level.level} className="text-gray-500">
-                          {level.level}: ${(level.steps[0].salary / 1000).toFixed(0)}k+
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          
+          {/* Stats Bar */}
+          {stats.total > 0 && (
+            <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 rounded-lg text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Offers</span>
+                <span className="font-semibold text-gray-900">{stats.total}</span>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Tips */}
-          <Card className="bg-blue-50 border-blue-200">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-blue-900 flex items-center gap-2">
-                <Info className="w-4 h-4" />
-                Rate & Utilization Tips
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="text-xs text-blue-800 space-y-2">
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Your loaded rate uses 2,080 hrs — PTO/holidays are in fringe</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Step increases typically add ~3% annually to your costs</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>&lt;2,080 hrs means partial utilization — you need other work</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Request escalation clauses for multi-year contracts</span>
-                </li>
-              </ul>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Prime Offer</DialogTitle>
-            <DialogDescription>
-              Update all offer details
-            </DialogDescription>
-          </DialogHeader>
-          {editingOffer && (
-            <div className="space-y-4">
-              <div>
-                <Label>Prime Contractor Name</Label>
-                <Input
-                  value={editPrimeName}
-                  onChange={(e) => setEditPrimeName(e.target.value)}
-                />
+              <span className="text-gray-300">·</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Profitable</span>
+                <span className="font-semibold text-green-600">{stats.profitable}</span>
               </div>
-
-              <div>
-                <Label>Role</Label>
-                <Select 
-                  value={editRoleId} 
-                  onValueChange={(v) => {
-                    setEditRoleId(v)
-                    setEditLevelIndex(null)
-                    setEditStepIndex(null)
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {companyRoles.map(role => (
-                      <SelectItem key={role.id} value={role.id}>
-                        {role.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <span className="text-gray-300">·</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Need Counter</span>
+                <span className="font-semibold text-red-600">{stats.needsCounter}</span>
               </div>
-
-              {editRoleId && (
-                <div>
-                  <Label>Level</Label>
-                  <Select 
-                    value={editLevelIndex?.toString() ?? ''} 
-                    onValueChange={(v) => {
-                      setEditLevelIndex(parseInt(v))
-                      setEditStepIndex(null)
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select level" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companyRoles.find(r => r.id === editRoleId)?.levels.map((level, index) => (
-                        <SelectItem key={level.level} value={index.toString()}>
-                          {level.level} - {level.levelName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {editLevelIndex !== null && editRoleId && (
-                <div>
-                  <Label>Starting Step</Label>
-                  <Select 
-                    value={editStepIndex?.toString() ?? ''} 
-                    onValueChange={(v) => setEditStepIndex(parseInt(v))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select step" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companyRoles.find(r => r.id === editRoleId)?.levels[editLevelIndex]?.steps.map((step, index) => (
-                        <SelectItem key={step.step} value={index.toString()}>
-                          Step {step.step} - {formatCurrency(step.salary)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Contract Years</Label>
-                  <Select 
-                    value={editContractYears.toString()} 
-                    onValueChange={(v) => setEditContractYears(parseInt(v))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5].map(y => (
-                        <SelectItem key={y} value={y.toString()}>
-                          {y} Year{y > 1 ? 's' : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Hours Offered/Year</Label>
-                  <Input
-                    type="number"
-                    value={editHoursPerYear}
-                    onChange={(e) => setEditHoursPerYear(parseFloat(e.target.value) || 0)}
-                  />
-                </div>
-              </div>
-
-              {/* Hours presets */}
-              <div className="flex flex-wrap gap-1">
-                {[
-                  { label: '1 FTE (1,920)', value: 1920 },
-                  { label: '1 FTE (1,880)', value: 1880 },
-                  { label: '0.5 FTE (960)', value: 960 },
-                  { label: 'Max (2,080)', value: 2080 },
-                ].map(preset => (
-                  <button
-                    key={preset.value}
-                    type="button"
-                    onClick={() => setEditHoursPerYear(preset.value)}
-                    className={`px-2 py-1 text-xs rounded border transition-colors ${
-                      editHoursPerYear === preset.value
-                        ? 'bg-blue-100 border-blue-300 text-blue-700'
-                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-
-              <div>
-                <Label>Prime's Offered Rate ($/hr)</Label>
-                <Input
-                  type="number"
-                  value={editOfferedRate}
-                  onChange={(e) => setEditOfferedRate(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="flex-1">
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleEditOffer} 
-                  className="flex-1"
-                  disabled={editLevelIndex === null || editStepIndex === null}
-                >
-                  Save Changes
-                </Button>
+              <span className="text-gray-300">·</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Total P/L</span>
+                <span className={`font-semibold ${stats.totalPL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {stats.totalPL >= 0 ? '+' : ''}{formatCurrency(stats.totalPL)}
+                </span>
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-    </div>
+        </div>
+
+        {/* Tabs & Actions */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <TabsList className="bg-gray-100 p-1">
+              <TabsTrigger value="all" className="text-xs px-4 data-[state=active]:bg-white">
+                <Building2 className="w-3.5 h-3.5 mr-1.5" />
+                All Offers
+                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.total}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="profitable" className="text-xs px-4 data-[state=active]:bg-white">
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                Profitable
+                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4 bg-green-100 text-green-700">{stats.profitable}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="needs-counter" className="text-xs px-4 data-[state=active]:bg-white">
+                <AlertTriangle className="w-3.5 h-3.5 mr-1.5" />
+                Need Counter
+                {stats.needsCounter > 0 && (
+                  <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.needsCounter}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+            
+            <Button size="sm" onClick={() => { setEditingOffer(null); setShowAddDialog(true) }}>
+              <Plus className="w-4 h-4 mr-2" />
+              Analyze Offer
+            </Button>
+          </div>
+
+          {/* Search */}
+          {stats.total > 0 && (
+            <div className="flex-1 max-w-xs">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input 
+                  placeholder="Search offers..." 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                  className="pl-9 h-9" 
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Content */}
+          <TabsContent value={activeTab} className="mt-0">
+            {filteredOffers.length === 0 ? (
+              <div className="text-center py-16 bg-white border border-gray-100 rounded-lg">
+                <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {stats.total === 0 ? 'No offers analyzed yet' : 'No matching offers'}
+                </h3>
+                <p className="text-sm text-gray-600 max-w-md mx-auto">
+                  {stats.total === 0 
+                    ? 'When a prime contractor offers you a subcontract rate, analyze it here to see if it covers your fully-loaded costs.'
+                    : 'Try adjusting your search or filter criteria.'
+                  }
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {filteredOffers.map(offer => (
+                  <OfferCard
+                    key={offer.id}
+                    offer={offer}
+                    onClick={() => setSelectedOfferId(offer.id)}
+                    onEdit={() => { setEditingOffer(offer); setShowAddDialog(true) }}
+                    onDelete={() => handleDeleteOffer(offer.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* Slideout Panel */}
+        {selectedOffer && (
+          <OfferSlideout
+            offer={selectedOffer}
+            isOpen={!!selectedOfferId}
+            onClose={() => setSelectedOfferId(null)}
+            onUpdate={(updates) => handleUpdateOffer(selectedOffer.id, updates)}
+            onEdit={() => { setEditingOffer(selectedOffer); setShowAddDialog(true); setSelectedOfferId(null) }}
+            targetMargin={targetMarginPercent}
+          />
+        )}
+
+        {/* Add/Edit Dialog */}
+        <OfferFormDialog
+          isOpen={showAddDialog}
+          onClose={() => { setShowAddDialog(false); setEditingOffer(null) }}
+          onSave={handleSaveOffer}
+          editingOffer={editingOffer}
+          companyRoles={companyRoles}
+          calculateOffer={calculateOffer}
+        />
+      </div>
+    </TooltipProvider>
   )
 }
+
+export default SubRatesTab
