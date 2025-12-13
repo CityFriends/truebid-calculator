@@ -6,6 +6,42 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export type ContractType = 'tm' | 'ffp' | 'gsa';
 
+// Salary structure options for company-wide configuration
+export type SalaryStructure = 'steps' | 'bands' | 'single';
+
+// Education requirements for a role
+export interface EducationRequirement {
+  minimum: string;
+  preferred?: string;
+  substitution?: string;
+}
+
+// GSA Labor Category within a SIN
+export interface GSALaborCategory {
+  id: string;
+  laborCategory: string;
+  hourlyRate: number;
+  yearsExperience?: string;
+  education?: string;
+}
+
+// GSA SIN (Special Item Number)
+export interface GSASin {
+  id: string;
+  sin: string;
+  title: string;
+  laborCategories: GSALaborCategory[];
+}
+
+// Company-wide settings
+export interface CompanySettings {
+  salaryStructure: SalaryStructure;
+}
+
+export const defaultCompanySettings: CompanySettings = {
+  salaryStructure: 'steps',
+};
+
 // ==================== ESTIMATE TAB TYPES (BOE Support) ====================
 
 // Estimate method types based on BOE document hierarchy (best to worst)
@@ -659,6 +695,9 @@ export interface CompanyProfile {
   naicsCodes: string[];
   gsaContractNumber?: string;
   gsaMasSchedule?: boolean;
+  gsaEscalationRate?: number;    // e.g., 0.03 for 3%
+  gsaBaseYear?: number;          // e.g., 2024
+  gsaSins?: GSASin[];
 }
 
 // ==================== INDIRECT RATES (Audit-Ready) ====================
@@ -725,11 +764,28 @@ export interface CompanyRole {
   title: string;
   laborCategory: string;
   description: string;
+  
+  // Detailed responsibilities for Labor Category Descriptions export
+  functionalResponsibilities?: string;
+  
+  // Education Requirements
+  education?: EducationRequirement;
+  
+  // Required/Preferred Certifications
+  certifications?: string[];
+  
+  // Salary levels
   levels: CompanyRoleLevel[];
+  
+  // BLS/SOC Classification
   blsOccCode?: string;
   blsOccTitle?: string;
+  
+  // GSA mapping
   gsaLaborCategory?: string;
   gsaSin?: string;
+  
+  // Service Contract Act
   scaCode?: string;
   scaOccupation?: string;
 }
@@ -935,6 +991,31 @@ export type MainTabId =
   | 'rate-justification' 
   | 'export';
 
+  // Utility tool type - accessed via Tools menu in header
+export type UtilityToolType = 'sub-rates' | null;
+
+// ==================== PROJECT VERSION TYPES ====================
+
+export interface ProjectSnapshot {
+  solicitation: SolicitationInfo;
+  estimateWbsElements: EstimateWBSElement[];
+  selectedRoles: Role[];
+  subcontractors: Subcontractor[];
+  teamingPartners: TeamingPartner[];
+  rateJustifications: Record<string, RoleJustification>;
+  odcs: ODCItem[];
+  perDiem: PerDiemCalculation[];
+}
+
+export interface ProjectVersion {
+  id: string;
+  name: string;
+  notes?: string;
+  snapshot: ProjectSnapshot;
+  createdAt: string;
+  createdBy?: string;
+}
+
 interface AppContextType {
   // Main Tab Navigation
   activeMainTab: MainTabId;
@@ -942,6 +1023,16 @@ interface AppContextType {
   navigateToRateJustification: (roleId?: string) => void;
   selectedRoleIdForJustification: string | null;
   clearSelectedRoleForJustification: () => void;
+  
+  // Utility Tool State (for Tools menu in header)
+  activeUtilityTool: UtilityToolType;
+  setActiveUtilityTool: (tool: UtilityToolType) => void;
+  
+  // Project Version History
+  projectVersions: ProjectVersion[];
+  saveProjectVersion: (name: string, notes?: string) => ProjectVersion;
+  restoreProjectVersion: (versionId: string) => void;
+  deleteProjectVersion: (versionId: string) => void;
   
   // Solicitation (RFP Details)
   solicitation: SolicitationInfo;
@@ -960,6 +1051,11 @@ interface AppContextType {
   // Company Profile (SaaS)
   companyProfile: CompanyProfile;
   setCompanyProfile: (profile: CompanyProfile) => void;
+  
+  // Company Settings
+  companySettings: CompanySettings;
+  setCompanySettings: (settings: CompanySettings) => void;
+  updateCompanySettings: (updates: Partial<CompanySettings>) => void;
   
   // Indirect Rates (Audit-Ready)
   indirectRates: IndirectRates;
@@ -1174,9 +1270,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActiveMainTab('rate-justification');
   };
   
-  const clearSelectedRoleForJustification = () => {
+ const clearSelectedRoleForJustification = () => {
     setSelectedRoleIdForJustification(null);
   };
+  
+  // ==================== UTILITY TOOL STATE ====================
+  const [activeUtilityTool, setActiveUtilityTool] = useState<UtilityToolType>(null);
+  
+  // ==================== PROJECT VERSION HISTORY ====================
+  const [projectVersions, setProjectVersions] = useState<ProjectVersion[]>([]);
   
   // ==================== SOLICITATION STATE ====================
   const [solicitation, setSolicitation] = useState<SolicitationInfo>(emptySolicitation);
@@ -1206,6 +1308,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Helper to get pricing settings with defaults
   const getPricingSettings = (): PricingSettings => {
     return solicitation.pricingSettings ?? defaultPricingSettings;
+  };
+
+  // ==================== COMPANY SETTINGS ====================
+  const [companySettings, setCompanySettings] = useState<CompanySettings>(defaultCompanySettings);
+  
+  const updateCompanySettings = (updates: Partial<CompanySettings>) => {
+    setCompanySettings(prev => ({ ...prev, ...updates }));
   };
 
   // ==================== COMPANY PROFILE (SaaS) ====================
@@ -1245,7 +1354,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ==================== ESCALATION ====================
   const [escalationRates, setEscalationRates] = useState<EscalationRates>({
     laborDefault: 0.03,
-    odcDefault: 0.02,
+    odcDefault: 0,
     source: 'BLS Employment Cost Index - Professional and Technical Services',
   });
 
@@ -1263,7 +1372,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ptoHours: 144,
     holidayHours: 88,
     sickHours: 40,
-    targetBillableHours: 1808,
+    targetBillableHours: 1920,
     overtimeMultiplier: 1.5,
   });
 
@@ -1863,7 +1972,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
       laborDefault: rate / 100,
     });
   };
-
+// ==================== VERSION HISTORY FUNCTIONS ====================
+  
+  const saveProjectVersion = (name: string, notes?: string): ProjectVersion => {
+    const snapshot: ProjectSnapshot = {
+      solicitation,
+      estimateWbsElements,
+      selectedRoles,
+      subcontractors,
+      teamingPartners,
+      rateJustifications,
+      odcs,
+      perDiem,
+    };
+    
+    const newVersion: ProjectVersion = {
+      id: `version-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name,
+      notes,
+      snapshot,
+      createdAt: new Date().toISOString(),
+    };
+    
+    setProjectVersions(prev => [newVersion, ...prev]);
+    return newVersion;
+  };
+  
+  const restoreProjectVersion = (versionId: string) => {
+    const version = projectVersions.find(v => v.id === versionId);
+    if (!version) return;
+    
+    const { snapshot } = version;
+    
+    // Restore all state from snapshot
+    setSolicitation(snapshot.solicitation);
+    setEstimateWbsElements(snapshot.estimateWbsElements);
+    setSelectedRoles(snapshot.selectedRoles);
+    setSubcontractors(snapshot.subcontractors);
+    setTeamingPartners(snapshot.teamingPartners);
+    setRateJustifications(snapshot.rateJustifications);
+    setODCs(snapshot.odcs);
+    setPerDiem(snapshot.perDiem);
+  };
+  
+  const deleteProjectVersion = (versionId: string) => {
+    setProjectVersions(prev => prev.filter(v => v.id !== versionId));
+  };
   // ==================== CONTEXT VALUE ====================
 
   const value: AppContextType = {
@@ -1873,6 +2027,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     navigateToRateJustification,
     selectedRoleIdForJustification,
     clearSelectedRoleForJustification,
+    
+    // Utility Tool State
+    activeUtilityTool,
+    setActiveUtilityTool,
+    
+    // Project Version History
+    projectVersions,
+    saveProjectVersion,
+    restoreProjectVersion,
+    deleteProjectVersion,
     
     // Solicitation
     solicitation,
@@ -1885,6 +2049,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openSolicitationEditor,
     closeSolicitationEditor,
     getPricingSettings,
+    
+    // Company Settings
+    companySettings,
+    setCompanySettings,
+    updateCompanySettings,
     
     // Company Profile
     companyProfile,

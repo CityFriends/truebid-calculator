@@ -1,15 +1,12 @@
 'use client'
 
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { 
   Upload, 
-  Target, 
   Users, 
   TrendingUp, 
   Building2, 
   FileDown, 
-  Calculator, 
-  FileSpreadsheet, 
   FileText, 
   Clock, 
   ChevronUp, 
@@ -22,6 +19,10 @@ import {
   HelpCircle,
   Wrench,
   ChevronRight,
+  History,
+  Save,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -88,9 +89,6 @@ type TabType =
   | 'teaming-partners' 
   | 'export'
 
-// Utility tool type - accessed via Tools menu
-type UtilityToolType = 'sub-rates'
-
 // Tab configuration with accessibility metadata
 interface TabConfig {
   id: TabType
@@ -99,21 +97,13 @@ interface TabConfig {
   description: string // For screen readers
 }
 
-// Utility tool configuration
-interface UtilityToolConfig {
-  id: UtilityToolType
-  label: string
-  icon: React.ComponentType<{ className?: string }>
-  description: string
-}
-
 // ==================== MAIN COMPONENT ====================
 
 export function TabsNavigation() {
   const [showSolicitationExpanded, setShowSolicitationExpanded] = useState(false)
-  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false)
-  const [activeUtilityTool, setActiveUtilityTool] = useState<UtilityToolType | null>(null)
-  const toolsMenuRef = useRef<HTMLDivElement>(null)
+  const [isVersionsSlideoutOpen, setIsVersionsSlideoutOpen] = useState(false)
+  const [newVersionName, setNewVersionName] = useState('')
+  const [newVersionNotes, setNewVersionNotes] = useState('')
   
   const { 
     solicitation, 
@@ -126,6 +116,14 @@ export function TabsNavigation() {
     setActiveMainTab,
     selectedRoleIdForJustification,
     clearSelectedRoleForJustification,
+    // Utility Tool from context
+    activeUtilityTool,
+    setActiveUtilityTool,
+    // Version History from context
+    projectVersions,
+    saveProjectVersion,
+    restoreProjectVersion,
+    deleteProjectVersion,
   } = useAppContext()
   
   // Use context state for tabs (allows child components to navigate)
@@ -176,35 +174,8 @@ export function TabsNavigation() {
     },
   ]
 
-  // Utility tools (accessible via Tools menu, not part of main flow)
-  const utilityTools: UtilityToolConfig[] = [
-    { 
-      id: 'sub-rates', 
-      label: 'Sub Rates Calculator', 
-      icon: Calculator,
-      description: 'Evaluate rates when you are a subcontractor to another prime'
-    },
-  ]
-
   // Check if a utility tool is active
   const isUtilityToolActive = activeUtilityTool !== null
-
-  // ==================== CLICK OUTSIDE HANDLER ====================
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (toolsMenuRef.current && !toolsMenuRef.current.contains(event.target as Node)) {
-        setIsToolsMenuOpen(false)
-      }
-    }
-
-    if (isToolsMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [isToolsMenuOpen])
 
   // ==================== DATE CALCULATIONS ====================
 
@@ -236,19 +207,19 @@ export function TabsNavigation() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Close slideout on Escape
       if (e.key === 'Escape') {
-        if (isSolicitationEditorOpen) {
+        if (isVersionsSlideoutOpen) {
+          setIsVersionsSlideoutOpen(false)
+        } else if (isSolicitationEditorOpen) {
           closeSolicitationEditor()
         } else if (showSolicitationExpanded) {
           setShowSolicitationExpanded(false)
-        } else if (isToolsMenuOpen) {
-          setIsToolsMenuOpen(false)
         }
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isSolicitationEditorOpen, closeSolicitationEditor, showSolicitationExpanded, isToolsMenuOpen])
+  }, [isSolicitationEditorOpen, closeSolicitationEditor, showSolicitationExpanded, isVersionsSlideoutOpen])
 
   // ==================== TAB CHANGE HANDLER ====================
 
@@ -266,22 +237,42 @@ export function TabsNavigation() {
 
   // ==================== UTILITY TOOL HANDLER ====================
 
-  const handleUtilityToolSelect = useCallback((toolId: UtilityToolType) => {
-    setActiveUtilityTool(toolId)
-    setIsToolsMenuOpen(false)
-    // Announce tool selection to screen readers
-    const tool = utilityTools.find(t => t.id === toolId)
-    if (tool) {
-      const announcement = document.getElementById('tab-announcement')
-      if (announcement) {
-        announcement.textContent = `${tool.label} opened. ${tool.description}`
-      }
-    }
-  }, [utilityTools])
-
   const handleBackToMainFlow = useCallback(() => {
     setActiveUtilityTool(null)
-  }, [])
+  }, [setActiveUtilityTool])
+
+  // ==================== VERSION HANDLERS ====================
+
+  const handleSaveVersion = useCallback(() => {
+    if (!newVersionName.trim()) return
+    saveProjectVersion(newVersionName.trim(), newVersionNotes.trim() || undefined)
+    setNewVersionName('')
+    setNewVersionNotes('')
+  }, [newVersionName, newVersionNotes, saveProjectVersion])
+
+  const handleRestoreVersion = useCallback((versionId: string) => {
+    if (confirm('Are you sure you want to restore this version? Current unsaved changes will be lost.')) {
+      restoreProjectVersion(versionId)
+      setIsVersionsSlideoutOpen(false)
+    }
+  }, [restoreProjectVersion])
+
+  const handleDeleteVersion = useCallback((versionId: string) => {
+    if (confirm('Are you sure you want to delete this version? This cannot be undone.')) {
+      deleteProjectVersion(versionId)
+    }
+  }, [deleteProjectVersion])
+
+  const formatVersionDate = (dateString: string): string => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  }
 
   // Show solicitation bar on main bid flow tabs (not upload, not utility tools)
   const showSolicitationBar = !isUtilityToolActive && activeTab !== 'upload' && solicitation?.solicitationNumber
@@ -289,7 +280,7 @@ export function TabsNavigation() {
   // ==================== RENDER ====================
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans">
+    <div className="font-sans flex flex-col min-h-0 flex-1">
       {/* Screen reader announcements */}
       <div 
         id="tab-announcement" 
@@ -301,15 +292,16 @@ export function TabsNavigation() {
 
       {/* Tab Navigation */}
       <nav 
-        className="bg-white border-b sticky top-0 z-40"
+        className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 sticky top-12 md:top-14 z-40 shrink-0"
         role="navigation"
         aria-label="Main navigation"
       >
-        <div className="container mx-auto px-6">
+        <div className="container mx-auto px-4 md:px-6">
           <div 
-            className="flex items-center gap-1 overflow-x-auto"
+            className="flex items-center gap-1 overflow-x-auto scrollbar-hide"
             role="tablist"
             aria-label="Bid workflow tabs"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {/* Main Bid Flow Tabs */}
             {bidFlowTabs.map((tab, index) => {
@@ -340,8 +332,8 @@ export function TabsNavigation() {
                     border-b-2 transition-colors focus:outline-none focus-visible:ring-2 
                     focus-visible:ring-blue-500 focus-visible:ring-offset-2
                     ${isActive 
-                      ? 'border-blue-600 text-blue-600' 
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                      ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' 
+                      : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600'
                     }
                   `}
                 >
@@ -350,95 +342,23 @@ export function TabsNavigation() {
                 </button>
               )
             })}
-
-            {/* Spacer to push Tools menu to the right */}
-            <div className="flex-1" />
-
-            {/* Tools Dropdown Menu */}
-            <div className="relative" ref={toolsMenuRef}>
-              <button
-                onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)}
-                aria-expanded={isToolsMenuOpen}
-                aria-haspopup="true"
-                aria-label="Tools menu"
-                className={`
-                  flex items-center gap-2 px-3 py-2 my-1 text-sm font-medium whitespace-nowrap 
-                  rounded-md transition-colors focus:outline-none focus-visible:ring-2 
-                  focus-visible:ring-amber-500 focus-visible:ring-offset-2
-                  ${isUtilityToolActive || isToolsMenuOpen
-                    ? 'bg-amber-100 text-amber-800 border border-amber-300' 
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-transparent'
-                  }
-                `}
-              >
-                <Wrench className="w-4 h-4" aria-hidden="true" />
-                <span>Tools</span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isToolsMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-              </button>
-
-              {/* Dropdown Menu */}
-              {isToolsMenuOpen && (
-                <div 
-                  className="absolute right-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
-                  role="menu"
-                  aria-orientation="vertical"
-                  aria-labelledby="tools-menu-button"
-                >
-                  <div className="px-3 py-2 border-b border-gray-100">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Utility Tools</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Standalone tools, not part of bid flow</p>
-                  </div>
-                  
-                  {utilityTools.map((tool) => {
-                    const Icon = tool.icon
-                    const isActive = activeUtilityTool === tool.id
-                    
-                    return (
-                      <button
-                        key={tool.id}
-                        role="menuitem"
-                        onClick={() => handleUtilityToolSelect(tool.id)}
-                        className={`
-                          w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors
-                          ${isActive 
-                            ? 'bg-amber-50 text-amber-800' 
-                            : 'text-gray-700 hover:bg-gray-50'
-                          }
-                        `}
-                      >
-                        <Icon className={`w-4 h-4 ${isActive ? 'text-amber-600' : 'text-gray-400'}`} aria-hidden="true" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{tool.label}</p>
-                          <p className="text-xs text-gray-500 truncate">{tool.description}</p>
-                        </div>
-                        {isActive && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700">
-                            Active
-                          </Badge>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </nav>
 
       {/* Utility Tool Header Bar - shown when a utility tool is active */}
       {isUtilityToolActive && (
-        <div className="bg-amber-50 border-b border-amber-200">
+        <div className="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800">
           <div className="container mx-auto px-6 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300">
+              <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900 dark:text-amber-200 dark:border-amber-700">
                 <Wrench className="w-3 h-3 mr-1" aria-hidden="true" />
                 Utility Tool
               </Badge>
-              <span className="text-sm font-medium text-amber-900">
-                {utilityTools.find(t => t.id === activeUtilityTool)?.label}
+              <span className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                {activeUtilityTool === 'sub-rates' ? 'Sub Rates Calculator' : activeUtilityTool}
               </span>
-              <span className="text-xs text-amber-700">
+              <span className="text-xs text-amber-700 dark:text-amber-400">
                 — Not part of bid workflow
               </span>
             </div>
@@ -446,7 +366,7 @@ export function TabsNavigation() {
               variant="ghost"
               size="sm"
               onClick={handleBackToMainFlow}
-              className="text-amber-700 hover:text-amber-900 hover:bg-amber-100"
+              className="text-amber-700 hover:text-amber-900 hover:bg-amber-100 dark:text-amber-300 dark:hover:text-amber-100 dark:hover:bg-amber-800"
             >
               <ChevronRight className="w-4 h-4 mr-1 rotate-180" aria-hidden="true" />
               Back to Bid Flow
@@ -457,20 +377,20 @@ export function TabsNavigation() {
 
       {/* Solicitation Bar - Own row below tabs */}
       {showSolicitationBar && (
-        <div className="bg-white border-b" role="region" aria-label="Solicitation information">
-          <div className="container mx-auto px-6">
+        <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 shrink-0" role="region" aria-label="Solicitation information">
+          <div className="container mx-auto px-4 md:px-6">
             {/* Collapsed view */}
-            <div className="flex items-center justify-between py-2">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-gray-400" aria-hidden="true" />
-                  <span className="text-sm font-medium text-gray-900">
+            <div className="flex items-center justify-between py-2 gap-2">
+              <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <div className="flex items-center gap-2 shrink-0">
+                  <FileText className="w-4 h-4 text-gray-400 hidden sm:block" aria-hidden="true" />
+                  <span className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[120px] sm:max-w-none">
                     {solicitation.solicitationNumber}
                   </span>
                   {solicitation.title && (
                     <>
-                      <span className="text-gray-300" aria-hidden="true">·</span>
-                      <span className="text-sm text-gray-600 truncate max-w-md">
+                      <span className="text-gray-300 dark:text-gray-600 hidden md:inline" aria-hidden="true">·</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[150px] md:max-w-md hidden md:inline">
                         {solicitation.title}
                       </span>
                     </>
@@ -478,7 +398,7 @@ export function TabsNavigation() {
                 </div>
                 
                 {/* Badges */}
-                <div className="flex items-center gap-2" aria-label="Contract details">
+                <div className="flex items-center gap-1 md:gap-2 shrink-0" aria-label="Contract details">
                   {solicitation.contractType && (
                     <Badge variant="secondary" className="text-xs">
                       {solicitation.contractType}
@@ -501,35 +421,52 @@ export function TabsNavigation() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 md:gap-3 shrink-0">
                 {/* Due date */}
                 {daysUntilDue !== null && (
                   <div 
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${
+                    className={`flex items-center gap-1 md:gap-1.5 px-1.5 md:px-2 py-1 rounded text-xs font-medium ${
                       isOverdue 
-                        ? 'bg-red-100 text-red-700' 
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' 
                         : isUrgent 
-                        ? 'bg-yellow-100 text-yellow-700'
-                        : 'bg-gray-100 text-gray-600'
+                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300'
+                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                     }`}
                     role="status"
                     aria-label={isOverdue ? 'Proposal is overdue' : `${daysUntilDue} days until proposal is due`}
                   >
                     <Clock className="w-3 h-3" aria-hidden="true" />
-                    <span>{isOverdue ? 'Overdue' : `${daysUntilDue} days left`}</span>
+                    <span>{isOverdue ? 'Overdue' : `${daysUntilDue}d`}</span>
                   </div>
                 )}
+
+                {/* Versions button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsVersionsSlideoutOpen(true)}
+                  className="h-7 px-1.5 md:px-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  aria-label="View version history"
+                >
+                  <History className="w-3.5 h-3.5 md:mr-1" aria-hidden="true" />
+                  <span className="hidden md:inline">Versions</span>
+                  {projectVersions.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 md:ml-1.5 h-4 px-1 text-[10px]">
+                      {projectVersions.length}
+                    </Badge>
+                  )}
+                </Button>
 
                 {/* Edit button */}
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => openSolicitationEditor()}
-                  className="h-7 px-2 text-gray-500 hover:text-gray-700"
+                  className="h-7 px-1.5 md:px-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                   aria-label="Edit solicitation details"
                 >
-                  <Pencil className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
-                  Edit
+                  <Pencil className="w-3.5 h-3.5 md:mr-1" aria-hidden="true" />
+                  <span className="hidden md:inline">Edit</span>
                 </Button>
 
                 {/* Expand/Collapse */}
@@ -537,7 +474,7 @@ export function TabsNavigation() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowSolicitationExpanded(!showSolicitationExpanded)}
-                  className="h-7 w-7 p-0 text-gray-400"
+                  className="h-7 w-7 p-0 text-gray-400 dark:text-gray-500"
                   aria-expanded={showSolicitationExpanded}
                   aria-label={showSolicitationExpanded ? 'Collapse solicitation details' : 'Expand solicitation details'}
                 >
@@ -771,8 +708,24 @@ export function TabsNavigation() {
         />
       )}
 
+      {/* Versions History Slideout */}
+      {isVersionsSlideoutOpen && (
+        <VersionsSlideout
+          versions={projectVersions}
+          onClose={() => setIsVersionsSlideoutOpen(false)}
+          onSave={handleSaveVersion}
+          onRestore={handleRestoreVersion}
+          onDelete={handleDeleteVersion}
+          newVersionName={newVersionName}
+          setNewVersionName={setNewVersionName}
+          newVersionNotes={newVersionNotes}
+          setNewVersionNotes={setNewVersionNotes}
+          formatDate={formatVersionDate}
+        />
+      )}
+
       {/* Tab Content */}
-      <main className="container mx-auto px-6 py-6">
+      <main className="container mx-auto px-4 md:px-6 py-4 md:py-6 flex-1 overflow-y-auto">
         {/* Utility Tools (shown when active) */}
         {activeUtilityTool === 'sub-rates' && <SubRatesTab />}
         
@@ -1511,6 +1464,195 @@ function EditSolicitationSlideout({
           <Button onClick={onClose}>
             Save Changes
           </Button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ==================== VERSIONS SLIDEOUT ====================
+
+interface VersionsSlideoutProps {
+  versions: Array<{
+    id: string
+    name: string
+    notes?: string
+    createdAt: string
+  }>
+  onClose: () => void
+  onSave: () => void
+  onRestore: (versionId: string) => void
+  onDelete: (versionId: string) => void
+  newVersionName: string
+  setNewVersionName: (name: string) => void
+  newVersionNotes: string
+  setNewVersionNotes: (notes: string) => void
+  formatDate: (date: string) => string
+}
+
+function VersionsSlideout({
+  versions,
+  onClose,
+  onSave,
+  onRestore,
+  onDelete,
+  newVersionName,
+  setNewVersionName,
+  newVersionNotes,
+  setNewVersionNotes,
+  formatDate,
+}: VersionsSlideoutProps) {
+  
+  return (
+    <>
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 bg-black/20 z-40"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      
+      {/* Slideout Panel */}
+      <div 
+        className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-xl z-50 flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="versions-title"
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+              <History className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <h2 id="versions-title" className="font-semibold text-gray-900">
+                Version History
+              </h2>
+              <p className="text-xs text-gray-500">
+                {versions.length} saved version{versions.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="h-8 w-8 p-0"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          
+          {/* Save New Version */}
+          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+            <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+              <Save className="w-4 h-4 text-gray-500" />
+              Save Current State
+            </h3>
+            <div className="space-y-2">
+              <Input
+                placeholder="Version name (e.g., 'Draft v2', 'Final Submission')"
+                value={newVersionName}
+                onChange={(e) => setNewVersionName(e.target.value)}
+                className="text-sm"
+              />
+              <textarea
+                placeholder="Notes (optional)"
+                value={newVersionNotes}
+                onChange={(e) => setNewVersionNotes(e.target.value)}
+                className="w-full px-3 py-2 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px] resize-y"
+              />
+            </div>
+            <Button 
+              onClick={onSave}
+              disabled={!newVersionName.trim()}
+              className="w-full"
+              size="sm"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Version
+            </Button>
+          </div>
+
+          {/* Saved Versions List */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-gray-700">
+              Saved Versions
+            </h3>
+            
+            {versions.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <History className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">No versions saved yet</p>
+                <p className="text-xs mt-1">Save a version to track changes over time</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {versions.map((version, index) => (
+                  <div 
+                    key={version.id}
+                    className="bg-white border border-gray-200 rounded-lg p-3 hover:border-gray-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm text-gray-900 truncate">
+                            {version.name}
+                          </span>
+                          {index === 0 && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-green-100 text-green-700">
+                              Latest
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {formatDate(version.createdAt)}
+                        </p>
+                        {version.notes && (
+                          <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                            {version.notes}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRestore(version.id)}
+                          className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          title="Restore this version"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDelete(version.id)}
+                          className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Delete this version"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4">
+          <p className="text-xs text-gray-500 text-center">
+            Versions are saved locally. Enable cloud sync for permanent storage.
+          </p>
         </div>
       </div>
     </>

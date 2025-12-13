@@ -2,7 +2,9 @@ import type { Metadata } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import './globals.css'
 import { AppProvider } from '@/contexts/app-context'
+import { ThemeProvider } from '@/components/shared/theme-provider'
 import { Header } from '@/components/shared/header'
+import { Footer } from '@/components/shared/footer'
 
 export const metadata: Metadata = {
   title: 'TrueBid - Government Contracting Calculator',
@@ -15,12 +17,17 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={GeistSans.className}>
-        <AppProvider>
-          <Header />
-          {children}
-        </AppProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${GeistSans.className} min-h-screen flex flex-col`}>
+        <ThemeProvider>
+          <AppProvider>
+            <Header />
+            <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950">
+              {children}
+            </div>
+            <Footer />
+          </AppProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

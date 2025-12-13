@@ -120,3 +120,58 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Hide scrollbar for horizontal scroll containers */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+/* Quick dark mode fixes for content areas */
+.dark {
+  /* Text colors */
+  h1, h2, h3, h4, h5, h6 {
+    color: oklch(0.95 0 0);
+  }
+  
+  p, span, label {
+    color: oklch(0.8 0 0);
+  }
+  
+  /* Card/container backgrounds */
+  .bg-white {
+    background-color: oklch(0.2 0.006 285.885);
+  }
+  
+  .bg-gray-50 {
+    background-color: oklch(0.16 0.005 285.823);
+  }
+  
+  .bg-gray-100 {
+    background-color: oklch(0.22 0.006 285.885);
+  }
+  
+  /* Borders */
+  .border-gray-200, .border-gray-300 {
+    border-color: oklch(0.3 0.006 285.885);
+  }
+  
+  /* Inputs */
+  input, textarea, select {
+    background-color: oklch(0.22 0.006 285.885);
+    border-color: oklch(0.35 0.006 285.885);
+    color: oklch(0.95 0 0);
+  }
+  
+  input::placeholder, textarea::placeholder {
+    color: oklch(0.5 0.01 285);
+  }
+  
+  /* Dashed borders (like drop zones) */
+  .border-dashed {
+    border-color: oklch(0.4 0.01 285);
+  }
+}
