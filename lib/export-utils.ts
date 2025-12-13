@@ -1,6 +1,6 @@
 // ============================================================================
 // EXPORT UTILITIES - TrueBid Cost Proposal Document Generation
-// Modern, Minimalist Professional Design
+// Google-Quality Modern Design
 // ============================================================================
 
 import { 
@@ -24,6 +24,28 @@ import {
   convertInchesToTwip
 } from 'docx'
 
+// pdfmake is loaded dynamically to avoid SSR issues
+let pdfMake: any = null
+
+async function loadPdfMake() {
+  if (pdfMake) return pdfMake
+  
+  const pdfMakeModule = await import('pdfmake/build/pdfmake')
+  const pdfFontsModule = await import('pdfmake/build/vfs_fonts')
+  
+  pdfMake = pdfMakeModule.default || pdfMakeModule
+  const pdfFonts = pdfFontsModule.default || pdfFontsModule
+  
+  // Handle different module structures
+  if (pdfFonts.pdfMake?.vfs) {
+    pdfMake.vfs = pdfFonts.pdfMake.vfs
+  } else if (pdfFonts.vfs) {
+    pdfMake.vfs = pdfFonts.vfs
+  }
+  
+  return pdfMake
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -38,6 +60,7 @@ export interface ExportRole {
   description?: string
   blsCode?: string
   yearsExperience?: string
+  education?: string
   allocatedHours?: number
   wbsCount?: number
 }
@@ -100,36 +123,53 @@ export interface ExportOptions {
 }
 
 // ============================================================================
-// DESIGN SYSTEM - Modern Minimalist
+// DESIGN SYSTEM - Google-Quality Modern
 // ============================================================================
 
-const FONT = 'Arial' // Closest to Helvetica on Windows
-
-const COLOR = {
-  black: '000000',
-  darkGray: '333333',
-  mediumGray: '666666',
-  lightGray: '999999',
-  border: 'DDDDDD',
-  headerBg: 'F8F8F8',
-  accent: '0066CC',
+const FONT = {
+  primary: 'Arial',
+  mono: 'Consolas'
 }
 
-// Font sizes in half-points
+const COLOR = {
+  black: '1a1a1a',
+  text: '202124',        // Google's primary text
+  secondary: '5f6368',   // Google's secondary text
+  tertiary: '80868b',    // Light gray
+  border: 'dadce0',      // Google's border color
+  headerBg: 'f8f9fa',    // Google's light background
+  accent: '1a73e8',      // Google blue
+  accentLight: 'e8f0fe', // Light blue background
+  success: '1e8e3e',     // Google green
+  white: 'ffffff',
+}
+
+// Font sizes in half-points (multiply pt by 2)
 const SIZE = {
-  title: 48,        // 24pt
-  h1: 32,           // 16pt
-  h2: 26,           // 13pt
-  h3: 22,           // 11pt
-  body: 20,         // 10pt
-  small: 18,        // 9pt
-  caption: 16,      // 8pt
+  title: 56,        // 28pt - Hero title
+  subtitle: 28,     // 14pt
+  h1: 36,           // 18pt
+  h2: 28,           // 14pt
+  h3: 24,           // 12pt
+  body: 22,         // 11pt
+  small: 20,        // 10pt
+  caption: 18,      // 9pt
+  tiny: 16,         // 8pt
+}
+
+// Spacing in twips (1440 = 1 inch, 72 = 1/20 inch)
+const SPACING = {
+  section: 600,     // Space before sections
+  paragraph: 240,   // Space after paragraphs
+  tight: 120,       // Tight spacing
+  loose: 360,       // Loose spacing
 }
 
 const STYLES = {
   default: {
     document: {
-      run: { font: FONT, size: SIZE.body, color: COLOR.darkGray },
+      run: { font: FONT.primary, size: SIZE.body, color: COLOR.text },
+      paragraph: { spacing: { line: 276 } } // 1.15 line height
     }
   },
   paragraphStyles: [
@@ -137,31 +177,53 @@ const STYLES = {
       id: 'Title',
       name: 'Title',
       basedOn: 'Normal',
-      run: { size: SIZE.title, color: COLOR.black, font: FONT },
-      paragraph: { spacing: { after: 120 } }
+      run: { size: SIZE.title, color: COLOR.black, font: FONT.primary, bold: true },
+      paragraph: { spacing: { after: 80 } }
+    },
+    {
+      id: 'Subtitle',
+      name: 'Subtitle',
+      basedOn: 'Normal',
+      run: { size: SIZE.subtitle, color: COLOR.secondary, font: FONT.primary },
+      paragraph: { spacing: { after: SPACING.section } }
     },
     {
       id: 'Heading1',
       name: 'Heading 1',
       basedOn: 'Normal',
       next: 'Normal',
-      run: { size: SIZE.h1, bold: true, color: COLOR.black, font: FONT },
-      paragraph: { spacing: { before: 400, after: 200 }, outlineLevel: 0 }
+      run: { size: SIZE.h1, bold: true, color: COLOR.black, font: FONT.primary },
+      paragraph: { spacing: { before: SPACING.section, after: SPACING.paragraph }, outlineLevel: 0 }
     },
     {
       id: 'Heading2',
       name: 'Heading 2',
       basedOn: 'Normal',
       next: 'Normal',
-      run: { size: SIZE.h2, bold: true, color: COLOR.darkGray, font: FONT },
-      paragraph: { spacing: { before: 300, after: 120 }, outlineLevel: 1 }
+      run: { size: SIZE.h2, bold: true, color: COLOR.text, font: FONT.primary },
+      paragraph: { spacing: { before: SPACING.loose, after: SPACING.tight }, outlineLevel: 1 }
+    },
+    {
+      id: 'Heading3',
+      name: 'Heading 3',
+      basedOn: 'Normal',
+      next: 'Normal',
+      run: { size: SIZE.h3, bold: true, color: COLOR.text, font: FONT.primary },
+      paragraph: { spacing: { before: SPACING.paragraph, after: SPACING.tight }, outlineLevel: 2 }
     },
     {
       id: 'BodyText',
       name: 'Body Text',
       basedOn: 'Normal',
-      run: { size: SIZE.body, font: FONT, color: COLOR.darkGray },
-      paragraph: { spacing: { after: 180, line: 276 } }
+      run: { size: SIZE.body, font: FONT.primary, color: COLOR.text },
+      paragraph: { spacing: { after: SPACING.paragraph, line: 300 } } // 1.25 line height
+    },
+    {
+      id: 'Caption',
+      name: 'Caption',
+      basedOn: 'Normal',
+      run: { size: SIZE.caption, font: FONT.primary, color: COLOR.secondary },
+      paragraph: { spacing: { after: SPACING.tight } }
     },
   ]
 }
@@ -176,50 +238,91 @@ const NUMBERING_CONFIG = [
       alignment: AlignmentType.LEFT,
       style: { paragraph: { indent: { left: 720, hanging: 360 } } }
     }]
+  },
+  {
+    reference: 'number-list',
+    levels: [{
+      level: 0,
+      format: LevelFormat.DECIMAL,
+      text: '%1.',
+      alignment: AlignmentType.LEFT,
+      style: { paragraph: { indent: { left: 720, hanging: 360 } } }
+    }]
   }
 ]
 
 // ============================================================================
-// TABLE HELPERS - Modern Minimal Design
+// TABLE HELPERS - Clean Modern Design
 // ============================================================================
 
 const noBorder = { style: BorderStyle.NONE, size: 0, color: COLOR.border }
-const bottomBorder = { style: BorderStyle.SINGLE, size: 6, color: COLOR.border }
-const topBorder = { style: BorderStyle.SINGLE, size: 6, color: COLOR.border }
+const subtleBorder = { style: BorderStyle.SINGLE, size: 4, color: COLOR.border }
 
-function headerCell(text: string, width: number, align: typeof AlignmentType[keyof typeof AlignmentType] = AlignmentType.LEFT): TableCell {
+function tableHeaderCell(
+  text: string, 
+  width: number, 
+  align: typeof AlignmentType[keyof typeof AlignmentType] = AlignmentType.LEFT
+): TableCell {
   return new TableCell({
     width: { size: width, type: WidthType.DXA },
-    borders: { top: noBorder, left: noBorder, right: noBorder, bottom: bottomBorder },
+    borders: { top: noBorder, left: noBorder, right: noBorder, bottom: subtleBorder },
     shading: { fill: COLOR.headerBg, type: ShadingType.CLEAR },
-    margins: { top: 100, bottom: 100, left: 80, right: 80 },
+    margins: { top: 140, bottom: 140, left: 120, right: 120 },
     children: [new Paragraph({
       alignment: align,
-      children: [new TextRun({ text, size: SIZE.small, bold: true, color: COLOR.mediumGray, font: FONT })]
+      children: [new TextRun({ 
+        text: text.toUpperCase(), 
+        size: SIZE.tiny, 
+        bold: true, 
+        color: COLOR.secondary, 
+        font: FONT.primary 
+      })]
     })]
   })
 }
 
-function dataCell(text: string, width: number, align: typeof AlignmentType[keyof typeof AlignmentType] = AlignmentType.LEFT, bold = false): TableCell {
+function tableDataCell(
+  text: string, 
+  width: number, 
+  align: typeof AlignmentType[keyof typeof AlignmentType] = AlignmentType.LEFT, 
+  options: { bold?: boolean; mono?: boolean; color?: string } = {}
+): TableCell {
   return new TableCell({
     width: { size: width, type: WidthType.DXA },
-    borders: { top: noBorder, left: noBorder, right: noBorder, bottom: bottomBorder },
-    margins: { top: 120, bottom: 120, left: 80, right: 80 },
+    borders: { top: noBorder, left: noBorder, right: noBorder, bottom: subtleBorder },
+    margins: { top: 140, bottom: 140, left: 120, right: 120 },
     children: [new Paragraph({
       alignment: align,
-      children: [new TextRun({ text, size: SIZE.body, bold, color: bold ? COLOR.black : COLOR.darkGray, font: FONT })]
+      children: [new TextRun({ 
+        text, 
+        size: SIZE.small, 
+        bold: options.bold || false, 
+        color: options.color || COLOR.text, 
+        font: options.mono ? FONT.mono : FONT.primary 
+      })]
     })]
   })
 }
 
-function totalCell(text: string, width: number, align: typeof AlignmentType[keyof typeof AlignmentType] = AlignmentType.LEFT): TableCell {
+function tableTotalCell(
+  text: string, 
+  width: number, 
+  align: typeof AlignmentType[keyof typeof AlignmentType] = AlignmentType.LEFT
+): TableCell {
   return new TableCell({
     width: { size: width, type: WidthType.DXA },
-    borders: { top: topBorder, left: noBorder, right: noBorder, bottom: noBorder },
-    margins: { top: 120, bottom: 120, left: 80, right: 80 },
+    borders: { top: subtleBorder, left: noBorder, right: noBorder, bottom: noBorder },
+    shading: { fill: COLOR.headerBg, type: ShadingType.CLEAR },
+    margins: { top: 140, bottom: 140, left: 120, right: 120 },
     children: [new Paragraph({
       alignment: align,
-      children: [new TextRun({ text, size: SIZE.body, bold: true, color: COLOR.black, font: FONT })]
+      children: [new TextRun({ 
+        text, 
+        size: SIZE.small, 
+        bold: true, 
+        color: COLOR.black, 
+        font: FONT.primary 
+      })]
     })]
   })
 }
@@ -228,559 +331,1234 @@ function totalCell(text: string, width: number, align: typeof AlignmentType[keyo
 // FORMATTERS
 // ============================================================================
 
-function currency(n: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
-}
+const currency = (n: number): string => 
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n)
 
-function currencyK(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
-  return currency(n)
-}
+const currencyWhole = (n: number): string => 
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n)
 
-function pct(n: number): string {
-  return `${(n * 100).toFixed(2)}%`
-}
+const num = (n: number): string => 
+  new Intl.NumberFormat('en-US').format(n)
 
-function num(n: number): string {
-  return n.toLocaleString('en-US')
-}
+const pct = (n: number): string => `${(n * 100).toFixed(1)}%`
 
-function contractType(t: string): string {
-  return { tm: 'Time & Materials', ffp: 'Firm Fixed Price', hybrid: 'Hybrid' }[t] || t
-}
+const yearLabel = (y: number): string => y === 1 ? 'Base Year' : `Option Year ${y - 1}`
 
-function fmtDate(d: string): string {
-  try { return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) }
-  catch { return d }
-}
-
-function yearLabel(y: number): string {
-  return y === 1 ? 'Base Year' : `Option ${y - 1}`
+const formatDate = (dateStr: string): string => {
+  try {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  } catch {
+    return dateStr
+  }
 }
 
 // ============================================================================
 // DOCUMENT SECTIONS
 // ============================================================================
 
-function coverPage(data: ExportData): Paragraph[] {
-  const items: Paragraph[] = []
+function coverPage(data: ExportData): (Paragraph | Table)[] {
+  const items: (Paragraph | Table)[] = []
   
-  // Title
+  // Add vertical spacing at top
+  items.push(new Paragraph({ spacing: { before: 2000 }, children: [] }))
+  
+  // Company name - subtle header
   items.push(new Paragraph({
-    spacing: { before: 600, after: 80 },
-    children: [new TextRun({ text: 'Cost Proposal', size: SIZE.title, color: COLOR.black, font: FONT })]
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 600 },
+    children: [new TextRun({ 
+      text: data.companyName.toUpperCase(), 
+      size: SIZE.caption, 
+      color: COLOR.secondary,
+      font: FONT.primary,
+      characterSpacing: 60
+    })]
   }))
   
-  // Subtitle - proposal title
+  // Main title
+  items.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    children: [new TextRun({ 
+      text: 'Cost Proposal', 
+      size: SIZE.title, 
+      bold: true, 
+      color: COLOR.black, 
+      font: FONT.primary 
+    })]
+  }))
+  
+  // Proposal title
   if (data.proposalTitle) {
     items.push(new Paragraph({
-      spacing: { after: 400 },
-      children: [new TextRun({ text: data.proposalTitle, size: SIZE.h2, color: COLOR.mediumGray, font: FONT })]
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 120 },
+      children: [new TextRun({ 
+        text: data.proposalTitle, 
+        size: SIZE.h2, 
+        color: COLOR.secondary, 
+        font: FONT.primary 
+      })]
     }))
   }
   
-  // Divider
+  // Divider line
+  items.push(new Paragraph({ spacing: { before: 400, after: 400 }, children: [] }))
   items.push(new Paragraph({
-    spacing: { before: 200, after: 300 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: COLOR.border } },
-    children: []
+    alignment: AlignmentType.CENTER,
+    children: [new TextRun({ 
+      text: '―――――――――――――', 
+      size: SIZE.h1, 
+      color: COLOR.border, 
+      font: FONT.primary 
+    })]
   }))
+  items.push(new Paragraph({ spacing: { before: 400 }, children: [] }))
   
-  // Company name
-  items.push(new Paragraph({
-    spacing: { after: 160 },
-    children: [new TextRun({ text: data.companyName || data.preparedBy, size: SIZE.h1, bold: true, color: COLOR.black, font: FONT })]
-  }))
-  
-  // Company details
-  if (data.samUei) {
-    items.push(new Paragraph({
-      spacing: { after: 60 },
-      children: [
-        new TextRun({ text: 'SAM UEI  ', size: SIZE.body, color: COLOR.lightGray, font: FONT }),
-        new TextRun({ text: data.samUei, size: SIZE.body, color: COLOR.darkGray, font: FONT })
-      ]
-    }))
-  }
-  
-  if (data.gsaContract) {
-    items.push(new Paragraph({
-      spacing: { after: 60 },
-      children: [
-        new TextRun({ text: 'GSA Contract  ', size: SIZE.body, color: COLOR.lightGray, font: FONT }),
-        new TextRun({ text: data.gsaContract, size: SIZE.body, color: COLOR.darkGray, font: FONT })
-      ]
-    }))
-  }
-  
-  // Solicitation
-  if (data.solicitation) {
-    items.push(new Paragraph({
-      spacing: { before: 200, after: 60 },
-      children: [
-        new TextRun({ text: 'Solicitation  ', size: SIZE.body, color: COLOR.lightGray, font: FONT }),
-        new TextRun({ text: data.solicitation, size: SIZE.body, color: COLOR.darkGray, font: FONT })
-      ]
-    }))
-  }
-  
-  // Client
-  if (data.client) {
-    items.push(new Paragraph({
-      spacing: { after: 60 },
-      children: [
-        new TextRun({ text: 'Prepared for  ', size: SIZE.body, color: COLOR.lightGray, font: FONT }),
-        new TextRun({ text: data.client, size: SIZE.body, color: COLOR.darkGray, font: FONT })
-      ]
-    }))
-  }
-  
-  // Date
-  items.push(new Paragraph({
-    spacing: { after: 200 },
-    children: [
-      new TextRun({ text: 'Date  ', size: SIZE.body, color: COLOR.lightGray, font: FONT }),
-      new TextRun({ text: fmtDate(data.preparedDate), size: SIZE.body, color: COLOR.darkGray, font: FONT })
-    ]
-  }))
-  
-  items.push(new Paragraph({ children: [new PageBreak()] }))
-  return items
-}
-
-function executiveSummary(data: ExportData): Paragraph[] {
-  const items: Paragraph[] = []
-  const totalFTEs = data.roles.reduce((s, r) => s + r.quantity, 0)
-  
-  // Calculate yearly totals
-  const yearTotals: number[] = []
-  for (let y = 1; y <= data.yearsToInclude; y++) {
-    let total = 0
-    data.roles.forEach(role => {
-      const base = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
-      const rate = y === 1 ? base : data.calculateEscalatedRate(base, y)
-      total += rate * data.productiveHours * role.quantity
-    })
-    yearTotals.push(total)
-  }
-  const grandTotal = yearTotals.reduce((s, t) => s + t, 0)
-  
-  items.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Executive Summary')] }))
-  
-  items.push(new Paragraph({
-    style: 'BodyText',
-    children: [new TextRun(`This cost proposal presents our pricing for ${data.solicitation || 'the solicitation'}${data.client ? ` with ${data.client}` : ''}. We propose a ${contractType(data.rateCardType).toLowerCase()} arrangement with ${data.roles.length} labor categories over ${data.yearsToInclude} year${data.yearsToInclude > 1 ? 's' : ''}.`)]
-  }))
-  
-  // Key metrics in a clean table
-  const metricsRows: TableRow[] = [
-    new TableRow({
-      children: [
-        headerCell('Total Value', 2400),
-        headerCell('Duration', 2400),
-        headerCell('Team Size', 2400),
-        headerCell('Categories', 2400),
-      ]
-    }),
-    new TableRow({
-      children: [
-        dataCell(currencyK(grandTotal), 2400, AlignmentType.LEFT, true),
-        dataCell(`${data.yearsToInclude} Year${data.yearsToInclude > 1 ? 's' : ''}`, 2400, AlignmentType.LEFT, true),
-        dataCell(`${totalFTEs} FTE${totalFTEs > 1 ? 's' : ''}`, 2400, AlignmentType.LEFT, true),
-        dataCell(`${data.roles.length}`, 2400, AlignmentType.LEFT, true),
-      ]
-    })
+  // Metadata
+  const metadata = [
+    { label: 'Solicitation', value: data.solicitation || 'N/A' },
+    { label: 'Client', value: data.client || 'N/A' },
+    { label: 'Prepared By', value: data.preparedBy },
+    { label: 'Date', value: formatDate(data.preparedDate) },
   ]
   
-  items.push(
-    new Paragraph({ spacing: { before: 200 }, children: [] }),
-    new Table({ columnWidths: [2400, 2400, 2400, 2400], rows: metricsRows })
-  )
-  
-  // Pricing by year
-  items.push(new Paragraph({
-    heading: HeadingLevel.HEADING_2,
-    children: [new TextRun('Pricing by Period')]
-  }))
-  
-  const pricingRows: TableRow[] = [
-    new TableRow({
+  metadata.forEach(item => {
+    items.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 80 },
       children: [
-        headerCell('Period', 4000),
-        headerCell('Hours', 2500, AlignmentType.RIGHT),
-        headerCell('Cost', 3000, AlignmentType.RIGHT),
-      ]
-    })
-  ]
-  
-  yearTotals.forEach((total, i) => {
-    pricingRows.push(new TableRow({
-      children: [
-        dataCell(yearLabel(i + 1), 4000),
-        dataCell(num(data.productiveHours * totalFTEs), 2500, AlignmentType.RIGHT),
-        dataCell(currency(total), 3000, AlignmentType.RIGHT),
+        new TextRun({ text: `${item.label}: `, size: SIZE.small, color: COLOR.tertiary, font: FONT.primary }),
+        new TextRun({ text: item.value, size: SIZE.small, color: COLOR.text, font: FONT.primary, bold: true })
       ]
     }))
   })
   
-  pricingRows.push(new TableRow({
-    children: [
-      totalCell('Total Contract Value', 4000),
-      totalCell('', 2500),
-      totalCell(currency(grandTotal), 3000, AlignmentType.RIGHT),
-    ]
-  }))
+  // Company identifiers
+  items.push(new Paragraph({ spacing: { before: 600 }, children: [] }))
   
-  items.push(
-    new Paragraph({ spacing: { before: 160 }, children: [] }),
-    new Table({ columnWidths: [4000, 2500, 3000], rows: pricingRows }),
-    new Paragraph({
-      spacing: { before: 120 },
-      children: [new TextRun({ text: `Based on ${num(data.productiveHours)} productive hours per FTE per year${data.includeEscalation && data.yearsToInclude > 1 ? `, ${pct(data.escalationRate)} annual escalation` : ''}.`, size: SIZE.small, color: COLOR.lightGray, italics: true, font: FONT })]
-    })
-  )
+  const identifiers: string[] = []
+  if (data.samUei) identifiers.push(`SAM UEI: ${data.samUei}`)
+  if (data.gsaContract) identifiers.push(`GSA: ${data.gsaContract}`)
+  
+  if (identifiers.length > 0) {
+    items.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ 
+        text: identifiers.join('   •   '), 
+        size: SIZE.caption, 
+        color: COLOR.tertiary, 
+        font: FONT.primary 
+      })]
+    }))
+  }
+  
+  // Page break
+  items.push(new Paragraph({ children: [new PageBreak()] }))
   
   return items
 }
 
-function rateCard(data: ExportData): Paragraph[] {
-  const items: Paragraph[] = []
+function executiveSummary(data: ExportData): (Paragraph | Table)[] {
+  const items: (Paragraph | Table)[] = []
   
-  items.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Rate Card')] }))
-  items.push(new Paragraph({
-    style: 'BodyText',
-    children: [new TextRun(`Fully burdened hourly rates by labor category under ${contractType(data.rateCardType).toLowerCase()} pricing.`)]
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_1, 
+    children: [new TextRun('Executive Summary')] 
   }))
   
-  // Header
-  const headerCells = [headerCell('Labor Category', 3500), headerCell('Level', 1000, AlignmentType.CENTER)]
+  // Calculate totals
+  const totalHours = data.wbsElements?.reduce((sum, el) => sum + el.hours, 0) || 0
+  let totalCost = 0
+  
+  data.roles.forEach(role => {
+    const rate = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
+    const hours = data.productiveHours * role.quantity * data.yearsToInclude
+    totalCost += rate * hours
+  })
+  
+  items.push(new Paragraph({
+    style: 'BodyText',
+    children: [new TextRun(
+      `This proposal presents ${data.companyName}'s cost approach for ${data.proposalTitle || 'the referenced solicitation'}. ` +
+      `Our team of ${data.roles.length} labor categories will deliver ${num(totalHours)} hours of effort ` +
+      `across ${data.yearsToInclude === 1 ? 'the base year' : `${data.yearsToInclude} performance periods`}.`
+    )]
+  }))
+  
+  // Key metrics in a clean grid
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_2, 
+    children: [new TextRun('Proposal Overview')] 
+  }))
+  
+  const metricsTable = new Table({
+    columnWidths: [2400, 2400, 2400, 2400],
+    rows: [
+      new TableRow({
+        children: [
+          createMetricCell('Total Value', currencyWhole(totalCost)),
+          createMetricCell('Duration', `${data.yearsToInclude} Year${data.yearsToInclude > 1 ? 's' : ''}`),
+          createMetricCell('Team Size', `${data.roles.length} Roles`),
+          createMetricCell('Total Hours', num(totalHours)),
+        ]
+      })
+    ]
+  })
+  
+  items.push(new Paragraph({ spacing: { before: 200 }, children: [] }))
+  items.push(metricsTable)
+  items.push(new Paragraph({ spacing: { after: 200 }, children: [] }))
+  
+  // Contract type info
+  const contractTypeLabel = data.rateCardType === 'tm' ? 'Time & Materials' : 
+                            data.rateCardType === 'ffp' ? 'Firm Fixed Price' : 'Hybrid'
+  
+  items.push(new Paragraph({
+    style: 'BodyText',
+    children: [
+      new TextRun({ text: 'Contract Type: ', bold: true }),
+      new TextRun(contractTypeLabel),
+      new TextRun('  •  '),
+      new TextRun({ text: 'Indirect Rates: ', bold: true }),
+      new TextRun(`FY${data.indirectRates.fiscalYear} ${data.indirectRates.source}`),
+    ]
+  }))
+  
+  return items
+}
+
+function createMetricCell(label: string, value: string): TableCell {
+  return new TableCell({
+    width: { size: 2400, type: WidthType.DXA },
+    borders: { top: noBorder, left: noBorder, right: noBorder, bottom: noBorder },
+    shading: { fill: COLOR.headerBg, type: ShadingType.CLEAR },
+    margins: { top: 200, bottom: 200, left: 160, right: 160 },
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: value, size: SIZE.h2, bold: true, color: COLOR.accent, font: FONT.primary })]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 60 },
+        children: [new TextRun({ text: label.toUpperCase(), size: SIZE.tiny, color: COLOR.secondary, font: FONT.primary })]
+      })
+    ]
+  })
+}
+
+function rateCard(data: ExportData): (Paragraph | Table)[] {
+  const items: (Paragraph | Table)[] = []
+  
+  items.push(new Paragraph({ children: [new PageBreak()] }))
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_1, 
+    children: [new TextRun('Rate Card')] 
+  }))
+  
+  items.push(new Paragraph({
+    style: 'BodyText',
+    children: [new TextRun(
+      `Fully-burdened hourly rates for all proposed labor categories. ` +
+      (data.includeEscalation && data.yearsToInclude > 1 
+        ? `Option year rates include ${pct(data.escalationRate)} annual escalation.`
+        : 'Rates are fixed across all performance periods.')
+    )]
+  }))
+  
+  // Build columns dynamically based on years
+  const colWidths: number[] = [3200, 800] // Name, Level
+  const headerCells: TableCell[] = [
+    tableHeaderCell('Labor Category', 3200),
+    tableHeaderCell('Level', 800, AlignmentType.CENTER),
+  ]
+  
   for (let y = 1; y <= data.yearsToInclude; y++) {
-    headerCells.push(headerCell(yearLabel(y), 1500, AlignmentType.RIGHT))
+    colWidths.push(1400)
+    headerCells.push(tableHeaderCell(yearLabel(y), 1400, AlignmentType.RIGHT))
   }
   
   const rows: TableRow[] = [new TableRow({ children: headerCells })]
   
   // Data rows
   data.roles.forEach(role => {
-    const base = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
-    const cells = [
-      dataCell(role.title || role.name || '', 3500),
-      dataCell(role.icLevel || '—', 1000, AlignmentType.CENTER),
+    const baseRate = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
+    const cells: TableCell[] = [
+      tableDataCell(role.title || role.name || '', 3200, AlignmentType.LEFT, { bold: true }),
+      tableDataCell(role.icLevel || '', 800, AlignmentType.CENTER, { color: COLOR.secondary }),
     ]
+    
     for (let y = 1; y <= data.yearsToInclude; y++) {
-      const rate = y === 1 ? base : data.calculateEscalatedRate(base, y)
-      cells.push(dataCell(currency(rate), 1500, AlignmentType.RIGHT))
+      const rate = y === 1 ? baseRate : data.calculateEscalatedRate(baseRate, y)
+      cells.push(tableDataCell(currency(rate), 1400, AlignmentType.RIGHT, { mono: true }))
     }
+    
     rows.push(new TableRow({ children: cells }))
   })
   
-  const widths = [3500, 1000, ...Array(data.yearsToInclude).fill(1500)]
+  items.push(new Paragraph({ spacing: { before: 200 }, children: [] }))
+  items.push(new Table({ columnWidths: colWidths, rows }))
   
-  items.push(
-    new Paragraph({ spacing: { before: 200 }, children: [] }),
-    new Table({ columnWidths: widths, rows }),
-    new Paragraph({
-      spacing: { before: 120 },
-      children: [new TextRun({ text: `Indirect rates: Fringe ${pct(data.indirectRates.fringe)}, OH ${pct(data.indirectRates.overhead)}, G&A ${pct(data.indirectRates.ga)}${data.rateCardType !== 'ffp' ? `, Profit ${pct(data.profitMargin)}` : ''} (${data.indirectRates.source} FY${data.indirectRates.fiscalYear})`, size: SIZE.small, color: COLOR.lightGray, italics: true, font: FONT })]
-    })
-  )
+  // Rate footnote
+  items.push(new Paragraph({
+    spacing: { before: 200 },
+    children: [new TextRun({ 
+      text: `Rates based on ${num(data.productiveHours)} productive hours per year. ` +
+            `Fringe ${pct(data.indirectRates.fringe)} · Overhead ${pct(data.indirectRates.overhead)} · G&A ${pct(data.indirectRates.ga)}` +
+            (data.rateCardType !== 'ffp' ? ` · Profit ${pct(data.profitMargin)}` : ''),
+      size: SIZE.caption, 
+      color: COLOR.tertiary, 
+      font: FONT.primary,
+      italics: true
+    })]
+  }))
   
   return items
 }
 
-function basisOfEstimate(data: ExportData): Paragraph[] {
-  const items: Paragraph[] = []
-  const totalFTEs = data.roles.reduce((s, r) => s + r.quantity, 0)
+function basisOfEstimate(data: ExportData): (Paragraph | Table)[] {
+  const items: (Paragraph | Table)[] = []
   
-  items.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Basis of Estimate')] }))
-  items.push(new Paragraph({
-    style: 'BodyText',
-    children: [new TextRun('Labor cost breakdown by category and performance period.')]
+  if (!data.wbsElements || data.wbsElements.length === 0) return items
+  
+  items.push(new Paragraph({ children: [new PageBreak()] }))
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_1, 
+    children: [new TextRun('Basis of Estimate')] 
   }))
   
-  // Labor Summary Table
-  const headerCells = [
-    headerCell('Labor Category', 2800),
-    headerCell('Qty', 700, AlignmentType.CENTER),
-    headerCell('Rate/Hr', 1200, AlignmentType.RIGHT),
+  const totalHours = data.wbsElements.reduce((sum, el) => sum + el.hours, 0)
+  
+  items.push(new Paragraph({
+    style: 'BodyText',
+    children: [new TextRun(
+      `This section details the work breakdown structure and labor hour estimates for the ${num(totalHours)} total hours proposed.`
+    )]
+  }))
+  
+  // Summary table
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_2, 
+    children: [new TextRun('WBS Summary')] 
+  }))
+  
+  const summaryRows: TableRow[] = [
+    new TableRow({
+      children: [
+        tableHeaderCell('WBS', 800),
+        tableHeaderCell('Element', 3600),
+        tableHeaderCell('Method', 1200, AlignmentType.CENTER),
+        tableHeaderCell('Confidence', 1200, AlignmentType.CENTER),
+        tableHeaderCell('Hours', 1200, AlignmentType.RIGHT),
+      ]
+    })
   ]
-  for (let y = 1; y <= data.yearsToInclude; y++) {
-    headerCells.push(headerCell(y === 1 ? 'Base Year' : `OY${y-1}`, 1500, AlignmentType.RIGHT))
-  }
   
-  const rows: TableRow[] = [new TableRow({ children: headerCells })]
-  const yearTotals: number[] = Array(data.yearsToInclude).fill(0)
-  
-  data.roles.forEach(role => {
-    const base = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
-    const cells = [
-      dataCell(role.title || role.name || '', 2800),
-      dataCell(role.quantity.toString(), 700, AlignmentType.CENTER),
-      dataCell(currency(base), 1200, AlignmentType.RIGHT),
-    ]
-    for (let y = 1; y <= data.yearsToInclude; y++) {
-      const rate = y === 1 ? base : data.calculateEscalatedRate(base, y)
-      const cost = rate * data.productiveHours * role.quantity
-      yearTotals[y - 1] += cost
-      cells.push(dataCell(currency(cost), 1500, AlignmentType.RIGHT))
-    }
-    rows.push(new TableRow({ children: cells }))
+  data.wbsElements.forEach(element => {
+    summaryRows.push(new TableRow({
+      children: [
+        tableDataCell(element.wbsNumber, 800, AlignmentType.LEFT, { mono: true, color: COLOR.secondary }),
+        tableDataCell(element.title, 3600, AlignmentType.LEFT, { bold: true }),
+        tableDataCell(element.estimateMethod, 1200, AlignmentType.CENTER),
+        tableDataCell(element.confidenceLevel, 1200, AlignmentType.CENTER, { 
+          color: element.confidenceLevel === 'high' ? COLOR.success : COLOR.secondary 
+        }),
+        tableDataCell(num(element.hours), 1200, AlignmentType.RIGHT, { mono: true }),
+      ]
+    }))
   })
   
   // Total row
-  const totalCells = [totalCell('Total', 2800), totalCell('', 700), totalCell('', 1200)]
-  yearTotals.forEach(t => totalCells.push(totalCell(currency(t), 1500, AlignmentType.RIGHT)))
-  rows.push(new TableRow({ children: totalCells }))
+  summaryRows.push(new TableRow({
+    children: [
+      tableTotalCell('', 800),
+      tableTotalCell('Total', 3600),
+      tableTotalCell('', 1200),
+      tableTotalCell('', 1200),
+      tableTotalCell(num(totalHours), 1200, AlignmentType.RIGHT),
+    ]
+  }))
   
-  const widths = [2800, 700, 1200, ...Array(data.yearsToInclude).fill(1500)]
+  items.push(new Paragraph({ spacing: { before: 200 }, children: [] }))
+  items.push(new Table({ columnWidths: [800, 3600, 1200, 1200, 1200], rows: summaryRows }))
   
-  items.push(
-    new Paragraph({ spacing: { before: 200 }, children: [] }),
-    new Table({ columnWidths: widths, rows }),
-    new Paragraph({
-      spacing: { before: 120 },
-      children: [new TextRun({ text: `${num(data.productiveHours)} productive hours per FTE per year.`, size: SIZE.small, color: COLOR.lightGray, italics: true, font: FONT })]
-    })
-  )
+  // Detailed breakdown for each WBS
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_2, 
+    spacing: { before: 600 },
+    children: [new TextRun('Detailed Breakdown')] 
+  }))
   
-  // WBS Elements Section - Detailed Breakdown
-  if (data.wbsElements && data.wbsElements.length > 0) {
-    items.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun('Work Breakdown Structure')] }))
-    items.push(new Paragraph({
-      style: 'BodyText',
-      children: [new TextRun(`Detailed breakdown of ${data.wbsElements.length} work elements totaling ${num(data.wbsElements.reduce((s, e) => s + e.hours, 0))} hours.`)]
+  data.wbsElements.forEach(element => {
+    items.push(new Paragraph({ 
+      heading: HeadingLevel.HEADING_3, 
+      children: [new TextRun(`${element.wbsNumber} ${element.title}`)] 
     }))
     
-    data.wbsElements.forEach((element, idx) => {
-      // WBS Header with number and title
+    items.push(new Paragraph({
+      style: 'BodyText',
+      children: [new TextRun(element.description)]
+    }))
+    
+    // SOO Reference
+    if (element.sooReference) {
       items.push(new Paragraph({
-        heading: HeadingLevel.HEADING_3,
-        spacing: { before: idx === 0 ? 200 : 360 },
+        spacing: { after: 120 },
         children: [
-          new TextRun({ text: `${element.wbsNumber}  `, color: COLOR.lightGray, font: FONT }),
-          new TextRun({ text: element.title, font: FONT })
+          new TextRun({ text: 'SOO Reference: ', size: SIZE.small, bold: true, color: COLOR.secondary, font: FONT.primary }),
+          new TextRun({ text: element.sooReference, size: SIZE.small, color: COLOR.text, font: FONT.primary })
         ]
       }))
-      
-      // Metadata line: method, confidence, SOO ref
-      const metaParts: string[] = []
-      metaParts.push(`${element.estimateMethod} estimate`)
-      metaParts.push(`${element.confidenceLevel} confidence`)
-      if (element.sooReference) metaParts.push(`Ref: ${element.sooReference}`)
-      
-      items.push(new Paragraph({
-        spacing: { after: 80 },
-        children: [new TextRun({ text: metaParts.join('  ·  '), size: SIZE.small, color: COLOR.lightGray, font: FONT })]
-      }))
-      
-      // Description
-      items.push(new Paragraph({
-        style: 'BodyText',
-        children: [new TextRun(element.description)]
-      }))
-      
-      // Total hours summary
-      items.push(new Paragraph({
-        spacing: { before: 120, after: 80 },
-        children: [
-          new TextRun({ text: 'Total Hours: ', bold: true, size: SIZE.body, color: COLOR.darkGray, font: FONT }),
-          new TextRun({ text: `${num(element.hours)}`, size: SIZE.body, color: COLOR.darkGray, font: FONT })
-        ]
-      }))
-      
-      // Labor Allocation Table with hours by period
-      if (element.laborBreakdown && element.laborBreakdown.length > 0) {
-        items.push(new Paragraph({
-          spacing: { before: 160, after: 80 },
-          children: [new TextRun({ text: 'Labor Allocation', bold: true, size: SIZE.body, color: COLOR.darkGray, font: FONT })]
-        }))
-        
-        // Build header with year columns
-        const laborHeaderCells = [
-          headerCell('Role', 2200),
-          headerCell('Total', 1000, AlignmentType.RIGHT),
-        ]
-        for (let y = 1; y <= data.yearsToInclude; y++) {
-          laborHeaderCells.push(headerCell(y === 1 ? 'Base' : `OY${y-1}`, 900, AlignmentType.RIGHT))
-        }
-        laborHeaderCells.push(headerCell('Rationale', 3500))
-        
-        const laborRows: TableRow[] = [new TableRow({ children: laborHeaderCells })]
-        
-        element.laborBreakdown.forEach(labor => {
-          // Calculate hours per year (even distribution or use period-specific if available)
-          const hoursPerYear = Math.round(labor.hours / data.yearsToInclude)
-          
-          const rowCells = [
-            dataCell(labor.roleName, 2200),
-            dataCell(num(labor.hours), 1000, AlignmentType.RIGHT, true),
+    }
+    
+    // Labor breakdown table
+    if (element.laborBreakdown && element.laborBreakdown.length > 0) {
+      const laborRows: TableRow[] = [
+        new TableRow({
+          children: [
+            tableHeaderCell('Role', 4000),
+            tableHeaderCell('Hours', 1200, AlignmentType.RIGHT),
+            tableHeaderCell('Rationale', 3800),
           ]
-          for (let y = 1; y <= data.yearsToInclude; y++) {
-            rowCells.push(dataCell(num(hoursPerYear), 900, AlignmentType.RIGHT))
-          }
-          rowCells.push(dataCell(labor.rationale || '—', 3500))
-          
-          laborRows.push(new TableRow({ children: rowCells }))
         })
-        
-        // Calculate column widths
-        const laborWidths = [2200, 1000, ...Array(data.yearsToInclude).fill(900), 3500]
-        
-        items.push(new Table({ columnWidths: laborWidths, rows: laborRows }))
-      }
+      ]
       
-      // Assumptions
-      if (element.assumptions && element.assumptions.length > 0) {
-        items.push(new Paragraph({
-          spacing: { before: 160, after: 60 },
-          children: [new TextRun({ text: 'Assumptions', bold: true, size: SIZE.body, color: COLOR.darkGray, font: FONT })]
+      element.laborBreakdown.forEach(labor => {
+        laborRows.push(new TableRow({
+          children: [
+            tableDataCell(labor.roleName, 4000),
+            tableDataCell(num(labor.hours), 1200, AlignmentType.RIGHT, { mono: true }),
+            tableDataCell(labor.rationale || '', 3800, AlignmentType.LEFT, { color: COLOR.secondary }),
+          ]
         }))
-        
-        element.assumptions.forEach(assumption => {
-          items.push(new Paragraph({
-            numbering: { reference: 'bullet-list', level: 0 },
-            children: [new TextRun({ text: assumption, size: SIZE.body, color: COLOR.darkGray, font: FONT })]
-          }))
-        })
-      }
-    })
-  }
+      })
+      
+      items.push(new Paragraph({ spacing: { before: 160 }, children: [] }))
+      items.push(new Table({ columnWidths: [4000, 1200, 3800], rows: laborRows }))
+    }
+    
+    // Assumptions
+    if (element.assumptions && element.assumptions.length > 0) {
+      items.push(new Paragraph({
+        spacing: { before: 160 },
+        children: [new TextRun({ text: 'Assumptions:', size: SIZE.small, bold: true, color: COLOR.secondary, font: FONT.primary })]
+      }))
+      
+      element.assumptions.forEach(assumption => {
+        items.push(new Paragraph({
+          numbering: { reference: 'bullet-list', level: 0 },
+          children: [new TextRun({ text: assumption, size: SIZE.small, color: COLOR.text, font: FONT.primary })]
+        }))
+      })
+    }
+    
+    items.push(new Paragraph({ spacing: { after: 240 }, children: [] }))
+  })
   
   return items
 }
 
-function laborCategories(data: ExportData): Paragraph[] {
-  const items: Paragraph[] = []
+function laborCategories(data: ExportData): (Paragraph | Table)[] {
+  const items: (Paragraph | Table)[] = []
   
-  // Calculate hours from WBS
+  // Calculate role hours from WBS
   const roleHours: Record<string, number> = {}
   data.wbsElements?.forEach(el => {
-    el.laborBreakdown.forEach(lb => {
+    el.laborBreakdown?.forEach(lb => {
       roleHours[lb.roleName] = (roleHours[lb.roleName] || 0) + lb.hours
     })
   })
   
-  items.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Labor Categories')] }))
+  items.push(new Paragraph({ children: [new PageBreak()] }))
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_1, 
+    children: [new TextRun('Labor Categories')] 
+  }))
+  
   items.push(new Paragraph({
     style: 'BodyText',
-    children: [new TextRun('Qualifications and responsibilities for each proposed labor category.')]
+    children: [new TextRun('Qualifications, experience requirements, and responsibilities for each proposed labor category.')]
   }))
+  
+  // Mock data for descriptions
+  const mockDescriptions: Record<string, string> = {
+    'delivery manager': 'Oversees project delivery, manages client relationships, and ensures on-time execution of deliverables. Coordinates cross-functional teams and maintains project schedules.',
+    'product manager': 'Defines product vision and roadmap, prioritizes features based on user research and business value. Works closely with engineering and design teams.',
+    'product designer': 'Creates user-centered designs including wireframes, prototypes, and high-fidelity mockups. Conducts usability testing and ensures Section 508 compliance.',
+    'frontend engineer': 'Develops responsive web applications using modern JavaScript frameworks. Implements accessible UI components and optimizes performance.',
+    'backend engineer': 'Designs and implements scalable APIs and microservices. Manages database architecture and ensures system reliability.',
+    'design lead': 'Leads design strategy and mentors junior designers. Establishes design systems and ensures consistency across products.',
+    'ux researcher': 'Conducts user research including interviews, surveys, and usability testing. Synthesizes findings into actionable insights.',
+    'data engineer': 'Builds and maintains data pipelines and ETL processes. Ensures data quality and availability for analytics.',
+    'devops engineer': 'Manages CI/CD pipelines, infrastructure as code, and cloud environments. Ensures system security and reliability.',
+    'technical lead': 'Provides technical leadership and architectural guidance. Mentors engineers and ensures code quality standards.',
+  }
+  
+  const mockExperience: Record<string, string> = {
+    'IC3': '3-5 years',
+    'IC4': '5-8 years', 
+    'IC5': '8-12 years',
+    'IC6': '12+ years',
+  }
+  
+  const mockEducation: Record<string, string> = {
+    'delivery manager': "Bachelor's degree in Business, IT, or related field",
+    'product manager': "Bachelor's degree in Business, Computer Science, or related field",
+    'product designer': "Bachelor's degree in Design, HCI, or related field",
+    'frontend engineer': "Bachelor's degree in Computer Science or related field",
+    'backend engineer': "Bachelor's degree in Computer Science or related field",
+    'design lead': "Bachelor's degree in Design, HCI, or related field",
+    'ux researcher': "Master's degree in HCI, Psychology, or related field preferred",
+    'data engineer': "Bachelor's degree in Computer Science, Data Science, or related field",
+    'devops engineer': "Bachelor's degree in Computer Science or related field",
+    'technical lead': "Bachelor's degree in Computer Science or related field",
+  }
+
+  const mockBLSCodes: Record<string, string> = {
+    'delivery manager': '11-3021',
+    'product manager': '11-3021',
+    'product designer': '15-1255',
+    'frontend engineer': '15-1252',
+    'backend engineer': '15-1252',
+    'design lead': '15-1255',
+    'ux researcher': '15-1255',
+    'data engineer': '15-1252',
+    'devops engineer': '15-1252',
+    'technical lead': '15-1252',
+  }
   
   data.roles.forEach(role => {
     const name = role.title || role.name || ''
+    const nameLower = name.toLowerCase()
     const rate = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
     const hours = roleHours[name] || 0
+    
+    const description = role.description || mockDescriptions[nameLower] || 
+      'Provides specialized expertise supporting federal government initiatives and program objectives.'
+    const experience = role.yearsExperience || mockExperience[role.icLevel || 'IC4'] || '5+ years'
+    const education = role.education || mockEducation[nameLower] || "Bachelor's degree in relevant field"
+    const blsCode = role.blsCode || mockBLSCodes[nameLower] || '15-1252'
     
     items.push(new Paragraph({
       heading: HeadingLevel.HEADING_2,
       children: [new TextRun(name)]
     }))
     
-    // Metadata line
-    const meta = [`${role.icLevel || 'N/A'}`, `${currency(rate)}/hr`]
-    if (role.quantity > 1) meta.push(`${role.quantity} positions`)
-    if (hours > 0) meta.push(`${num(hours)} hours allocated`)
+    // Metadata badges
+    const metaParts: string[] = [role.icLevel || 'N/A', currency(rate) + '/hr']
+    if (role.quantity > 1) metaParts.push(`${role.quantity} positions`)
+    if (hours > 0) metaParts.push(`${num(hours)} hours`)
     
     items.push(new Paragraph({
-      spacing: { after: 120 },
-      children: [new TextRun({ text: meta.join('  ·  '), size: SIZE.small, color: COLOR.lightGray, font: FONT })]
+      spacing: { after: 160 },
+      children: [new TextRun({ 
+        text: metaParts.join('  •  '), 
+        size: SIZE.small, 
+        color: COLOR.tertiary, 
+        font: FONT.primary 
+      })]
     }))
     
-    if (role.description) {
-      items.push(new Paragraph({ style: 'BodyText', children: [new TextRun(role.description)] }))
-    }
+    // Description
+    items.push(new Paragraph({
+      style: 'BodyText',
+      children: [new TextRun(description)]
+    }))
     
-    if (role.yearsExperience) {
-      items.push(new Paragraph({
-        style: 'BodyText',
-        children: [new TextRun({ text: 'Experience: ', bold: true }), new TextRun(role.yearsExperience)]
-      }))
-    }
+    // Qualifications table
+    const qualRows: TableRow[] = [
+      new TableRow({
+        children: [
+          tableHeaderCell('Requirement', 2000),
+          tableHeaderCell('Details', 6000),
+        ]
+      }),
+      new TableRow({
+        children: [
+          tableDataCell('Experience', 2000, AlignmentType.LEFT, { bold: true }),
+          tableDataCell(experience, 6000),
+        ]
+      }),
+      new TableRow({
+        children: [
+          tableDataCell('Education', 2000, AlignmentType.LEFT, { bold: true }),
+          tableDataCell(education, 6000),
+        ]
+      }),
+      new TableRow({
+        children: [
+          tableDataCell('BLS Code', 2000, AlignmentType.LEFT, { bold: true }),
+          tableDataCell(blsCode, 6000, AlignmentType.LEFT, { mono: true }),
+        ]
+      }),
+    ]
     
-    if (role.blsCode) {
-      items.push(new Paragraph({
-        style: 'BodyText',
-        children: [new TextRun({ text: 'BLS Code: ', bold: true }), new TextRun(role.blsCode)]
-      }))
-    }
+    items.push(new Paragraph({ spacing: { before: 120 }, children: [] }))
+    items.push(new Table({ columnWidths: [2000, 6000], rows: qualRows }))
+    items.push(new Paragraph({ spacing: { after: 300 }, children: [] }))
   })
   
   return items
 }
 
-function rateCalculation(data: ExportData): Paragraph[] {
-  const items: Paragraph[] = []
+function auditPackage(data: ExportData): (Paragraph | Table)[] {
+  const items: (Paragraph | Table)[] = []
   
-  items.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Rate Calculation')] }))
-  items.push(new Paragraph({
-    style: 'BodyText',
-    children: [new TextRun('Detailed rate buildup demonstrating FAR 31.2 compliance.')]
+  items.push(new Paragraph({ children: [new PageBreak()] }))
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_1, 
+    children: [new TextRun('Rate Calculation & Audit Support')] 
   }))
   
-  items.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun('Methodology')] }))
+  items.push(new Paragraph({
+    style: 'BodyText',
+    children: [new TextRun('Detailed rate buildup demonstrating FAR 31.2 compliance and supporting audit requirements.')]
+  }))
+  
+  // Methodology
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_2, 
+    children: [new TextRun('Rate Methodology')] 
+  }))
+  
+  items.push(new Paragraph({
+    style: 'BodyText',
+    children: [new TextRun('All rates are calculated using the following formula:')]
+  }))
   
   const steps = [
-    'Direct Rate = Annual Salary ÷ 2,080 hours',
-    `+ Fringe @ ${pct(data.indirectRates.fringe)}`,
-    `+ Overhead @ ${pct(data.indirectRates.overhead)}`,
-    `+ G&A @ ${pct(data.indirectRates.ga)}`,
+    'Direct Hourly Rate = Annual Salary ÷ 2,080 standard hours',
+    `Apply Fringe Benefits @ ${pct(data.indirectRates.fringe)}`,
+    `Apply Overhead @ ${pct(data.indirectRates.overhead)}`,
+    `Apply G&A @ ${pct(data.indirectRates.ga)}`,
   ]
-  if (data.rateCardType !== 'ffp') steps.push(`+ Profit @ ${pct(data.profitMargin)}`)
+  if (data.rateCardType !== 'ffp') {
+    steps.push(`Apply Profit @ ${pct(data.profitMargin)}`)
+  }
   
   steps.forEach(step => {
     items.push(new Paragraph({
-      numbering: { reference: 'bullet-list', level: 0 },
-      children: [new TextRun({ text: step, size: SIZE.body, color: COLOR.darkGray, font: FONT })]
+      numbering: { reference: 'number-list', level: 0 },
+      children: [new TextRun({ text: step, size: SIZE.body, color: COLOR.text, font: FONT.primary })]
     }))
   })
   
   items.push(new Paragraph({
-    spacing: { before: 120 },
-    children: [new TextRun({ text: `Source: ${data.indirectRates.source} FY${data.indirectRates.fiscalYear}`, size: SIZE.small, color: COLOR.lightGray, italics: true, font: FONT })]
+    spacing: { before: 200 },
+    children: [new TextRun({ 
+      text: `Indirect rates source: ${data.indirectRates.source} FY${data.indirectRates.fiscalYear}`, 
+      size: SIZE.caption, 
+      color: COLOR.tertiary, 
+      font: FONT.primary,
+      italics: true 
+    })]
   }))
   
   // Rate buildup table
-  items.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun('Rate Buildup')] }))
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_2, 
+    children: [new TextRun('Rate Buildup by Category')] 
+  }))
   
-  const rows: TableRow[] = [
+  const buildupRows: TableRow[] = [
     new TableRow({
       children: [
-        headerCell('Category', 2200),
-        headerCell('Direct', 1300, AlignmentType.RIGHT),
-        headerCell('+Fringe', 1300, AlignmentType.RIGHT),
-        headerCell('+OH', 1300, AlignmentType.RIGHT),
-        headerCell('+G&A', 1300, AlignmentType.RIGHT),
-        headerCell('Final', 1300, AlignmentType.RIGHT),
+        tableHeaderCell('Labor Category', 2400),
+        tableHeaderCell('Direct', 1200, AlignmentType.RIGHT),
+        tableHeaderCell('+Fringe', 1200, AlignmentType.RIGHT),
+        tableHeaderCell('+OH', 1200, AlignmentType.RIGHT),
+        tableHeaderCell('+G&A', 1200, AlignmentType.RIGHT),
+        tableHeaderCell('Burdened', 1200, AlignmentType.RIGHT),
       ]
     })
   ]
   
   data.roles.forEach(role => {
     const direct = role.baseSalary / 2080
-    const fringe = direct * (1 + data.indirectRates.fringe)
-    const oh = fringe * (1 + data.indirectRates.overhead)
-    const ga = oh * (1 + data.indirectRates.ga)
-    const final = data.rateCardType !== 'ffp' ? ga * (1 + data.profitMargin) : ga
+    const withFringe = direct * (1 + data.indirectRates.fringe)
+    const withOH = withFringe * (1 + data.indirectRates.overhead)
+    const withGA = withOH * (1 + data.indirectRates.ga)
+    const final = data.rateCardType !== 'ffp' ? withGA * (1 + data.profitMargin) : withGA
     
-    rows.push(new TableRow({
+    buildupRows.push(new TableRow({
       children: [
-        dataCell(role.title || role.name || '', 2200),
-        dataCell(currency(direct), 1300, AlignmentType.RIGHT),
-        dataCell(currency(fringe), 1300, AlignmentType.RIGHT),
-        dataCell(currency(oh), 1300, AlignmentType.RIGHT),
-        dataCell(currency(ga), 1300, AlignmentType.RIGHT),
-        dataCell(currency(final), 1300, AlignmentType.RIGHT, true),
+        tableDataCell(role.title || role.name || '', 2400, AlignmentType.LEFT, { bold: true }),
+        tableDataCell(currency(direct), 1200, AlignmentType.RIGHT, { mono: true }),
+        tableDataCell(currency(withFringe), 1200, AlignmentType.RIGHT, { mono: true }),
+        tableDataCell(currency(withOH), 1200, AlignmentType.RIGHT, { mono: true }),
+        tableDataCell(currency(withGA), 1200, AlignmentType.RIGHT, { mono: true }),
+        tableDataCell(currency(final), 1200, AlignmentType.RIGHT, { mono: true, bold: true, color: COLOR.accent }),
       ]
     }))
   })
   
-  items.push(
-    new Paragraph({ spacing: { before: 160 }, children: [] }),
-    new Table({ columnWidths: [2200, 1300, 1300, 1300, 1300, 1300], rows })
-  )
+  items.push(new Paragraph({ spacing: { before: 200 }, children: [] }))
+  items.push(new Table({ columnWidths: [2400, 1200, 1200, 1200, 1200, 1200], rows: buildupRows }))
+  
+  // FAR compliance statement
+  items.push(new Paragraph({ 
+    heading: HeadingLevel.HEADING_2, 
+    children: [new TextRun('FAR 31.2 Compliance')] 
+  }))
+  
+  items.push(new Paragraph({
+    style: 'BodyText',
+    children: [new TextRun(
+      'All proposed costs comply with FAR 31.2 cost principles. Indirect rates have been applied consistently ' +
+      'with our approved accounting system and are subject to audit by the cognizant federal agency. ' +
+      'Cost elements are allowable, allocable, and reasonable as defined by FAR 31.201.'
+    )]
+  }))
+  
+  // Certification
+  items.push(new Paragraph({
+    spacing: { before: 400 },
+    shading: { fill: COLOR.headerBg, type: ShadingType.CLEAR },
+    children: [new TextRun({ 
+      text: 'CERTIFICATION: I certify that the information provided herein is accurate and complete to the best of my knowledge.', 
+      size: SIZE.small, 
+      color: COLOR.secondary, 
+      font: FONT.primary 
+    })]
+  }))
+  
+  items.push(new Paragraph({
+    spacing: { before: 400 },
+    children: [
+      new TextRun({ text: '_______________________________', size: SIZE.body, color: COLOR.text, font: FONT.primary }),
+      new TextRun({ text: '          ', size: SIZE.body }),
+      new TextRun({ text: '_______________________________', size: SIZE.body, color: COLOR.text, font: FONT.primary }),
+    ]
+  }))
+  
+  items.push(new Paragraph({
+    children: [
+      new TextRun({ text: 'Authorized Signature', size: SIZE.caption, color: COLOR.tertiary, font: FONT.primary }),
+      new TextRun({ text: '                                        ', size: SIZE.caption }),
+      new TextRun({ text: 'Date', size: SIZE.caption, color: COLOR.tertiary, font: FONT.primary }),
+    ]
+  }))
   
   return items
+}
+
+// ============================================================================
+// PDF GENERATION - Using pdfmake
+// ============================================================================
+
+const PDF_COLORS = {
+  black: '#1a1a1a',
+  text: '#202124',
+  secondary: '#5f6368',
+  tertiary: '#80868b',
+  border: '#dadce0',
+  headerBg: '#f8f9fa',
+  accent: '#1a73e8',
+  success: '#1e8e3e',
+}
+
+function generatePdfDocument(data: ExportData, options: ExportOptions): Promise<Blob> {
+  // Calculate totals
+  const totalHours = data.wbsElements?.reduce((sum, el) => sum + el.hours, 0) || 0
+  let totalCost = 0
+  data.roles.forEach(role => {
+    const rate = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
+    const hours = data.productiveHours * role.quantity * data.yearsToInclude
+    totalCost += rate * hours
+  })
+
+  // Role hours from WBS
+  const roleHours: Record<string, number> = {}
+  data.wbsElements?.forEach(el => {
+    el.laborBreakdown?.forEach(lb => {
+      roleHours[lb.roleName] = (roleHours[lb.roleName] || 0) + lb.hours
+    })
+  })
+
+  // Mock data
+  const mockDescriptions: Record<string, string> = {
+    'delivery manager': 'Oversees project delivery, manages client relationships, and ensures on-time execution of deliverables.',
+    'product manager': 'Defines product vision and roadmap, prioritizes features based on user research and business value.',
+    'product designer': 'Creates user-centered designs including wireframes, prototypes, and high-fidelity mockups.',
+    'frontend engineer': 'Develops responsive web applications using modern JavaScript frameworks.',
+    'backend engineer': 'Designs and implements scalable APIs and microservices.',
+  }
+  const mockExperience: Record<string, string> = { 'IC3': '3-5 years', 'IC4': '5-8 years', 'IC5': '8-12 years', 'IC6': '12+ years' }
+  const mockEducation: Record<string, string> = {
+    'delivery manager': "Bachelor's in Business or IT",
+    'product manager': "Bachelor's in Business or CS",
+    'product designer': "Bachelor's in Design or HCI",
+    'frontend engineer': "Bachelor's in Computer Science",
+    'backend engineer': "Bachelor's in Computer Science",
+  }
+
+  const content: any[] = []
+
+  // ===== COVER PAGE =====
+  content.push({ text: '\n\n\n\n' })
+  content.push({ 
+    text: data.companyName.toUpperCase(), 
+    style: 'companyName',
+    alignment: 'center',
+    margin: [0, 0, 0, 30]
+  })
+  content.push({ 
+    text: 'Cost Proposal', 
+    style: 'title',
+    alignment: 'center'
+  })
+  if (data.proposalTitle) {
+    content.push({ 
+      text: data.proposalTitle, 
+      style: 'subtitle',
+      alignment: 'center',
+      margin: [0, 10, 0, 0]
+    })
+  }
+  content.push({ 
+    text: '―――――――――――――', 
+    alignment: 'center',
+    color: PDF_COLORS.border,
+    margin: [0, 40, 0, 40]
+  })
+  
+  // Metadata
+  const metadata = [
+    { label: 'Solicitation', value: data.solicitation || 'N/A' },
+    { label: 'Client', value: data.client || 'N/A' },
+    { label: 'Prepared By', value: data.preparedBy },
+    { label: 'Date', value: formatDate(data.preparedDate) },
+  ]
+  metadata.forEach(item => {
+    content.push({
+      text: [
+        { text: `${item.label}: `, color: PDF_COLORS.tertiary },
+        { text: item.value, bold: true, color: PDF_COLORS.text }
+      ],
+      alignment: 'center',
+      margin: [0, 4, 0, 4]
+    })
+  })
+
+  // Identifiers
+  const identifiers: string[] = []
+  if (data.samUei) identifiers.push(`SAM UEI: ${data.samUei}`)
+  if (data.gsaContract) identifiers.push(`GSA: ${data.gsaContract}`)
+  if (identifiers.length > 0) {
+    content.push({
+      text: identifiers.join('   •   '),
+      alignment: 'center',
+      color: PDF_COLORS.tertiary,
+      fontSize: 9,
+      margin: [0, 40, 0, 0]
+    })
+  }
+
+  content.push({ text: '', pageBreak: 'after' })
+
+  // ===== EXECUTIVE SUMMARY =====
+  if (data.roles.length > 0) {
+    content.push({ text: 'Executive Summary', style: 'h1' })
+    content.push({ 
+      text: `This proposal presents ${data.companyName}'s cost approach for ${data.proposalTitle || 'the referenced solicitation'}. Our team of ${data.roles.length} labor categories will deliver ${num(totalHours)} hours of effort across ${data.yearsToInclude === 1 ? 'the base year' : `${data.yearsToInclude} performance periods`}.`,
+      style: 'body',
+      margin: [0, 0, 0, 20]
+    })
+
+    content.push({ text: 'Proposal Overview', style: 'h2' })
+    
+    // Metrics table
+    content.push({
+      table: {
+        widths: ['*', '*', '*', '*'],
+        body: [[
+          { text: [{ text: currencyWhole(totalCost) + '\n', style: 'metricValue' }, { text: 'TOTAL VALUE', style: 'metricLabel' }], alignment: 'center', fillColor: PDF_COLORS.headerBg, margin: [10, 15, 10, 15] },
+          { text: [{ text: `${data.yearsToInclude} Year${data.yearsToInclude > 1 ? 's' : ''}\n`, style: 'metricValue' }, { text: 'DURATION', style: 'metricLabel' }], alignment: 'center', fillColor: PDF_COLORS.headerBg, margin: [10, 15, 10, 15] },
+          { text: [{ text: `${data.roles.length} Roles\n`, style: 'metricValue' }, { text: 'TEAM SIZE', style: 'metricLabel' }], alignment: 'center', fillColor: PDF_COLORS.headerBg, margin: [10, 15, 10, 15] },
+          { text: [{ text: num(totalHours) + '\n', style: 'metricValue' }, { text: 'TOTAL HOURS', style: 'metricLabel' }], alignment: 'center', fillColor: PDF_COLORS.headerBg, margin: [10, 15, 10, 15] },
+        ]]
+      },
+      layout: 'noBorders',
+      margin: [0, 10, 0, 20]
+    })
+
+    const contractTypeLabel = data.rateCardType === 'tm' ? 'Time & Materials' : data.rateCardType === 'ffp' ? 'Firm Fixed Price' : 'Hybrid'
+    content.push({
+      text: [
+        { text: 'Contract Type: ', bold: true },
+        { text: contractTypeLabel },
+        { text: '  •  ' },
+        { text: 'Indirect Rates: ', bold: true },
+        { text: `FY${data.indirectRates.fiscalYear} ${data.indirectRates.source}` }
+      ],
+      style: 'body'
+    })
+  }
+
+  // ===== RATE CARD =====
+  if (options.includeRateCard && data.roles.length > 0) {
+    content.push({ text: '', pageBreak: 'after' })
+    content.push({ text: 'Rate Card', style: 'h1' })
+    content.push({ 
+      text: `Fully-burdened hourly rates for all proposed labor categories. ${data.includeEscalation && data.yearsToInclude > 1 ? `Option year rates include ${pct(data.escalationRate)} annual escalation.` : 'Rates are fixed across all performance periods.'}`,
+      style: 'body',
+      margin: [0, 0, 0, 15]
+    })
+
+    // Build rate table
+    const rateHeaders = [
+      { text: 'LABOR CATEGORY', style: 'tableHeader' },
+      { text: 'LEVEL', style: 'tableHeader', alignment: 'center' },
+    ]
+    for (let y = 1; y <= data.yearsToInclude; y++) {
+      rateHeaders.push({ text: yearLabel(y).toUpperCase(), style: 'tableHeader', alignment: 'right' })
+    }
+
+    const rateBody = [rateHeaders]
+    data.roles.forEach(role => {
+      const baseRate = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
+      const row: any[] = [
+        { text: role.title || role.name || '', bold: true },
+        { text: role.icLevel || '', alignment: 'center', color: PDF_COLORS.secondary },
+      ]
+      for (let y = 1; y <= data.yearsToInclude; y++) {
+        const rate = y === 1 ? baseRate : data.calculateEscalatedRate(baseRate, y)
+        row.push({ text: currency(rate), alignment: 'right', font: 'Roboto' })
+      }
+      rateBody.push(row)
+    })
+
+    const rateWidths = ['*', 50]
+    for (let y = 1; y <= data.yearsToInclude; y++) rateWidths.push(80)
+
+    content.push({
+      table: { headerRows: 1, widths: rateWidths, body: rateBody },
+      layout: {
+        hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0.5,
+        vLineWidth: () => 0,
+        hLineColor: () => PDF_COLORS.border,
+        fillColor: (i: number) => i === 0 ? PDF_COLORS.headerBg : null,
+        paddingTop: () => 8,
+        paddingBottom: () => 8,
+      },
+      margin: [0, 10, 0, 10]
+    })
+
+    content.push({
+      text: `Rates based on ${num(data.productiveHours)} productive hours per year. Fringe ${pct(data.indirectRates.fringe)} · Overhead ${pct(data.indirectRates.overhead)} · G&A ${pct(data.indirectRates.ga)}${data.rateCardType !== 'ffp' ? ` · Profit ${pct(data.profitMargin)}` : ''}`,
+      fontSize: 9,
+      italics: true,
+      color: PDF_COLORS.tertiary,
+      margin: [0, 5, 0, 0]
+    })
+  }
+
+  // ===== BASIS OF ESTIMATE =====
+  if (options.includeBOE && data.wbsElements && data.wbsElements.length > 0) {
+    content.push({ text: '', pageBreak: 'after' })
+    content.push({ text: 'Basis of Estimate', style: 'h1' })
+    content.push({ 
+      text: `This section details the work breakdown structure and labor hour estimates for the ${num(totalHours)} total hours proposed.`,
+      style: 'body',
+      margin: [0, 0, 0, 15]
+    })
+
+    content.push({ text: 'WBS Summary', style: 'h2' })
+
+    const wbsBody = [[
+      { text: 'WBS', style: 'tableHeader' },
+      { text: 'ELEMENT', style: 'tableHeader' },
+      { text: 'METHOD', style: 'tableHeader', alignment: 'center' },
+      { text: 'CONFIDENCE', style: 'tableHeader', alignment: 'center' },
+      { text: 'HOURS', style: 'tableHeader', alignment: 'right' },
+    ]]
+    data.wbsElements.forEach(el => {
+      wbsBody.push([
+        { text: el.wbsNumber, color: PDF_COLORS.secondary, font: 'Roboto' },
+        { text: el.title, bold: true },
+        { text: el.estimateMethod, alignment: 'center' },
+        { text: el.confidenceLevel, alignment: 'center', color: el.confidenceLevel === 'high' ? PDF_COLORS.success : PDF_COLORS.secondary },
+        { text: num(el.hours), alignment: 'right', font: 'Roboto' },
+      ])
+    })
+    wbsBody.push([
+      { text: '', fillColor: PDF_COLORS.headerBg },
+      { text: 'Total', bold: true, fillColor: PDF_COLORS.headerBg },
+      { text: '', fillColor: PDF_COLORS.headerBg },
+      { text: '', fillColor: PDF_COLORS.headerBg },
+      { text: num(totalHours), bold: true, alignment: 'right', fillColor: PDF_COLORS.headerBg },
+    ])
+
+    content.push({
+      table: { headerRows: 1, widths: [40, '*', 70, 70, 60], body: wbsBody },
+      layout: {
+        hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0.5,
+        vLineWidth: () => 0,
+        hLineColor: () => PDF_COLORS.border,
+        fillColor: (i: number) => i === 0 ? PDF_COLORS.headerBg : null,
+        paddingTop: () => 8,
+        paddingBottom: () => 8,
+      },
+      margin: [0, 10, 0, 20]
+    })
+
+    // Detailed breakdown
+    content.push({ text: 'Detailed Breakdown', style: 'h2' })
+    data.wbsElements.forEach(el => {
+      content.push({ text: `${el.wbsNumber} ${el.title}`, style: 'h3' })
+      content.push({ text: el.description, style: 'body' })
+      
+      if (el.sooReference) {
+        content.push({
+          text: [{ text: 'SOO Reference: ', bold: true, color: PDF_COLORS.secondary }, { text: el.sooReference }],
+          fontSize: 10,
+          margin: [0, 5, 0, 10]
+        })
+      }
+
+      if (el.laborBreakdown && el.laborBreakdown.length > 0) {
+        const laborBody = [[
+          { text: 'ROLE', style: 'tableHeader' },
+          { text: 'HOURS', style: 'tableHeader', alignment: 'right' },
+          { text: 'RATIONALE', style: 'tableHeader' },
+        ]]
+        el.laborBreakdown.forEach(lb => {
+          laborBody.push([
+            { text: lb.roleName },
+            { text: num(lb.hours), alignment: 'right', font: 'Roboto' },
+            { text: lb.rationale || '', color: PDF_COLORS.secondary },
+          ])
+        })
+        content.push({
+          table: { headerRows: 1, widths: [120, 60, '*'], body: laborBody },
+          layout: {
+            hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0.5,
+            vLineWidth: () => 0,
+            hLineColor: () => PDF_COLORS.border,
+            fillColor: (i: number) => i === 0 ? PDF_COLORS.headerBg : null,
+            paddingTop: () => 6,
+            paddingBottom: () => 6,
+          },
+          margin: [0, 10, 0, 10]
+        })
+      }
+
+      if (el.assumptions && el.assumptions.length > 0) {
+        content.push({ text: 'Assumptions:', bold: true, fontSize: 10, color: PDF_COLORS.secondary, margin: [0, 5, 0, 5] })
+        content.push({
+          ul: el.assumptions.map(a => ({ text: a, fontSize: 10 })),
+          margin: [0, 0, 0, 15]
+        })
+      }
+    })
+  }
+
+  // ===== LABOR CATEGORIES =====
+  if (options.includeLCATs && data.roles.length > 0) {
+    content.push({ text: '', pageBreak: 'after' })
+    content.push({ text: 'Labor Categories', style: 'h1' })
+    content.push({ 
+      text: 'Qualifications, experience requirements, and responsibilities for each proposed labor category.',
+      style: 'body',
+      margin: [0, 0, 0, 15]
+    })
+
+    data.roles.forEach(role => {
+      const name = role.title || role.name || ''
+      const nameLower = name.toLowerCase()
+      const rate = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
+      const hours = roleHours[name] || 0
+      const description = role.description || mockDescriptions[nameLower] || 'Provides specialized expertise supporting federal government initiatives.'
+      const experience = role.yearsExperience || mockExperience[role.icLevel || 'IC4'] || '5+ years'
+      const education = role.education || mockEducation[nameLower] || "Bachelor's degree in relevant field"
+
+      content.push({ text: name, style: 'h2' })
+      
+      const metaParts = [role.icLevel || 'N/A', currency(rate) + '/hr']
+      if (role.quantity > 1) metaParts.push(`${role.quantity} positions`)
+      if (hours > 0) metaParts.push(`${num(hours)} hours`)
+      
+      content.push({
+        text: metaParts.join('  •  '),
+        fontSize: 10,
+        color: PDF_COLORS.tertiary,
+        margin: [0, 0, 0, 10]
+      })
+
+      content.push({ text: description, style: 'body' })
+
+      content.push({
+        table: {
+          widths: [100, '*'],
+          body: [
+            [{ text: 'REQUIREMENT', style: 'tableHeader' }, { text: 'DETAILS', style: 'tableHeader' }],
+            [{ text: 'Experience', bold: true }, { text: experience }],
+            [{ text: 'Education', bold: true }, { text: education }],
+            [{ text: 'BLS Code', bold: true }, { text: role.blsCode || '15-1252', font: 'Roboto' }],
+          ]
+        },
+        layout: {
+          hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0.5,
+          vLineWidth: () => 0,
+          hLineColor: () => PDF_COLORS.border,
+          fillColor: (i: number) => i === 0 ? PDF_COLORS.headerBg : null,
+          paddingTop: () => 6,
+          paddingBottom: () => 6,
+        },
+        margin: [0, 10, 0, 20]
+      })
+    })
+  }
+
+  // ===== AUDIT PACKAGE =====
+  if (options.includeAuditPackage && data.roles.length > 0) {
+    content.push({ text: '', pageBreak: 'after' })
+    content.push({ text: 'Rate Calculation & Audit Support', style: 'h1' })
+    content.push({ 
+      text: 'Detailed rate buildup demonstrating FAR 31.2 compliance and supporting audit requirements.',
+      style: 'body',
+      margin: [0, 0, 0, 15]
+    })
+
+    content.push({ text: 'Rate Methodology', style: 'h2' })
+    content.push({ text: 'All rates are calculated using the following formula:', style: 'body' })
+
+    const steps = [
+      'Direct Hourly Rate = Annual Salary ÷ 2,080 standard hours',
+      `Apply Fringe Benefits @ ${pct(data.indirectRates.fringe)}`,
+      `Apply Overhead @ ${pct(data.indirectRates.overhead)}`,
+      `Apply G&A @ ${pct(data.indirectRates.ga)}`,
+    ]
+    if (data.rateCardType !== 'ffp') steps.push(`Apply Profit @ ${pct(data.profitMargin)}`)
+
+    content.push({
+      ol: steps.map(s => ({ text: s })),
+      margin: [0, 10, 0, 10]
+    })
+
+    content.push({
+      text: `Indirect rates source: ${data.indirectRates.source} FY${data.indirectRates.fiscalYear}`,
+      italics: true,
+      fontSize: 9,
+      color: PDF_COLORS.tertiary,
+      margin: [0, 0, 0, 20]
+    })
+
+    content.push({ text: 'Rate Buildup by Category', style: 'h2' })
+
+    const buildupBody = [[
+      { text: 'LABOR CATEGORY', style: 'tableHeader' },
+      { text: 'DIRECT', style: 'tableHeader', alignment: 'right' },
+      { text: '+FRINGE', style: 'tableHeader', alignment: 'right' },
+      { text: '+OH', style: 'tableHeader', alignment: 'right' },
+      { text: '+G&A', style: 'tableHeader', alignment: 'right' },
+      { text: 'BURDENED', style: 'tableHeader', alignment: 'right' },
+    ]]
+
+    data.roles.forEach(role => {
+      const direct = role.baseSalary / 2080
+      const withFringe = direct * (1 + data.indirectRates.fringe)
+      const withOH = withFringe * (1 + data.indirectRates.overhead)
+      const withGA = withOH * (1 + data.indirectRates.ga)
+      const final = data.rateCardType !== 'ffp' ? withGA * (1 + data.profitMargin) : withGA
+
+      buildupBody.push([
+        { text: role.title || role.name || '', bold: true },
+        { text: currency(direct), alignment: 'right', font: 'Roboto' },
+        { text: currency(withFringe), alignment: 'right', font: 'Roboto' },
+        { text: currency(withOH), alignment: 'right', font: 'Roboto' },
+        { text: currency(withGA), alignment: 'right', font: 'Roboto' },
+        { text: currency(final), alignment: 'right', font: 'Roboto', bold: true, color: PDF_COLORS.accent },
+      ])
+    })
+
+    content.push({
+      table: { headerRows: 1, widths: ['*', 55, 55, 55, 55, 60], body: buildupBody },
+      layout: {
+        hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0.5,
+        vLineWidth: () => 0,
+        hLineColor: () => PDF_COLORS.border,
+        fillColor: (i: number) => i === 0 ? PDF_COLORS.headerBg : null,
+        paddingTop: () => 6,
+        paddingBottom: () => 6,
+      },
+      margin: [0, 10, 0, 20]
+    })
+
+    content.push({ text: 'FAR 31.2 Compliance', style: 'h2' })
+    content.push({
+      text: 'All proposed costs comply with FAR 31.2 cost principles. Indirect rates have been applied consistently with our approved accounting system and are subject to audit by the cognizant federal agency. Cost elements are allowable, allocable, and reasonable as defined by FAR 31.201.',
+      style: 'body',
+      margin: [0, 0, 0, 30]
+    })
+
+    content.push({
+      text: 'CERTIFICATION: I certify that the information provided herein is accurate and complete to the best of my knowledge.',
+      fillColor: PDF_COLORS.headerBg,
+      fontSize: 10,
+      color: PDF_COLORS.secondary,
+      margin: [10, 10, 10, 10]
+    })
+
+    content.push({
+      columns: [
+        { text: '_______________________________\nAuthorized Signature', alignment: 'left', fontSize: 10 },
+        { text: '_______________________________\nDate', alignment: 'left', fontSize: 10 },
+      ],
+      margin: [0, 40, 0, 0]
+    })
+  }
+
+  // Document definition
+  const docDefinition = {
+    pageSize: 'LETTER',
+    pageMargins: [72, 72, 72, 72], // 1 inch margins
+    header: (currentPage: number) => currentPage > 1 ? {
+      text: `${data.companyName}  |  ${data.solicitation || 'Cost Proposal'}`,
+      alignment: 'right',
+      fontSize: 8,
+      color: PDF_COLORS.tertiary,
+      margin: [72, 40, 72, 0]
+    } : null,
+    footer: (currentPage: number, pageCount: number) => ({
+      text: `Page ${currentPage} of ${pageCount}`,
+      alignment: 'center',
+      fontSize: 8,
+      color: PDF_COLORS.tertiary,
+      margin: [0, 20, 0, 0]
+    }),
+    content,
+    styles: {
+      title: { fontSize: 28, bold: true, color: PDF_COLORS.black },
+      subtitle: { fontSize: 14, color: PDF_COLORS.secondary },
+      companyName: { fontSize: 9, color: PDF_COLORS.secondary, characterSpacing: 2 },
+      h1: { fontSize: 18, bold: true, color: PDF_COLORS.black, margin: [0, 30, 0, 15] },
+      h2: { fontSize: 14, bold: true, color: PDF_COLORS.text, margin: [0, 20, 0, 10] },
+      h3: { fontSize: 12, bold: true, color: PDF_COLORS.text, margin: [0, 15, 0, 8] },
+      body: { fontSize: 11, color: PDF_COLORS.text, lineHeight: 1.4 },
+      tableHeader: { fontSize: 8, bold: true, color: PDF_COLORS.secondary },
+      metricValue: { fontSize: 14, bold: true, color: PDF_COLORS.accent },
+      metricLabel: { fontSize: 8, color: PDF_COLORS.secondary },
+    },
+    defaultStyle: {
+      font: 'Roboto',
+      fontSize: 11,
+      color: PDF_COLORS.text,
+    }
+  }
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      const pdfMakeInstance = await loadPdfMake()
+      const pdfDocGenerator = pdfMakeInstance.createPdf(docDefinition as any)
+      pdfDocGenerator.getBlob((blob: Blob) => {
+        resolve(blob)
+      })
+    } catch (error) {
+      reject(error)
+    }
+  })
 }
 
 // ============================================================================
@@ -788,27 +1566,57 @@ function rateCalculation(data: ExportData): Paragraph[] {
 // ============================================================================
 
 export async function generateWordDocument(data: ExportData, options: ExportOptions): Promise<Blob> {
-  const content: Paragraph[] = []
+  const content: (Paragraph | Table)[] = []
   
+  // Always include cover page
   content.push(...coverPage(data))
-  if (data.roles.length > 0) content.push(...executiveSummary(data))
-  if (options.includeRateCard && data.roles.length > 0) content.push(...rateCard(data))
-  if (options.includeBOE && data.roles.length > 0) content.push(...basisOfEstimate(data))
-  if (options.includeLCATs && data.roles.length > 0) content.push(...laborCategories(data))
-  if (options.includeAuditPackage && data.roles.length > 0) content.push(...rateCalculation(data))
+  
+  // Executive summary (if we have roles)
+  if (data.roles.length > 0) {
+    content.push(...executiveSummary(data))
+  }
+  
+  // Sections based on options
+  if (options.includeRateCard && data.roles.length > 0) {
+    content.push(...rateCard(data))
+  }
+  
+  if (options.includeBOE && data.wbsElements && data.wbsElements.length > 0) {
+    content.push(...basisOfEstimate(data))
+  }
+  
+  if (options.includeLCATs && data.roles.length > 0) {
+    content.push(...laborCategories(data))
+  }
+  
+  if (options.includeAuditPackage && data.roles.length > 0) {
+    content.push(...auditPackage(data))
+  }
   
   const doc = new Document({
     styles: STYLES,
     numbering: { config: NUMBERING_CONFIG },
     sections: [{
       properties: {
-        page: { margin: { top: convertInchesToTwip(0.75), right: convertInchesToTwip(0.75), bottom: convertInchesToTwip(0.75), left: convertInchesToTwip(0.75) } }
+        page: { 
+          margin: { 
+            top: convertInchesToTwip(1), 
+            right: convertInchesToTwip(1), 
+            bottom: convertInchesToTwip(0.75), 
+            left: convertInchesToTwip(1) 
+          } 
+        }
       },
       headers: {
         default: new Header({
           children: [new Paragraph({
             alignment: AlignmentType.RIGHT,
-            children: [new TextRun({ text: `${data.companyName}  ·  ${data.solicitation || 'Cost Proposal'}`, size: SIZE.caption, color: COLOR.lightGray, font: FONT })]
+            children: [new TextRun({ 
+              text: `${data.companyName}  |  ${data.solicitation || 'Cost Proposal'}`, 
+              size: SIZE.tiny, 
+              color: COLOR.tertiary, 
+              font: FONT.primary 
+            })]
           })]
         })
       },
@@ -817,10 +1625,10 @@ export async function generateWordDocument(data: ExportData, options: ExportOpti
           children: [new Paragraph({
             alignment: AlignmentType.CENTER,
             children: [
-              new TextRun({ text: 'Page ', size: SIZE.caption, color: COLOR.lightGray, font: FONT }),
-              new TextRun({ children: [PageNumber.CURRENT], size: SIZE.caption, color: COLOR.lightGray, font: FONT }),
-              new TextRun({ text: ' of ', size: SIZE.caption, color: COLOR.lightGray, font: FONT }),
-              new TextRun({ children: [PageNumber.TOTAL_PAGES], size: SIZE.caption, color: COLOR.lightGray, font: FONT }),
+              new TextRun({ text: 'Page ', size: SIZE.tiny, color: COLOR.tertiary, font: FONT.primary }),
+              new TextRun({ children: [PageNumber.CURRENT], size: SIZE.tiny, color: COLOR.tertiary, font: FONT.primary }),
+              new TextRun({ text: ' of ', size: SIZE.tiny, color: COLOR.tertiary, font: FONT.primary }),
+              new TextRun({ children: [PageNumber.TOTAL_PAGES], size: SIZE.tiny, color: COLOR.tertiary, font: FONT.primary }),
             ]
           })]
         })
@@ -834,31 +1642,65 @@ export async function generateWordDocument(data: ExportData, options: ExportOpti
 }
 
 export async function generateExport(data: ExportData, options: ExportOptions, format: 'xlsx' | 'pdf' | 'docx'): Promise<Blob> {
-  if (format === 'docx' || format === 'pdf') return generateWordDocument(data, options)
-  if (format === 'xlsx') return generateCSV(data, options)
+  if (format === 'docx') {
+    return generateWordDocument(data, options)
+  }
+  if (format === 'pdf') {
+    return generatePdfDocument(data, options)
+  }
+  if (format === 'xlsx') {
+    return generateCSV(data, options)
+  }
   throw new Error(`Unsupported format: ${format}`)
 }
 
 function generateCSV(data: ExportData, options: ExportOptions): Blob {
   const lines: string[] = []
+  
   lines.push(`"Cost Proposal - ${data.solicitation || 'Export'}"`)
   lines.push(`"${data.companyName}","${data.client}","${data.preparedDate}"`)
   lines.push('')
   
   if (options.includeRateCard) {
     lines.push('"RATE CARD"')
-    const h = ['Labor Category', 'Level', 'Qty', 'Salary']
-    for (let y = 1; y <= data.yearsToInclude; y++) h.push(`${yearLabel(y)} Rate`, `${yearLabel(y)} Cost`)
-    lines.push(h.map(x => `"${x}"`).join(','))
+    const headers = ['Labor Category', 'Level', 'Qty', 'Salary']
+    for (let y = 1; y <= data.yearsToInclude; y++) {
+      headers.push(`${yearLabel(y)} Rate`)
+    }
+    lines.push(headers.map(x => `"${x}"`).join(','))
     
-    data.roles.forEach(r => {
-      const base = data.calculateRate(r.baseSalary, data.rateCardType !== 'ffp')
-      const row = [r.title || r.name || '', r.icLevel || '', r.quantity, r.baseSalary]
+    data.roles.forEach(role => {
+      const baseRate = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
+      const row: (string | number)[] = [
+        role.title || role.name || '', 
+        role.icLevel || '', 
+        role.quantity, 
+        role.baseSalary
+      ]
       for (let y = 1; y <= data.yearsToInclude; y++) {
-        const rate = y === 1 ? base : data.calculateEscalatedRate(base, y)
-        row.push(rate.toFixed(2), (rate * data.productiveHours * r.quantity).toFixed(2))
+        const rate = y === 1 ? baseRate : data.calculateEscalatedRate(baseRate, y)
+        row.push(rate.toFixed(2))
       }
       lines.push(row.map(x => `"${x}"`).join(','))
+    })
+    lines.push('')
+  }
+  
+  if (options.includeBOE && data.wbsElements) {
+    lines.push('"BASIS OF ESTIMATE"')
+    lines.push('"WBS","Element","Hours","Method","Confidence"')
+    data.wbsElements.forEach(el => {
+      lines.push(`"${el.wbsNumber}","${el.title}","${el.hours}","${el.estimateMethod}","${el.confidenceLevel}"`)
+    })
+    lines.push('')
+  }
+  
+  if (options.includeLCATs) {
+    lines.push('"LABOR CATEGORIES"')
+    lines.push('"Category","Level","Experience","Hourly Rate"')
+    data.roles.forEach(role => {
+      const rate = data.calculateRate(role.baseSalary, data.rateCardType !== 'ffp')
+      lines.push(`"${role.title || role.name}","${role.icLevel}","${role.yearsExperience || ''}","${rate.toFixed(2)}"`)
     })
   }
   
@@ -876,22 +1718,56 @@ export function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url)
 }
 
-export interface GoogleDriveUploadResult { fileId: string; webViewLink: string; fileName: string }
+export interface GoogleDriveUploadResult { 
+  fileId: string
+  webViewLink: string
+  fileName: string 
+}
 
-export async function uploadToGoogleDrive(blob: Blob, fileName: string, accessToken: string, folderId?: string): Promise<GoogleDriveUploadResult> {
+export async function uploadToGoogleDrive(
+  blob: Blob, 
+  fileName: string, 
+  accessToken: string, 
+  folderId?: string
+): Promise<GoogleDriveUploadResult> {
   const metadata: Record<string, unknown> = { name: fileName, mimeType: blob.type }
   if (folderId) metadata.parents = [folderId]
   
   const boundary = '-------314159265358979323846'
-  const body = `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${blob.type}\r\nContent-Transfer-Encoding: base64\r\n\r\n${btoa(new Uint8Array(await blob.arrayBuffer()).reduce((d, b) => d + String.fromCharCode(b), ''))}\r\n--${boundary}--`
+  const arrayBuffer = await blob.arrayBuffer()
+  const base64 = btoa(new Uint8Array(arrayBuffer).reduce((d, b) => d + String.fromCharCode(b), ''))
   
-  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,name', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
-    body
-  })
+  const body = [
+    `\r\n--${boundary}`,
+    `\r\nContent-Type: application/json\r\n\r\n`,
+    JSON.stringify(metadata),
+    `\r\n--${boundary}`,
+    `\r\nContent-Type: ${blob.type}`,
+    `\r\nContent-Transfer-Encoding: base64\r\n\r\n`,
+    base64,
+    `\r\n--${boundary}--`
+  ].join('')
   
-  if (!res.ok) throw new Error(`Upload failed: ${await res.text()}`)
-  const r = await res.json()
-  return { fileId: r.id, webViewLink: r.webViewLink, fileName: r.name }
+  const response = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,name',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`
+      },
+      body
+    }
+  )
+  
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${await response.text()}`)
+  }
+  
+  const result = await response.json()
+  return { 
+    fileId: result.id, 
+    webViewLink: result.webViewLink, 
+    fileName: result.name 
+  }
 }

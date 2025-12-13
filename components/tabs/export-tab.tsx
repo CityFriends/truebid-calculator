@@ -15,29 +15,39 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   FileSpreadsheet, 
   FileText, 
   Download, 
   CheckCircle2, 
   AlertCircle,
-  ChevronDown,
-  ChevronRight,
   Loader2,
   Calculator,
   Users,
   Shield,
-  ArrowRight,
-  CloudUpload,
-  ExternalLink,
+  X,
   FileType,
   ListTree,
-  HelpCircle
+  Settings,
+  Eye,
+  AlertTriangle,
+  ArrowRight
 } from 'lucide-react'
 
 // ============================================================================
 // TYPES
 // ============================================================================
+
+interface ExportSection {
+  id: 'rateCard' | 'boe' | 'lcats' | 'audit'
+  title: string
+  description: string
+  icon: React.ElementType
+  included: boolean
+  badge?: string
+  badgeVariant?: 'default' | 'secondary' | 'outline'
+}
 
 interface ExportConfig {
   solicitation: string
@@ -45,26 +55,21 @@ interface ExportConfig {
   proposalTitle: string
   preparedBy: string
   preparedDate: string
-  
-  includeRateCard: boolean
-  includeBOE: boolean
-  includeLCATs: boolean
-  includeAuditPackage: boolean
-  
   includeEscalation: boolean
-  
   format: 'xlsx' | 'pdf' | 'docx'
-  saveDestination: 'local' | 'gdrive'
-  gdriveFolderId?: string
 }
 
-type ExportStatus = 'idle' | 'generating' | 'uploading' | 'success' | 'error'
+type ExportStatus = 'idle' | 'generating' | 'success' | 'error'
 
-interface GoogleAuthState {
-  isAuthenticated: boolean
-  accessToken: string | null
-  error: string | null
-}
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const FORMAT_OPTIONS = [
+  { value: 'docx', label: 'Word', icon: FileText },
+  { value: 'pdf', label: 'PDF', icon: FileType },
+  { value: 'xlsx', label: 'CSV', icon: FileSpreadsheet },
+] as const
 
 // ============================================================================
 // HELPERS
@@ -128,6 +133,723 @@ const MOCK_WBS_ELEMENTS: WBSElement[] = [
 ]
 
 // ============================================================================
+// SECTION CARD COMPONENT
+// ============================================================================
+
+interface SectionCardProps {
+  section: ExportSection
+  onToggle: () => void
+  onClick: () => void
+  isSelected: boolean
+}
+
+function SectionCard({ section, onToggle, onClick, isSelected }: SectionCardProps) {
+  const Icon = section.icon
+  
+  return (
+    <div 
+      className={`group relative bg-white border rounded-lg transition-all cursor-pointer ${
+        isSelected 
+          ? 'border-blue-300 ring-2 ring-blue-100' 
+          : section.included 
+            ? 'border-blue-200 bg-blue-50/30 hover:border-blue-300' 
+            : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+      }`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+    >
+      {/* Checkbox in corner */}
+      <div className="absolute top-3 right-3" onClick={(e) => e.stopPropagation()}>
+        <Checkbox 
+          checked={section.included} 
+          onCheckedChange={onToggle}
+          className="h-5 w-5"
+        />
+      </div>
+
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <div className={`p-2 rounded-lg ${section.included ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+            <Icon className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0 pr-6">
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="font-medium text-sm text-gray-900">{section.title}</h4>
+              {section.badge && (
+                <Badge 
+                  variant={section.badgeVariant || 'secondary'} 
+                  className="text-[10px] px-1.5 py-0"
+                >
+                  {section.badge}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 line-clamp-2">{section.description}</p>
+          </div>
+        </div>
+        
+        {/* Click for details hint */}
+        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+          <span className="text-[10px] text-gray-400 group-hover:text-blue-500 transition-colors">
+            Click for details & preview
+          </span>
+          <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// SECTION SLIDEOUT COMPONENT
+// ============================================================================
+
+interface SectionSlideoutProps {
+  section: ExportSection | null
+  isOpen: boolean
+  onClose: () => void
+  config: ExportConfig
+  onUpdateConfig: (updates: Partial<ExportConfig>) => void
+  selectedRoles: any[]
+  companyRoles: any[]
+  wbsElements: WBSElement[]
+  indirectRates: any
+  escalationRates: any
+  contractYears: number
+  contractType: string
+  calculateFullyBurdenedRate: (salary: number, includeProfit: boolean) => number
+  calculateEscalatedRate: (rate: number, year: number) => number
+}
+
+function SectionSlideout({ 
+  section, 
+  isOpen, 
+  onClose, 
+  config,
+  onUpdateConfig,
+  selectedRoles,
+  companyRoles,
+  wbsElements,
+  indirectRates,
+  escalationRates,
+  contractYears,
+  contractType,
+  calculateFullyBurdenedRate,
+  calculateEscalatedRate
+}: SectionSlideoutProps) {
+  
+  const wbsSummary = useMemo(() => {
+    const totalHours = wbsElements.reduce((sum, el) => sum + el.hours, 0)
+    const confidenceCounts = wbsElements.reduce((acc, el) => {
+      acc[el.confidenceLevel] = (acc[el.confidenceLevel] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+    return {
+      totalElements: wbsElements.length,
+      totalHours,
+      highConfidencePercent: wbsElements.length > 0 ? ((confidenceCounts.high || 0) / wbsElements.length) * 100 : 0
+    }
+  }, [wbsElements])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
+  if (!isOpen || !section) return null
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
+      <div 
+        className="fixed inset-y-0 right-0 w-[750px] bg-white shadow-2xl z-50 overflow-hidden flex flex-col"
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${section.included ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                <section.icon className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{section.title}</h3>
+                <p className="text-sm text-gray-500">{section.description}</p>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {section.id === 'rateCard' && (
+            <div className="space-y-6">
+              {/* Options */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-900">Options</h4>
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <Checkbox 
+                    id="escalation" 
+                    checked={config.includeEscalation} 
+                    onCheckedChange={(checked) => onUpdateConfig({ includeEscalation: checked as boolean })} 
+                  />
+                  <div>
+                    <Label htmlFor="escalation" className="text-sm font-medium text-gray-900 cursor-pointer">
+                      Apply annual escalation
+                    </Label>
+                    <p className="text-xs text-gray-500">
+                      {(escalationRates.laborDefault * 100).toFixed(1)}% per year for option years
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900">Preview</h4>
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-left p-3 text-xs font-medium text-gray-500">Labor Category</th>
+                        <th className="text-center p-3 text-xs font-medium text-gray-500">Level</th>
+                        <th className="text-right p-3 text-xs font-medium text-gray-500">Base Year</th>
+                        {contractYears >= 2 && <th className="text-right p-3 text-xs font-medium text-gray-500">Opt 1</th>}
+                        {contractYears >= 3 && <th className="text-right p-3 text-xs font-medium text-gray-500">Opt 2</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedRoles.map((role, idx) => {
+                        const baseRate = calculateFullyBurdenedRate(role.baseSalary, contractType !== 'ffp')
+                        return (
+                          <tr key={role.id} className={idx % 2 === 1 ? 'bg-gray-50' : ''}>
+                            <td className="p-3 text-gray-900">{role.title || role.name}</td>
+                            <td className="p-3 text-center">
+                              <Badge variant="outline" className="text-xs">{role.icLevel}</Badge>
+                            </td>
+                            <td className="p-3 text-right font-mono text-gray-900">{formatCurrency(baseRate)}</td>
+                            {contractYears >= 2 && (
+                              <td className="p-3 text-right font-mono text-gray-900">
+                                {formatCurrency(config.includeEscalation ? calculateEscalatedRate(baseRate, 2) : baseRate)}
+                              </td>
+                            )}
+                            {contractYears >= 3 && (
+                              <td className="p-3 text-right font-mono text-gray-900">
+                                {formatCurrency(config.includeEscalation ? calculateEscalatedRate(baseRate, 3) : baseRate)}
+                              </td>
+                            )}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Fringe {(indirectRates.fringe * 100).toFixed(1)}% · OH {(indirectRates.overhead * 100).toFixed(1)}% · G&A {(indirectRates.ga * 100).toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          )}
+
+          {section.id === 'boe' && (
+            <div className="space-y-6">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                  <p className="text-2xl font-semibold text-gray-900">{wbsSummary.totalElements}</p>
+                  <p className="text-xs text-gray-500">WBS Elements</p>
+                </div>
+                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                  <p className="text-2xl font-semibold text-gray-900">{wbsSummary.totalHours.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500">Total Hours</p>
+                </div>
+                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                  <p className="text-2xl font-semibold text-gray-900">{Math.round(wbsSummary.highConfidencePercent)}%</p>
+                  <p className="text-xs text-gray-500">High Confidence</p>
+                </div>
+              </div>
+
+              {/* WBS List */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900">WBS Elements</h4>
+                <div className="space-y-3">
+                  {wbsElements.map((element) => (
+                    <div key={element.id} className="p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <span className="text-xs font-mono text-gray-500">{element.wbsNumber}</span>
+                          <h5 className="font-medium text-gray-900">{element.title}</h5>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px]">{element.estimateMethod}</Badge>
+                          <Badge 
+                            variant={element.confidenceLevel === 'high' ? 'default' : 'secondary'} 
+                            className="text-[10px]"
+                          >
+                            {element.confidenceLevel}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <p className="text-xs text-gray-500 mb-3">{element.description}</p>
+                      
+                      {/* Total Hours */}
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="text-sm">
+                          <strong className="text-gray-900">{element.hours.toLocaleString()}</strong>
+                          <span className="text-gray-500 ml-1">total hours</span>
+                        </span>
+                        {element.sooReference && (
+                          <span className="text-xs text-gray-500 border-l border-gray-300 pl-3">
+                            SOO: {element.sooReference}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Labor Breakdown */}
+                      {element.laborBreakdown && element.laborBreakdown.length > 0 && (
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                            Labor Allocation
+                          </p>
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-[10px] font-medium text-gray-500 border-b border-gray-200">
+                                <th className="text-left pb-1">Role</th>
+                                <th className="text-right pb-1">Total</th>
+                                <th className="text-right pb-1">Base</th>
+                                {contractYears >= 2 && <th className="text-right pb-1">OY1</th>}
+                                {contractYears >= 3 && <th className="text-right pb-1">OY2</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {element.laborBreakdown.map((labor, idx) => {
+                                const hoursPerYear = Math.round(labor.hours / contractYears)
+                                return (
+                                  <tr key={idx}>
+                                    <td className="py-1.5 font-medium text-gray-900">{labor.roleName}</td>
+                                    <td className="py-1.5 text-right font-semibold text-gray-900">
+                                      {labor.hours.toLocaleString()}
+                                    </td>
+                                    <td className="py-1.5 text-right text-gray-600 text-xs">
+                                      {hoursPerYear.toLocaleString()}
+                                    </td>
+                                    {contractYears >= 2 && (
+                                      <td className="py-1.5 text-right text-gray-600 text-xs">
+                                        {hoursPerYear.toLocaleString()}
+                                      </td>
+                                    )}
+                                    {contractYears >= 3 && (
+                                      <td className="py-1.5 text-right text-gray-600 text-xs">
+                                        {hoursPerYear.toLocaleString()}
+                                      </td>
+                                    )}
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Assumptions */}
+                      {element.assumptions && element.assumptions.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                            Assumptions
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {element.assumptions.map((assumption, idx) => (
+                              <span 
+                                key={idx} 
+                                className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded"
+                              >
+                                {assumption}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {section.id === 'lcats' && (
+            <div className="space-y-6">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2 text-sm text-blue-800">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Role definitions from Company Settings
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900">Labor Categories ({selectedRoles.length})</h4>
+                <div className="space-y-3">
+                  {selectedRoles.map((role) => {
+                    // Find matching company role
+                    const companyRole = companyRoles.find(cr => 
+                      cr.title.toLowerCase().includes(role.name?.toLowerCase() || '') ||
+                      (role.name?.toLowerCase() || '').includes(cr.title.toLowerCase()) ||
+                      cr.title === role.title
+                    )
+                    
+                    // Find level info
+                    const levelInfo = companyRole?.levels?.find((l: any) => l.level === role.icLevel)
+                    
+                    // Mock data fallback based on role name
+                    const mockDescriptions: Record<string, string> = {
+                      'delivery manager': 'Oversees project delivery, manages client relationships, and ensures on-time execution of deliverables. Coordinates cross-functional teams and maintains project schedules.',
+                      'product manager': 'Defines product vision and roadmap, prioritizes features based on user research and business value. Works closely with engineering and design teams.',
+                      'product designer': 'Creates user-centered designs including wireframes, prototypes, and high-fidelity mockups. Conducts usability testing and ensures Section 508 compliance.',
+                      'frontend engineer': 'Develops responsive web applications using modern JavaScript frameworks. Implements accessible UI components and optimizes performance.',
+                      'backend engineer': 'Designs and implements scalable APIs and microservices. Manages database architecture and ensures system reliability.',
+                      'design lead': 'Leads design strategy and mentors junior designers. Establishes design systems and ensures consistency across products.',
+                      'ux researcher': 'Conducts user research including interviews, surveys, and usability testing. Synthesizes findings into actionable insights.',
+                      'data engineer': 'Builds and maintains data pipelines and ETL processes. Ensures data quality and availability for analytics.',
+                      'devops engineer': 'Manages CI/CD pipelines, infrastructure as code, and cloud environments. Ensures system security and reliability.',
+                      'technical lead': 'Provides technical leadership and architectural guidance. Mentors engineers and ensures code quality standards.',
+                    }
+                    
+                    const mockExperience: Record<string, string> = {
+                      'IC3': '3-5 years',
+                      'IC4': '5-8 years', 
+                      'IC5': '8-12 years',
+                      'IC6': '12+ years',
+                    }
+                    
+                    const mockEducation: Record<string, string> = {
+                      'delivery manager': "Bachelor's in Business, IT, or related field",
+                      'product manager': "Bachelor's in Business, Computer Science, or related field",
+                      'product designer': "Bachelor's in Design, HCI, or related field",
+                      'frontend engineer': "Bachelor's in Computer Science or related field",
+                      'backend engineer': "Bachelor's in Computer Science or related field",
+                      'design lead': "Bachelor's in Design, HCI, or related field",
+                      'ux researcher': "Master's in HCI, Psychology, or related field",
+                      'data engineer': "Bachelor's in Computer Science, Data Science, or related field",
+                      'devops engineer': "Bachelor's in Computer Science or related field",
+                      'technical lead': "Bachelor's in Computer Science or related field",
+                    }
+
+                    const mockBLSCodes: Record<string, string> = {
+                      'delivery manager': '11-3021',
+                      'product manager': '11-3021',
+                      'product designer': '15-1255',
+                      'frontend engineer': '15-1252',
+                      'backend engineer': '15-1252',
+                      'design lead': '15-1255',
+                      'ux researcher': '15-1255',
+                      'data engineer': '15-1252',
+                      'devops engineer': '15-1252',
+                      'technical lead': '15-1252',
+                    }
+                    
+                    const roleLower = (role.name || role.title || '').toLowerCase()
+                    const description = companyRole?.description || mockDescriptions[roleLower] || 'Provides specialized expertise supporting federal government initiatives.'
+                    const experience = levelInfo?.yearsExperience || mockExperience[role.icLevel] || '5+ years'
+                    const education = levelInfo?.education || mockEducation[roleLower] || "Bachelor's degree in relevant field"
+                    const blsCode = companyRole?.blsOccCode || mockBLSCodes[roleLower] || '15-1252'
+                    
+                    return (
+                      <div key={role.id} className="p-4 border border-gray-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="font-medium text-gray-900">{role.title || role.name}</h5>
+                          <Badge variant="outline">{role.icLevel}</Badge>
+                        </div>
+                        
+                        {/* Description */}
+                        <p className="text-sm text-gray-700 mb-3">
+                          {description}
+                        </p>
+                        
+                        {/* Details grid */}
+                        <div className="grid grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg">
+                          <div>
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                              Experience Required
+                            </p>
+                            <p className="text-sm text-gray-900">{experience}</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                              Education
+                            </p>
+                            <p className="text-sm text-gray-900">{education}</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                              BLS Code
+                            </p>
+                            <p className="text-sm text-gray-900 font-mono">{blsCode}</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                              Level
+                            </p>
+                            <p className="text-sm text-gray-900">{levelInfo?.levelName || role.icLevel}</p>
+                          </div>
+                        </div>
+                        
+                        {/* Certifications if any */}
+                        {levelInfo?.certifications && levelInfo.certifications.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                              Certifications
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {levelInfo.certifications.map((cert: string, idx: number) => (
+                                <span 
+                                  key={idx} 
+                                  className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded"
+                                >
+                                  {cert}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {section.id === 'audit' && (
+            <div className="space-y-6">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-sm font-semibold text-blue-900 mb-2">What's Included</h4>
+                <p className="text-xs text-blue-800">
+                  The audit defense package provides detailed documentation to support your rates during government audits.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900">Package Contents</h4>
+                <div className="space-y-2">
+                  {[
+                    { title: 'Rate Calculation Walkthrough', description: 'Step-by-step breakdown showing how each rate was calculated' },
+                    { title: 'Indirect Rate Documentation', description: `FY${indirectRates.fiscalYear} rates with source documentation` },
+                    { title: 'FAR 31.2 Compliance Matrix', description: 'Mapping of cost elements to FAR allowability criteria' },
+                    { title: 'Salary Survey References', description: 'BLS and market data supporting base salary ranges' },
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg">
+                      <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                        <p className="text-xs text-gray-500">{item.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ============================================================================
+// SETTINGS SLIDEOUT COMPONENT
+// ============================================================================
+
+interface SettingsSlideoutProps {
+  isOpen: boolean
+  onClose: () => void
+  config: ExportConfig
+  onUpdateConfig: (updates: Partial<ExportConfig>) => void
+  solicitation: any
+}
+
+function SettingsSlideout({ isOpen, onClose, config, onUpdateConfig, solicitation }: SettingsSlideoutProps) {
+  // Local state for editing
+  const [localConfig, setLocalConfig] = useState({
+    solicitation: config.solicitation,
+    client: config.client,
+    proposalTitle: config.proposalTitle,
+    preparedBy: config.preparedBy,
+    preparedDate: config.preparedDate,
+  })
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  // Reset local state when opening or config changes externally
+  useEffect(() => {
+    if (isOpen) {
+      setLocalConfig({
+        solicitation: config.solicitation,
+        client: config.client,
+        proposalTitle: config.proposalTitle,
+        preparedBy: config.preparedBy,
+        preparedDate: config.preparedDate,
+      })
+      setHasUnsavedChanges(false)
+    }
+  }, [isOpen, config.solicitation, config.client, config.proposalTitle, config.preparedBy, config.preparedDate])
+
+  // Track changes
+  useEffect(() => {
+    const changed = 
+      localConfig.solicitation !== config.solicitation ||
+      localConfig.client !== config.client ||
+      localConfig.proposalTitle !== config.proposalTitle ||
+      localConfig.preparedBy !== config.preparedBy ||
+      localConfig.preparedDate !== config.preparedDate
+    setHasUnsavedChanges(changed)
+  }, [localConfig, config])
+
+  const handleSave = () => {
+    onUpdateConfig(localConfig)
+    setHasUnsavedChanges(false)
+  }
+
+  const updateLocal = (field: string, value: string) => {
+    setLocalConfig(prev => ({ ...prev, [field]: value }))
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
+      <div 
+        className="fixed inset-y-0 right-0 w-[750px] bg-white shadow-2xl z-50 overflow-hidden flex flex-col"
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gray-100 text-gray-600">
+                <Settings className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Document Settings</h3>
+                <p className="text-sm text-gray-500">Configure export metadata</p>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="space-y-6">
+            {/* Unsaved changes banner */}
+            {hasUnsavedChanges && (
+              <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-center gap-2 text-sm text-amber-800">
+                  <AlertTriangle className="w-4 h-4" />
+                  You have unsaved changes
+                </div>
+                <Button size="sm" onClick={handleSave}>
+                  Save Changes
+                </Button>
+              </div>
+            )}
+
+            {solicitation?.solicitationNumber && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2 text-sm text-blue-800">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Auto-filled from uploaded solicitation
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Solicitation Number</Label>
+                <Input
+                  placeholder="e.g., 47QTCA24R0001"
+                  value={localConfig.solicitation}
+                  onChange={(e) => updateLocal('solicitation', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Client / Agency</Label>
+                <Input
+                  placeholder="e.g., Department of Commerce"
+                  value={localConfig.client}
+                  onChange={(e) => updateLocal('client', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Proposal Title</Label>
+                <Input
+                  placeholder="e.g., IT Modernization Support"
+                  value={localConfig.proposalTitle}
+                  onChange={(e) => updateLocal('proposalTitle', e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Prepared By</Label>
+                  <Input
+                    value={localConfig.preparedBy}
+                    onChange={(e) => updateLocal('preparedBy', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Date</Label>
+                  <Input
+                    type="date"
+                    value={localConfig.preparedDate}
+                    onChange={(e) => updateLocal('preparedDate', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Save button at bottom */}
+            <div className="pt-4 border-t border-gray-200">
+              <Button 
+                onClick={handleSave} 
+                disabled={!hasUnsavedChanges}
+                className="w-full"
+              >
+                {hasUnsavedChanges ? 'Save Changes' : 'Saved'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
@@ -149,15 +871,11 @@ export function ExportTab() {
 
   const wbsElements = contextWbsElements?.length > 0 ? contextWbsElements : MOCK_WBS_ELEMENTS
 
+  const [activeTab, setLocalActiveTab] = useState('sections')
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle')
-  const [exportResult, setExportResult] = useState<{ url?: string; fileName?: string } | null>(null)
-  const [expandedSection, setExpandedSection] = useState<string | null>('rateCard')
-  const [previewMode, setPreviewMode] = useState<'rates' | 'wbs'>('rates')
-  const [googleAuth, setGoogleAuth] = useState<GoogleAuthState>({
-    isAuthenticated: false,
-    accessToken: null,
-    error: null
-  })
+  const [exportResult, setExportResult] = useState<{ fileName?: string } | null>(null)
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
   
   const [config, setConfig] = useState<ExportConfig>({
     solicitation: '',
@@ -165,29 +883,31 @@ export function ExportTab() {
     proposalTitle: '',
     preparedBy: companyProfile.name,
     preparedDate: new Date().toISOString().split('T')[0],
-    
-    includeRateCard: true,
-    includeBOE: true,
-    includeLCATs: false,
-    includeAuditPackage: false,
-    
     includeEscalation: true,
-    
-    format: 'docx',
-    saveDestination: 'local'
+    format: 'docx'
+  })
+
+  const [includedSections, setIncludedSections] = useState({
+    rateCard: true,
+    boe: true,
+    lcats: false,
+    audit: false
   })
 
   // Auto-populate from solicitation
   useEffect(() => {
     if (solicitation) {
+      // Check multiple possible property names for agency/client
+      const clientAgency = solicitation.agency || solicitation.client || solicitation.clientAgency || solicitation.agencyName || ''
+      
       setConfig(prev => ({
         ...prev,
-        solicitation: solicitation.solicitationNumber || prev.solicitation,
-        client: solicitation.agency || prev.client,
-        proposalTitle: solicitation.title || prev.proposalTitle,
+        solicitation: solicitation.solicitationNumber || solicitation.number || prev.solicitation,
+        client: clientAgency || prev.client,
+        proposalTitle: solicitation.title || solicitation.projectTitle || solicitation.name || prev.proposalTitle,
       }))
     }
-  }, [solicitation?.solicitationNumber, solicitation?.agency, solicitation?.title])
+  }, [solicitation])
 
   const updateConfig = (updates: Partial<ExportConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }))
@@ -203,41 +923,69 @@ export function ExportTab() {
       acc[el.confidenceLevel] = (acc[el.confidenceLevel] || 0) + 1
       return acc
     }, {} as Record<string, number>)
-
     return {
       totalElements: wbsElements.length,
       totalHours,
-      highConfidencePercent: ((confidenceCounts.high || 0) / wbsElements.length) * 100
+      highConfidencePercent: wbsElements.length > 0 ? ((confidenceCounts.high || 0) / wbsElements.length) * 100 : 0
     }
   }, [wbsElements])
+
+  // Build sections array
+  const sections: ExportSection[] = useMemo(() => [
+    {
+      id: 'rateCard',
+      title: 'Rate Card',
+      description: `${contractType.toUpperCase()} rates for ${contractYears} year${contractYears !== 1 ? 's' : ''} with ${selectedRoles.length} roles`,
+      icon: Calculator,
+      included: includedSections.rateCard,
+    },
+    {
+      id: 'boe',
+      title: 'Basis of Estimate',
+      description: `${wbsElements.length} WBS elements totaling ${wbsSummary.totalHours.toLocaleString()} hours`,
+      icon: ListTree,
+      included: includedSections.boe,
+      badge: wbsSummary.highConfidencePercent >= 70 ? 'Strong' : 'Review',
+      badgeVariant: wbsSummary.highConfidencePercent >= 70 ? 'default' : 'secondary',
+    },
+    {
+      id: 'lcats',
+      title: 'Labor Categories',
+      description: `${selectedRoles.length} roles with descriptions from Company Settings`,
+      icon: Users,
+      included: includedSections.lcats,
+    },
+    {
+      id: 'audit',
+      title: 'Audit Defense',
+      description: 'Rate calculations and compliance documentation',
+      icon: Shield,
+      included: includedSections.audit,
+      badge: 'Advanced',
+      badgeVariant: 'secondary',
+    },
+  ], [contractType, contractYears, selectedRoles.length, wbsElements.length, wbsSummary, includedSections])
+
+  const selectedSection = sections.find(s => s.id === selectedSectionId) || null
 
   // Readiness checks
   const checks = useMemo(() => {
     const hasRoles = selectedRoles.length > 0
     const hasRates = indirectRates.fringe > 0
-    const hasCompany = !!companyProfile.name
-    const hasSolicitation = !!config.solicitation
     const hasWBS = wbsElements.length > 0
+    const hasSolicitation = !!config.solicitation
     
     return {
       hasRoles,
       hasRates,
-      hasCompany,
-      hasSolicitation,
       hasWBS,
-      passCount: [hasRoles, hasRates, hasCompany, hasSolicitation].filter(Boolean).length,
+      hasSolicitation,
+      passCount: [hasRoles, hasRates, hasWBS, hasSolicitation].filter(Boolean).length,
     }
-  }, [selectedRoles.length, indirectRates.fringe, companyProfile.name, config.solicitation, wbsElements.length])
+  }, [selectedRoles.length, indirectRates.fringe, wbsElements.length, config.solicitation])
 
-  const isReady = checks.passCount >= 2
-
-  const handleGoogleAuth = useCallback(async () => {
-    setGoogleAuth({
-      isAuthenticated: false,
-      accessToken: null,
-      error: 'Google Drive requires OAuth setup. Download locally for now.'
-    })
-  }, [])
+  const selectedCount = Object.values(includedSections).filter(Boolean).length
+  const isReady = checks.passCount >= 2 && selectedCount > 0
 
   // Handle export
   const handleExport = async () => {
@@ -279,10 +1027,11 @@ export function ExportTab() {
             quantity: role.quantity,
             description: role.description,
             blsCode: companyRole?.blsOccCode,
-            yearsExperience: levelInfo?.yearsExperience
+            yearsExperience: levelInfo?.yearsExperience,
+            education: levelInfo?.education
           }
         }),
-        wbsElements: config.includeBOE ? wbsElements : undefined,
+        wbsElements: wbsElements, // Always pass - used by both BOE and Labor Categories
         calculateRate: (salary: number, includeProfit: boolean) => 
           calculateFullyBurdenedRate(salary, includeProfit),
         calculateEscalatedRate: (rate: number, year: number) => 
@@ -293,414 +1042,278 @@ export function ExportTab() {
       }
 
       const options: ExportOptions = {
-        includeRateCard: config.includeRateCard,
-        includeBOE: config.includeBOE,
-        includeLCATs: config.includeLCATs,
-        includeAuditPackage: config.includeAuditPackage
+        includeRateCard: includedSections.rateCard,
+        includeBOE: includedSections.boe,
+        includeLCATs: includedSections.lcats,
+        includeAuditPackage: includedSections.audit
       }
 
       const blob = await generateExport(exportData, options, config.format)
       const extension = config.format === 'xlsx' ? 'csv' : config.format
       const filename = `TrueBid_${config.solicitation || 'Export'}_${new Date().toISOString().split('T')[0]}.${extension}`
       
-      if (config.saveDestination === 'gdrive' && googleAuth.isAuthenticated && googleAuth.accessToken) {
-        setExportStatus('uploading')
-        const result = await uploadToGoogleDrive(blob, filename, googleAuth.accessToken, config.gdriveFolderId)
-        setExportResult({ url: result.webViewLink, fileName: result.fileName })
-        setExportStatus('success')
-      } else {
-        downloadBlob(blob, filename)
-        setExportResult({ fileName: filename })
-        setExportStatus('success')
-      }
+      downloadBlob(blob, filename)
+      setExportResult({ fileName: filename })
+      setExportStatus('success')
+      
+      // Reset after 3 seconds
+      setTimeout(() => setExportStatus('idle'), 3000)
     } catch (error) {
       console.error('Export failed:', error)
       setExportStatus('error')
     }
   }
 
-  const selectedCount = [config.includeRateCard, config.includeBOE, config.includeLCATs, config.includeAuditPackage].filter(Boolean).length
+  const toggleSection = (id: keyof typeof includedSections) => {
+    setIncludedSections(prev => ({ ...prev, [id]: !prev[id] }))
+  }
 
   return (
-    <div className="flex gap-6 h-full">
-      {/* LEFT SIDEBAR */}
-      <div className="w-80 flex-shrink-0">
-        <div className="sticky top-6 space-y-5">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Export</h2>
-            <p className="text-xs text-gray-600 dark:text-gray-400">Generate cost proposal documents</p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold text-gray-900">Export</h1>
+          <Badge variant="outline" className="text-xs">
+            {selectedCount} section{selectedCount !== 1 ? 's' : ''} selected
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Format Toggle */}
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+            {FORMAT_OPTIONS.map((format) => (
+              <button
+                key={format.value}
+                onClick={() => updateConfig({ format: format.value })}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  config.format === format.value 
+                    ? 'bg-white shadow-sm text-gray-900' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <format.icon className="w-3.5 h-3.5" />
+                {format.label}
+              </button>
+            ))}
           </div>
 
-          {/* Document Info */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Document Info</h3>
-              {solicitation?.solicitationNumber && <Badge variant="secondary" className="text-[10px]">Auto-filled</Badge>}
-            </div>
-            
-            <div className="space-y-3">
-              <div>
-                <Label className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Solicitation #</Label>
-                <Input
-                  placeholder="e.g., 47QTCA24R0001"
-                  value={config.solicitation}
-                  onChange={(e) => updateConfig({ solicitation: e.target.value })}
-                  className="h-8 text-sm"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Client / Agency</Label>
-                <Input
-                  placeholder="e.g., Department of Commerce"
-                  value={config.client}
-                  onChange={(e) => updateConfig({ client: e.target.value })}
-                  className="h-8 text-sm"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Proposal Title</Label>
-                <Input
-                  placeholder="e.g., IT Modernization Support"
-                  value={config.proposalTitle}
-                  onChange={(e) => updateConfig({ proposalTitle: e.target.value })}
-                  className="h-8 text-sm"
-                />
-              </div>
-            </div>
-          </div>
+          {/* Settings Button */}
+          <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
+            <Settings className="w-4 h-4 mr-2" />
+            Settings
+          </Button>
 
-          {/* Output */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Output</h3>
-              <div className="group relative">
-                <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                <div className="absolute left-0 bottom-full mb-2 w-56 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                  <p className="mb-1"><strong>Word</strong> — Editable format</p>
-                  <p className="mb-1"><strong>PDF</strong> — Fixed format for submission</p>
-                  <p><strong>CSV</strong> — Raw data for Excel</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                <button
-                  onClick={() => updateConfig({ format: 'docx' })}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-md text-xs font-medium transition-all ${
-                    config.format === 'docx' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  Word
-                </button>
-                <button
-                  onClick={() => updateConfig({ format: 'pdf' })}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-md text-xs font-medium transition-all ${
-                    config.format === 'pdf' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  <FileType className="w-3.5 h-3.5" />
-                  PDF
-                </button>
-                <button
-                  onClick={() => updateConfig({ format: 'xlsx' })}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-md text-xs font-medium transition-all ${
-                    config.format === 'xlsx' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                  CSV
-                </button>
-              </div>
-
-              <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                <button
-                  onClick={() => updateConfig({ saveDestination: 'local' })}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-md text-xs font-medium transition-all ${
-                    config.saveDestination === 'local' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download
-                </button>
-                <button
-                  onClick={() => { updateConfig({ saveDestination: 'gdrive' }); if (!googleAuth.isAuthenticated) handleGoogleAuth() }}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-md text-xs font-medium transition-all ${
-                    config.saveDestination === 'gdrive' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  <CloudUpload className="w-3.5 h-3.5" />
-                  Drive
-                </button>
-              </div>
-              {config.saveDestination === 'gdrive' && googleAuth.error && (
-                <p className="text-[10px] text-amber-600 dark:text-amber-400">{googleAuth.error}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Readiness */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Readiness</h3>
-            <div className="space-y-2">
-              <ReadinessCheck 
-                label="Roles selected" 
-                passed={checks.hasRoles} 
-                detail={checks.hasRoles ? `${selectedRoles.length} roles` : '0 roles'}
-                actionLabel={!checks.hasRoles ? 'Add' : undefined}
-                onAction={!checks.hasRoles ? () => setActiveTab('roles-pricing') : undefined}
-              />
-              <ReadinessCheck label="Indirect rates" passed={checks.hasRates} detail={checks.hasRates ? `FY${indirectRates.fiscalYear}` : 'Not set'} />
-              <ReadinessCheck 
-                label="WBS elements" 
-                passed={checks.hasWBS} 
-                detail={checks.hasWBS ? `${wbsElements.length} elements` : 'None'}
-                actionLabel={!checks.hasWBS ? 'Add' : undefined}
-                onAction={!checks.hasWBS ? () => setActiveTab('estimate') : undefined}
-              />
-              <ReadinessCheck label="Solicitation #" passed={checks.hasSolicitation} detail={config.solicitation || 'Not set'} />
-            </div>
-          </div>
-
-          {/* Export Button - Changed to singular "Export Document" */}
+          {/* Export Button */}
           <Button 
-            className="w-full h-11"
-            disabled={!isReady || exportStatus === 'generating' || exportStatus === 'uploading' || selectedCount === 0}
             onClick={handleExport}
+            disabled={!isReady || exportStatus === 'generating'}
           >
             {exportStatus === 'generating' ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</>
-            ) : exportStatus === 'uploading' ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading...</>
+            ) : exportStatus === 'success' ? (
+              <><CheckCircle2 className="w-4 h-4 mr-2" />Downloaded!</>
             ) : (
               <><Download className="w-4 h-4 mr-2" />Export Document</>
             )}
           </Button>
-
-          {/* Export Result */}
-          {exportStatus === 'success' && exportResult && (
-            <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-green-900 dark:text-green-100">Export successful!</p>
-                  <p className="text-xs text-green-700 dark:text-green-300 truncate">{exportResult.fileName}</p>
-                  {exportResult.url && (
-                    <a href={exportResult.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-green-700 hover:text-green-900 mt-1">
-                      Open in Drive <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {exportStatus === 'error' && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 mt-0.5" />
-                <div>
-                  <p className="text-xs font-medium text-red-900 dark:text-red-100">Export failed</p>
-                  <p className="text-xs text-red-700 dark:text-red-300">Please try again.</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!isReady && <p className="text-xs text-amber-600 dark:text-amber-400 text-center">Complete at least 2 checks to export</p>}
         </div>
       </div>
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 min-w-0 space-y-4 overflow-y-auto">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Sections</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Select sections to include in your document</p>
-          </div>
-          <Badge variant="outline" className="text-sm">{selectedCount} selected</Badge>
+      {/* Stats Bar */}
+      <div className="px-4 py-2 bg-gray-50 rounded-lg flex items-center gap-6 text-sm">
+        <div className="flex items-center gap-2">
+          {checks.hasRoles ? (
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+          )}
+          <span className={checks.hasRoles ? 'text-gray-700' : 'text-amber-600'}>
+            {selectedRoles.length} roles
+          </span>
         </div>
+        <span className="text-gray-300">•</span>
+        <div className="flex items-center gap-2">
+          {checks.hasWBS ? (
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+          )}
+          <span className={checks.hasWBS ? 'text-gray-700' : 'text-amber-600'}>
+            {wbsElements.length} WBS elements
+          </span>
+        </div>
+        <span className="text-gray-300">•</span>
+        <div className="flex items-center gap-2">
+          {checks.hasRates ? (
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+          )}
+          <span className={checks.hasRates ? 'text-gray-700' : 'text-amber-600'}>
+            FY{indirectRates.fiscalYear} rates
+          </span>
+        </div>
+        <span className="text-gray-300">•</span>
+        <div className="flex items-center gap-2">
+          {checks.hasSolicitation ? (
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+          )}
+          <span className={checks.hasSolicitation ? 'text-gray-700' : 'text-amber-600'}>
+            {config.solicitation || 'No solicitation #'}
+          </span>
+        </div>
+      </div>
 
-        {/* Document Cards */}
-        <div className="space-y-3">
-          <DocumentCard
-            icon={Calculator}
-            title="Rate Card"
-            description={`${contractType.toUpperCase()} rates for ${contractYears} year${contractYears !== 1 ? 's' : ''}`}
-            checked={config.includeRateCard}
-            onCheckedChange={(checked) => updateConfig({ includeRateCard: checked })}
-            expanded={expandedSection === 'rateCard'}
-            onToggleExpand={() => setExpandedSection(expandedSection === 'rateCard' ? null : 'rateCard')}
-            hasOptions
-          >
-            <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
-              <div className="flex items-center gap-2">
-                <Checkbox id="escalation" checked={config.includeEscalation} onCheckedChange={(checked) => updateConfig({ includeEscalation: checked as boolean })} />
-                <Label htmlFor="escalation" className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                  Apply {(escalationRates.laborDefault * 100).toFixed(1)}% annual escalation
-                </Label>
-              </div>
-            </div>
-          </DocumentCard>
+      {/* Error / Success Messages */}
+      {exportStatus === 'error' && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-sm text-red-800">Export failed. Please try again.</span>
+        </div>
+      )}
 
-          <DocumentCard
-            icon={ListTree}
-            title="Basis of Estimate (BOE)"
-            description={`${wbsElements.length} WBS elements, ${wbsSummary.totalHours.toLocaleString()} hours`}
-            checked={config.includeBOE}
-            onCheckedChange={(checked) => updateConfig({ includeBOE: checked })}
-            expanded={expandedSection === 'boe'}
-            onToggleExpand={() => setExpandedSection(expandedSection === 'boe' ? null : 'boe')}
-            badge={wbsSummary.highConfidencePercent >= 70 ? 'Strong' : 'Review'}
-            badgeVariant={wbsSummary.highConfidencePercent >= 70 ? 'default' : 'secondary'}
-          >
-            <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="text-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{wbsElements.length}</p>
-                  <p className="text-[10px] text-gray-500">Elements</p>
-                </div>
-                <div className="text-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{wbsSummary.totalHours.toLocaleString()}</p>
-                  <p className="text-[10px] text-gray-500">Hours</p>
-                </div>
-                <div className="text-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{Math.round(wbsSummary.highConfidencePercent)}%</p>
-                  <p className="text-[10px] text-gray-500">High Conf.</p>
-                </div>
-              </div>
-            </div>
-          </DocumentCard>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setLocalActiveTab}>
+        <TabsList className="bg-gray-100 p-1">
+          <TabsTrigger value="sections" className="data-[state=active]:bg-white text-xs">
+            Sections
+          </TabsTrigger>
+          <TabsTrigger value="preview" className="data-[state=active]:bg-white text-xs">
+            Preview
+          </TabsTrigger>
+        </TabsList>
 
-          <DocumentCard
-            icon={Users}
-            title="Labor Category Descriptions"
-            description="Role definitions and experience requirements"
-            checked={config.includeLCATs}
-            onCheckedChange={(checked) => updateConfig({ includeLCATs: checked })}
-            expanded={expandedSection === 'lcats'}
-            onToggleExpand={() => setExpandedSection(expandedSection === 'lcats' ? null : 'lcats')}
-          >
-            <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {selectedRoles.length} labor categories with qualifications and BLS codes.
+        {/* SECTIONS TAB */}
+        <TabsContent value="sections" className="mt-4">
+          {selectedRoles.length === 0 ? (
+            <div className="text-center py-12 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-amber-900 mb-1">No roles selected</h3>
+              <p className="text-sm text-amber-700 mb-4">
+                Add roles in Roles & Pricing to generate export documents.
               </p>
+              <Button variant="outline" onClick={() => setActiveTab('roles-pricing')}>
+                Go to Roles & Pricing
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
             </div>
-          </DocumentCard>
-
-          <DocumentCard
-            icon={Shield}
-            title="Audit Defense Package"
-            description="Rate calculations and compliance documentation"
-            checked={config.includeAuditPackage}
-            onCheckedChange={(checked) => updateConfig({ includeAuditPackage: checked })}
-            badge="Advanced"
-            expanded={expandedSection === 'audit'}
-            onToggleExpand={() => setExpandedSection(expandedSection === 'audit' ? null : 'audit')}
-          >
-            <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
-              {['Step-by-step rate calculation', `FY${indirectRates.fiscalYear} indirect rates`, 'FAR 31.2 compliance'].map((item, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  {item}
-                </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {sections.map((section) => (
+                <SectionCard
+                  key={section.id}
+                  section={section}
+                  onToggle={() => toggleSection(section.id)}
+                  onClick={() => setSelectedSectionId(section.id)}
+                  isSelected={selectedSectionId === section.id}
+                />
               ))}
             </div>
-          </DocumentCard>
-        </div>
+          )}
+        </TabsContent>
 
-        {/* UNIFIED PREVIEW SECTION */}
-        {selectedRoles.length > 0 ? (
-          <div className="mt-6">
-            {/* Preview Toggle */}
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Preview</h4>
-              <div className="flex gap-1 p-0.5 bg-gray-100 dark:bg-gray-800 rounded-md">
-                <button
-                  onClick={() => setPreviewMode('rates')}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-all ${
-                    previewMode === 'rates' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  Rate Card
-                </button>
-                <button
-                  onClick={() => setPreviewMode('wbs')}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-all ${
-                    previewMode === 'wbs' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  WBS Elements
-                </button>
-              </div>
+        {/* PREVIEW TAB */}
+        <TabsContent value="preview" className="mt-4">
+          {selectedRoles.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 border border-gray-200 rounded-lg">
+              <Eye className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-gray-600 mb-1">Nothing to preview</h3>
+              <p className="text-sm text-gray-500">Add roles to see a preview of your export.</p>
             </div>
-
-            {/* Rate Card Preview */}
-            {previewMode === 'rates' && (
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                      <th className="text-left p-3 text-xs font-medium text-gray-500">Labor Category</th>
-                      <th className="text-center p-3 text-xs font-medium text-gray-500">Level</th>
-                      <th className="text-right p-3 text-xs font-medium text-gray-500">Base Year</th>
-                      {contractYears >= 2 && <th className="text-right p-3 text-xs font-medium text-gray-500">Opt 1</th>}
-                      {contractYears >= 3 && <th className="text-right p-3 text-xs font-medium text-gray-500">Opt 2</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedRoles.slice(0, 6).map((role, idx) => {
-                      const baseRate = calculateFullyBurdenedRate(role.baseSalary, contractType !== 'ffp')
-                      return (
-                        <tr key={role.id} className={idx % 2 === 1 ? 'bg-gray-50 dark:bg-gray-800/50' : ''}>
-                          <td className="p-3 text-gray-900 dark:text-white">{role.title || role.name}</td>
-                          <td className="p-3 text-center"><Badge variant="outline" className="text-xs">{role.icLevel}</Badge></td>
-                          <td className="p-3 text-right font-mono text-gray-900 dark:text-white">{formatCurrency(baseRate)}</td>
-                          {contractYears >= 2 && <td className="p-3 text-right font-mono text-gray-900 dark:text-white">{formatCurrency(config.includeEscalation ? calculateEscalatedRate(baseRate, 2) : baseRate)}</td>}
-                          {contractYears >= 3 && <td className="p-3 text-right font-mono text-gray-900 dark:text-white">{formatCurrency(config.includeEscalation ? calculateEscalatedRate(baseRate, 3) : baseRate)}</td>}
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-                {selectedRoles.length > 6 && (
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 text-center">
-                    + {selectedRoles.length - 6} more roles
+          ) : (
+            <div className="space-y-6">
+              {/* Rate Card Preview */}
+              {includedSections.rateCard && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-gray-900">Rate Card</h4>
+                    <Badge variant="outline" className="text-xs">
+                      {contractYears} year{contractYears !== 1 ? 's' : ''}
+                    </Badge>
                   </div>
-                )}
-              </div>
-            )}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          <th className="text-left p-3 text-xs font-medium text-gray-500">Labor Category</th>
+                          <th className="text-center p-3 text-xs font-medium text-gray-500">Level</th>
+                          <th className="text-right p-3 text-xs font-medium text-gray-500">Base Year</th>
+                          {contractYears >= 2 && <th className="text-right p-3 text-xs font-medium text-gray-500">Opt 1</th>}
+                          {contractYears >= 3 && <th className="text-right p-3 text-xs font-medium text-gray-500">Opt 2</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedRoles.slice(0, 5).map((role, idx) => {
+                          const baseRate = calculateFullyBurdenedRate(role.baseSalary, contractType !== 'ffp')
+                          return (
+                            <tr key={role.id} className={idx % 2 === 1 ? 'bg-gray-50' : ''}>
+                              <td className="p-3 text-gray-900">{role.title || role.name}</td>
+                              <td className="p-3 text-center">
+                                <Badge variant="outline" className="text-xs">{role.icLevel}</Badge>
+                              </td>
+                              <td className="p-3 text-right font-mono text-gray-900">{formatCurrency(baseRate)}</td>
+                              {contractYears >= 2 && (
+                                <td className="p-3 text-right font-mono text-gray-900">
+                                  {formatCurrency(config.includeEscalation ? calculateEscalatedRate(baseRate, 2) : baseRate)}
+                                </td>
+                              )}
+                              {contractYears >= 3 && (
+                                <td className="p-3 text-right font-mono text-gray-900">
+                                  {formatCurrency(config.includeEscalation ? calculateEscalatedRate(baseRate, 3) : baseRate)}
+                                </td>
+                              )}
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    {selectedRoles.length > 5 && (
+                      <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 text-center">
+                        + {selectedRoles.length - 5} more roles
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
-            {/* WBS Preview - with hours by period */}
-            {previewMode === 'wbs' && (
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                <div className="max-h-[600px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-700">
-                  {wbsElements.map((element) => (
-                    <div key={element.id} className="p-4 bg-white dark:bg-gray-900">
+              {/* BOE Preview */}
+              {includedSections.boe && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-gray-900">Basis of Estimate</h4>
+                    <Badge variant="outline" className="text-xs">
+                      {wbsSummary.totalHours.toLocaleString()} total hours
+                    </Badge>
+                  </div>
+                  <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-[500px] overflow-y-auto">
+                    {wbsElements.map((element) => (
+                      <div key={element.id} className="p-4">
                         {/* Header */}
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{element.wbsNumber}</span>
-                            <h5 className="font-medium text-gray-900 dark:text-white">{element.title}</h5>
+                            <span className="text-xs font-mono text-gray-500">{element.wbsNumber}</span>
+                            <h5 className="font-medium text-gray-900">{element.title}</h5>
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="text-[10px]">{element.estimateMethod}</Badge>
-                            <Badge variant={element.confidenceLevel === 'high' ? 'default' : element.confidenceLevel === 'medium' ? 'secondary' : 'outline'} className="text-[10px]">
+                            <Badge 
+                              variant={element.confidenceLevel === 'high' ? 'default' : 'secondary'} 
+                              className="text-[10px]"
+                            >
                               {element.confidenceLevel}
                             </Badge>
                           </div>
                         </div>
                         
-                        {/* Description */}
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">{element.description}</p>
+                        <p className="text-xs text-gray-500 mb-3">{element.description}</p>
                         
-                        {/* Total Hours - inline */}
+                        {/* Total Hours */}
                         <div className="flex items-center gap-3 mb-3">
                           <span className="text-sm">
-                            <strong className="text-gray-900 dark:text-white">{element.hours.toLocaleString()}</strong>
+                            <strong className="text-gray-900">{element.hours.toLocaleString()}</strong>
                             <span className="text-gray-500 ml-1">total hours</span>
                           </span>
                           {element.sooReference && (
@@ -712,63 +1325,64 @@ export function ExportTab() {
 
                         {/* Labor Breakdown with hours by period */}
                         {element.laborBreakdown && element.laborBreakdown.length > 0 && (
-                          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 mb-3">
-                            <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Labor Allocation</p>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                              Labor Allocation
+                            </p>
                             
-                            {/* Table header */}
-                            <div className="grid grid-cols-12 gap-2 text-[10px] font-medium text-gray-500 border-b border-gray-200 dark:border-gray-700 pb-1 mb-2">
-                              <div className="col-span-4">Role</div>
-                              <div className="col-span-2 text-right">Total</div>
-                              <div className="col-span-1 text-right">Base</div>
-                              {contractYears >= 2 && <div className="col-span-1 text-right">OY1</div>}
-                              {contractYears >= 3 && <div className="col-span-1 text-right">OY2</div>}
-                              <div className={`${contractYears === 1 ? 'col-span-5' : contractYears === 2 ? 'col-span-4' : 'col-span-3'} text-left pl-2`}>Rationale</div>
-                            </div>
-                            
-                            {/* Labor rows */}
-                            <div className="space-y-2">
-                              {element.laborBreakdown.map((labor, idx) => {
-                                const hoursPerYear = Math.round(labor.hours / contractYears)
-                                return (
-                                  <div key={idx} className="grid grid-cols-12 gap-2 items-start">
-                                    <div className="col-span-4">
-                                      <span className="text-sm font-medium text-gray-900 dark:text-white">{labor.roleName}</span>
-                                    </div>
-                                    <div className="col-span-2 text-right">
-                                      <span className="text-sm font-semibold text-gray-900 dark:text-white">{labor.hours.toLocaleString()}</span>
-                                    </div>
-                                    <div className="col-span-1 text-right">
-                                      <span className="text-xs text-gray-600 dark:text-gray-300">{hoursPerYear.toLocaleString()}</span>
-                                    </div>
-                                    {contractYears >= 2 && (
-                                      <div className="col-span-1 text-right">
-                                        <span className="text-xs text-gray-600 dark:text-gray-300">{hoursPerYear.toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    {contractYears >= 3 && (
-                                      <div className="col-span-1 text-right">
-                                        <span className="text-xs text-gray-600 dark:text-gray-300">{hoursPerYear.toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    <div className={`${contractYears === 1 ? 'col-span-5' : contractYears === 2 ? 'col-span-4' : 'col-span-3'} pl-2`}>
-                                      {labor.rationale && (
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 italic">{labor.rationale}</p>
+                            {/* Table */}
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-[10px] font-medium text-gray-500 border-b border-gray-200">
+                                  <th className="text-left pb-1">Role</th>
+                                  <th className="text-right pb-1">Total</th>
+                                  <th className="text-right pb-1">Base</th>
+                                  {contractYears >= 2 && <th className="text-right pb-1">OY1</th>}
+                                  {contractYears >= 3 && <th className="text-right pb-1">OY2</th>}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {element.laborBreakdown.map((labor, idx) => {
+                                  const hoursPerYear = Math.round(labor.hours / contractYears)
+                                  return (
+                                    <tr key={idx}>
+                                      <td className="py-1.5 font-medium text-gray-900">{labor.roleName}</td>
+                                      <td className="py-1.5 text-right font-semibold text-gray-900">
+                                        {labor.hours.toLocaleString()}
+                                      </td>
+                                      <td className="py-1.5 text-right text-gray-600 text-xs">
+                                        {hoursPerYear.toLocaleString()}
+                                      </td>
+                                      {contractYears >= 2 && (
+                                        <td className="py-1.5 text-right text-gray-600 text-xs">
+                                          {hoursPerYear.toLocaleString()}
+                                        </td>
                                       )}
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
+                                      {contractYears >= 3 && (
+                                        <td className="py-1.5 text-right text-gray-600 text-xs">
+                                          {hoursPerYear.toLocaleString()}
+                                        </td>
+                                      )}
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         )}
 
                         {/* Assumptions */}
                         {element.assumptions && element.assumptions.length > 0 && (
-                          <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
-                            <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Assumptions</p>
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                              Assumptions
+                            </p>
                             <div className="flex flex-wrap gap-1">
                               {element.assumptions.map((assumption, idx) => (
-                                <span key={idx} className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                                <span 
+                                  key={idx} 
+                                  className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded"
+                                >
                                   {assumption}
                                 </span>
                               ))}
@@ -776,103 +1390,50 @@ export function ExportTab() {
                           </div>
                         )}
                       </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Fringe {(indirectRates.fringe * 100).toFixed(1)}% · OH {(indirectRates.overhead * 100).toFixed(1)}% · G&A {(indirectRates.ga * 100).toFixed(1)}%
-              {contractType !== 'ffp' && ` · Profit ${(profitTargets.tmDefault * 100).toFixed(1)}%`}
-            </p>
-          </div>
-        ) : (
-          /* No Roles Warning */
-          <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-amber-900 dark:text-amber-100 mb-1">No roles selected</p>
-                <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
-                  Add roles in Roles & Pricing to generate rate cards and cost estimates.
-                </p>
-                <Button variant="outline" size="sm" onClick={() => setActiveTab('roles-pricing')} className="text-amber-700 border-amber-300 hover:bg-amber-100">
-                  Go to Roles & Pricing <ArrowRight className="w-3 h-3 ml-1" />
-                </Button>
-              </div>
+              {/* Info Footer */}
+              <p className="text-xs text-gray-500">
+                Fringe {(indirectRates.fringe * 100).toFixed(1)}% · 
+                OH {(indirectRates.overhead * 100).toFixed(1)}% · 
+                G&A {(indirectRates.ga * 100).toFixed(1)}%
+                {contractType !== 'ffp' && ` · Profit ${(profitTargets.tmDefault * 100).toFixed(1)}%`}
+                {config.includeEscalation && ` · ${(escalationRates.laborDefault * 100).toFixed(1)}% escalation`}
+              </p>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ============================================================================
-// SUB-COMPONENTS
-// ============================================================================
-
-interface ReadinessCheckProps {
-  label: string
-  passed: boolean
-  detail: string
-  actionLabel?: string
-  onAction?: () => void
-}
-
-function ReadinessCheck({ label, passed, detail, actionLabel, onAction }: ReadinessCheckProps) {
-  return (
-    <div className={`flex items-center gap-2 p-2 rounded-lg ${passed ? 'bg-green-50 dark:bg-green-900/20' : 'bg-amber-50 dark:bg-amber-900/20'}`}>
-      {passed ? <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" /> : <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
-      <div className="min-w-0 flex-1">
-        <p className={`text-xs font-medium ${passed ? 'text-green-900 dark:text-green-100' : 'text-amber-900 dark:text-amber-100'}`}>{label}</p>
-        <p className={`text-xs truncate ${passed ? 'text-green-600 dark:text-green-300' : 'text-amber-600 dark:text-amber-300'}`}>{detail}</p>
-      </div>
-      {actionLabel && onAction && (
-        <button onClick={onAction} className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-900 flex items-center gap-1">
-          {actionLabel} <ArrowRight className="w-3 h-3" />
-        </button>
-      )}
-    </div>
-  )
-}
-
-interface DocumentCardProps {
-  icon: React.ElementType
-  title: string
-  description: string
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
-  badge?: string
-  badgeVariant?: 'default' | 'secondary' | 'outline'
-  hasOptions?: boolean
-  expanded?: boolean
-  onToggleExpand?: () => void
-  children?: React.ReactNode
-}
-
-function DocumentCard({ icon: Icon, title, description, checked, onCheckedChange, badge, badgeVariant = 'secondary', hasOptions, expanded, onToggleExpand, children }: DocumentCardProps) {
-  return (
-    <div className={`border rounded-lg transition-all ${checked ? 'border-blue-300 dark:border-blue-700 bg-blue-50/30 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'}`}>
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          <Checkbox checked={checked} onCheckedChange={onCheckedChange} className="mt-1" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <Icon className={`w-4 h-4 ${checked ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`} />
-              <h4 className="font-medium text-sm text-gray-900 dark:text-white">{title}</h4>
-              {badge && <Badge variant={badgeVariant} className="text-[10px] px-1.5 py-0">{badge}</Badge>}
-            </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400">{description}</p>
-          </div>
-          {(hasOptions || children) && (
-            <button onClick={onToggleExpand} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">
-              {expanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-            </button>
           )}
-        </div>
-        {expanded && children && <div className="mt-3 ml-7">{children}</div>}
-      </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Section Slideout */}
+      <SectionSlideout
+        section={selectedSection}
+        isOpen={!!selectedSectionId}
+        onClose={() => setSelectedSectionId(null)}
+        config={config}
+        onUpdateConfig={updateConfig}
+        selectedRoles={selectedRoles}
+        companyRoles={companyRoles}
+        wbsElements={wbsElements}
+        indirectRates={indirectRates}
+        escalationRates={escalationRates}
+        contractYears={contractYears}
+        contractType={contractType}
+        calculateFullyBurdenedRate={calculateFullyBurdenedRate}
+        calculateEscalatedRate={calculateEscalatedRate}
+      />
+
+      {/* Settings Slideout */}
+      <SettingsSlideout
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        config={config}
+        onUpdateConfig={updateConfig}
+        solicitation={solicitation}
+      />
     </div>
   )
 }
