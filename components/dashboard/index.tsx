@@ -36,7 +36,6 @@ import {
   Send,
   Trash2,
   Copy,
-  Star,
   Users,
   AlertCircle,
   Grid3X3,
@@ -223,7 +222,7 @@ const getStatusConfig = (status: ProposalStatus) => {
 
 // Get unique agencies from proposals
 const getUniqueAgencies = (proposals: Proposal[]): string[] => {
-  const agencies = new Set(proposals.map(p => p.client))
+  const agencies = new Set(proposals.map(p => p.client).filter(c => c))
   return Array.from(agencies).sort()
 }
 
@@ -266,7 +265,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 function ProposalCard({
   proposal,
   onOpen,
-  onToggleStar,
   onDuplicate,
   onDelete,
   onToggleArchive,
@@ -275,7 +273,6 @@ function ProposalCard({
 }: {
   proposal: Proposal
   onOpen: () => void
-  onToggleStar: () => void
   onDuplicate: () => void
   onDelete: () => void
   onToggleArchive: () => void
@@ -339,23 +336,10 @@ function ProposalCard({
       {/* Header with title and actions */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1 min-w-0">
-          {/* Title with star */}
-          <div className="flex items-start gap-2 mb-1.5">
-            <button
-              onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
-              className={`mt-0.5 shrink-0 ${
-                proposal.starred 
-                  ? 'text-amber-500 hover:text-amber-600' 
-                  : 'text-gray-300 hover:text-gray-400'
-              }`}
-              title={proposal.starred ? 'Remove from favorites' : 'Add to favorites'}
-            >
-              <Star className={`w-4 h-4 ${proposal.starred ? 'fill-current' : ''}`} />
-            </button>
-            <h3 className="font-medium text-sm text-gray-900 leading-tight line-clamp-2">
-              {proposal.title}
-            </h3>
-          </div>
+          {/* Title */}
+          <h3 className="font-medium text-sm text-gray-900 leading-tight line-clamp-2 mb-1.5">
+            {proposal.title}
+          </h3>
           
           {/* Badges */}
           <div className="flex items-center gap-1.5 mb-2">
@@ -634,14 +618,9 @@ function KanbanView({
                     ${draggedId === proposal.id ? 'opacity-50 ring-2 ring-blue-400' : ''}
                   `}
                 >
-                  <div className="flex items-start gap-2 mb-2">
-                    {proposal.starred && (
-                      <Star className="w-3.5 h-3.5 text-amber-500 fill-current shrink-0 mt-0.5" />
-                    )}
-                    <h4 className="text-sm font-medium text-gray-900 line-clamp-2">
-                      {proposal.title}
-                    </h4>
-                  </div>
+                  <h4 className="text-sm font-medium text-gray-900 line-clamp-2 mb-2">
+                    {proposal.title}
+                  </h4>
                   <p className="text-xs text-gray-500 mb-2">{proposal.client}</p>
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-gray-900">
@@ -935,6 +914,13 @@ export function Dashboard() {
     }
   }, [recentlyViewed, isLoaded])
 
+  // Auto-switch back from archive view if no archived proposals
+  useEffect(() => {
+    if (showArchived && proposals.filter(p => p.archived).length === 0) {
+      setShowArchived(false)
+    }
+  }, [showArchived, proposals])
+
   // Unique agencies for filter
   const uniqueAgencies = useMemo(() => getUniqueAgencies(proposals), [proposals])
 
@@ -972,11 +958,6 @@ export function Dashboard() {
 
     // Sort
     result = [...result].sort((a, b) => {
-      // Starred items always first
-      if (a.starred !== b.starred) {
-        return a.starred ? -1 : 1
-      }
-
       let comparison = 0
       switch (sortBy) {
         case 'dueDate':
@@ -1029,12 +1010,6 @@ export function Dashboard() {
   }, [proposals])
 
   // Handlers
-  const handleNewProposal = () => {
-    setActiveUtilityTool(null)
-    const newId = `prop-${Date.now()}`
-    router.push(`/${newId}`)
-  }
-
   const handleImportRFP = () => {
     setActiveUtilityTool(null)
     const newId = `prop-${Date.now()}`
@@ -1074,12 +1049,6 @@ export function Dashboard() {
       return [proposalId, ...filtered].slice(0, 10)
     })
     router.push(`/${proposalId}`)
-  }
-
-  const handleToggleStar = (proposalId: string) => {
-    setProposals(prev =>
-      prev.map(p => p.id === proposalId ? { ...p, starred: !p.starred } : p)
-    )
   }
 
   const handleToggleArchive = (proposalId: string) => {
@@ -1166,7 +1135,26 @@ export function Dashboard() {
           />
         ) : (
           <>
-            {/* Stats Row - Clickable */}
+            {/* Archive View Banner */}
+            {showArchived && (
+              <div className="flex items-center justify-between bg-gray-100 border border-gray-200 rounded-lg px-4 py-2 mb-4">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Archive className="w-4 h-4" />
+                  <span>Viewing archived proposals</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowArchived(false)}
+                  className="h-7 px-2 text-gray-500 hover:text-gray-700"
+                >
+                  Back to all proposals
+                </Button>
+              </div>
+            )}
+
+            {/* Stats Row - Clickable (hidden in archive view) */}
+            {!showArchived && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <button
                 onClick={() => handleStatClick('active')}
@@ -1216,6 +1204,7 @@ export function Dashboard() {
                 <div className="text-xs text-gray-500">Historical</div>
               </button>
             </div>
+            )}
 
             {/* Toolbar - Sticky */}
             <div className="sticky top-14 z-20 bg-gray-50 py-3 -mx-6 px-6 mb-4 border-b border-gray-200">
@@ -1267,7 +1256,7 @@ export function Dashboard() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Agencies</SelectItem>
-                    {uniqueAgencies.map((agency) => (
+                    {uniqueAgencies.filter(agency => agency).map((agency) => (
                       <SelectItem key={agency} value={agency}>
                         {agency.length > 30 ? agency.substring(0, 30) + '...' : agency}
                       </SelectItem>
@@ -1370,6 +1359,7 @@ export function Dashboard() {
                   onClick={() => setShowArchived(!showArchived)}
                   className="h-9 gap-1.5"
                   title="Toggle archive"
+                  disabled={archivedCount === 0 && !showArchived}
                 >
                   <Archive className="w-4 h-4" />
                   Archive
@@ -1380,31 +1370,11 @@ export function Dashboard() {
                   )}
                 </Button>
 
-                {/* Add New */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" className="h-9 gap-1.5">
-                      Add New...
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={handleNewProposal}>
-                      <FileText className="w-4 h-4 mr-2" />
-                      Blank Proposal
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleImportRFP}>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Import from RFP
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem disabled>
-                      <FileText className="w-4 h-4 mr-2" />
-                      From Template
-                      <Badge variant="secondary" className="ml-auto text-[10px]">Soon</Badge>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {/* New Proposal */}
+                <Button size="sm" className="h-9 gap-1.5" onClick={handleImportRFP}>
+                  <Plus className="w-4 h-4" />
+                  New Proposal
+                </Button>
               </div>
             </div>
 
@@ -1426,7 +1396,6 @@ export function Dashboard() {
                       key={proposal.id}
                       proposal={proposal}
                       onOpen={() => handleOpenProposal(proposal.id)}
-                      onToggleStar={() => handleToggleStar(proposal.id)}
                       onToggleArchive={() => handleToggleArchive(proposal.id)}
                       onDuplicate={() => handleDuplicate(proposal.id)}
                       onDelete={() => handleDelete(proposal.id)}
@@ -1457,17 +1426,6 @@ export function Dashboard() {
                           }
                         `}
                       >
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleToggleStar(proposal.id); }}
-                          className={`shrink-0 ${
-                            proposal.starred 
-                              ? 'text-amber-500 hover:text-amber-600' 
-                              : 'text-gray-300 hover:text-gray-400'
-                          }`}
-                          title={proposal.starred ? 'Remove from favorites' : 'Add to favorites'}
-                        >
-                          <Star className={`w-4 h-4 ${proposal.starred ? 'fill-current' : ''}`} />
-                        </button>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <h3 className="font-medium text-sm text-gray-900 truncate">{proposal.title}</h3>
