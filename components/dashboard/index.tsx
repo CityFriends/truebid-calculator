@@ -1211,10 +1211,35 @@ export function Dashboard() {
   }
 
   const handleImportRFP = () => {
-    setActiveUtilityTool(null)
-    const newId = `prop-${Date.now()}`
-    router.push(`/${newId}?tab=upload`)
+  setActiveUtilityTool(null)
+  const newId = `prop-${Date.now()}`
+  
+  // Create and save the proposal
+  const newProposal = {
+    id: newId,
+    title: 'New Proposal',
+    solicitation: '',
+    client: '',
+    status: 'draft',
+    totalValue: 0,
+    dueDate: null,
+    updatedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    teamSize: 0,
+    progress: 0,
+    starred: false,
+    archived: false,
+    contractType: 'tm',
+    periodOfPerformance: '',
   }
+  
+  const existing = localStorage.getItem(PROPOSALS_STORAGE_KEY)
+  const existingProposals = existing ? JSON.parse(existing) : []
+  existingProposals.unshift(newProposal)
+  localStorage.setItem(PROPOSALS_STORAGE_KEY, JSON.stringify(existingProposals))
+  
+  router.push(`/${newId}?tab=upload`)
+}
 
   const handleOpenProposal = (proposalId: string) => {
     setActiveUtilityTool(null)
