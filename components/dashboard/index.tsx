@@ -50,9 +50,6 @@ import {
   ArrowUpDown,
   Kanban,
   CalendarDays,
-  History,
-  Keyboard,
-  X,
 } from 'lucide-react'
 
 // ============================================================================
@@ -274,6 +271,7 @@ function ProposalCard({
   onDelete,
   onToggleArchive,
   onStatusChange,
+  isRecentlyViewed,
 }: {
   proposal: Proposal
   onOpen: () => void
@@ -282,6 +280,7 @@ function ProposalCard({
   onDelete: () => void
   onToggleArchive: () => void
   onStatusChange: (status: ProposalStatus) => void
+  isRecentlyViewed?: boolean
 }) {
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const statusConfig = getStatusConfig(proposal.status)
@@ -301,10 +300,14 @@ function ProposalCard({
   return (
     <div
       className={`
-        group border border-gray-200 rounded-lg p-4 
-        hover:border-blue-400 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] 
+        group border rounded-lg p-4 
+        hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] 
         transition-all cursor-pointer bg-white
-        ${proposal.archived ? 'opacity-60' : ''}
+        ${proposal.archived ? 'opacity-60 border-gray-200' : ''}
+        ${isUrgent && !proposal.archived 
+          ? 'border-l-4 border-l-amber-400 border-t-gray-200 border-r-gray-200 border-b-gray-200' 
+          : 'border-gray-200 hover:border-blue-400'
+        }
       `}
       onClick={onOpen}
       role="button"
@@ -316,6 +319,23 @@ function ProposalCard({
         }
       }}
     >
+      {/* Tags row - Recently viewed & Due soon */}
+      {(isRecentlyViewed || isUrgent) && !proposal.archived && (
+        <div className="flex items-center gap-2 mb-2">
+          {isRecentlyViewed && (
+            <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">
+              Recently viewed
+            </span>
+          )}
+          {isUrgent && (
+            <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-medium flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Due in {daysUntilDue}d
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Header with title and actions */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1 min-w-0">
@@ -328,6 +348,7 @@ function ProposalCard({
                   ? 'text-amber-500 hover:text-amber-600' 
                   : 'text-gray-300 hover:text-gray-400'
               }`}
+              title={proposal.starred ? 'Remove from favorites' : 'Add to favorites'}
             >
               <Star className={`w-4 h-4 ${proposal.starred ? 'fill-current' : ''}`} />
             </button>
@@ -451,23 +472,17 @@ function ProposalCard({
       <div className="space-y-1.5 text-xs border-t border-gray-100 pt-3">
         <div className="flex items-center justify-between">
           <span className="text-gray-500">Solicitation</span>
-          <span className="font-mono text-gray-700">{proposal.solicitation}</span>
+          <span className="font-mono text-gray-700">{proposal.solicitation || '—'}</span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-gray-500">Value</span>
           <span className="font-semibold text-gray-900">{formatCurrency(proposal.totalValue)}</span>
         </div>
-        {proposal.dueDate && ['draft', 'in-review'].includes(proposal.status) && (
+        {proposal.dueDate && ['draft', 'in-review'].includes(proposal.status) && !isUrgent && (
           <div className="flex items-center justify-between">
             <span className="text-gray-500">Due</span>
-            <span className={`flex items-center gap-1 font-medium ${
-              isUrgent ? 'text-yellow-600' : 'text-gray-700'
-            }`}>
-              <Calendar className="w-3 h-3" />
-              {daysUntilDue !== null && daysUntilDue >= 0 
-                ? `${daysUntilDue} days left`
-                : new Date(proposal.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-              }
+            <span className="text-gray-700">
+              {new Date(proposal.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </span>
           </div>
         )}
@@ -634,7 +649,7 @@ function KanbanView({
                     </span>
                     {proposal.dueDate && getDaysUntilDue(proposal.dueDate) !== null && (
                       <span className={`flex items-center gap-1 ${
-                        getDaysUntilDue(proposal.dueDate)! <= 7 ? 'text-yellow-600' : 'text-gray-500'
+                        getDaysUntilDue(proposal.dueDate)! <= 7 ? 'text-amber-600' : 'text-gray-500'
                       }`}>
                         <Clock className="w-3 h-3" />
                         {getDaysUntilDue(proposal.dueDate)}d
@@ -775,148 +790,6 @@ function CalendarView({
 }
 
 // ============================================================================
-// URGENCY BANNER
-// ============================================================================
-
-function UrgencyBanner({ 
-  proposals, 
-  onOpen 
-}: { 
-  proposals: Proposal[]
-  onOpen: (id: string) => void 
-}) {
-  const urgentProposals = proposals.filter(p => {
-    if (p.archived || !['draft', 'in-review'].includes(p.status)) return false
-    const days = getDaysUntilDue(p.dueDate)
-    return days !== null && days >= 0 && days <= 7
-  }).sort((a, b) => getDaysUntilDue(a.dueDate)! - getDaysUntilDue(b.dueDate)!)
-
-  if (urgentProposals.length === 0) return null
-
-  return (
-    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-      <div className="flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-yellow-800">
-            {urgentProposals.length} proposal{urgentProposals.length > 1 ? 's' : ''} due this week
-          </p>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {urgentProposals.map((proposal) => (
-              <button
-                key={proposal.id}
-                onClick={() => onOpen(proposal.id)}
-                className="inline-flex items-center gap-1.5 px-2 py-1 bg-yellow-100 hover:bg-yellow-200 rounded text-xs font-medium text-yellow-800 transition-colors"
-              >
-                {proposal.title}
-                <span className="text-yellow-600">
-                  ({getDaysUntilDue(proposal.dueDate)}d)
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ============================================================================
-// RECENTLY VIEWED
-// ============================================================================
-
-function RecentlyViewed({
-  proposals,
-  recentIds,
-  onOpen,
-}: {
-  proposals: Proposal[]
-  recentIds: string[]
-  onOpen: (id: string) => void
-}) {
-  const recentProposals = recentIds
-    .map(id => proposals.find(p => p.id === id))
-    .filter((p): p is Proposal => p !== undefined)
-    .slice(0, 5)
-
-  if (recentProposals.length === 0) return null
-
-  return (
-    <div className="mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <History className="w-4 h-4 text-gray-400" />
-        <h3 className="text-sm font-medium text-gray-600">Recently Viewed</h3>
-      </div>
-      <div className="flex gap-3 overflow-x-auto pb-2">
-        {recentProposals.map((proposal) => (
-          <button
-            key={proposal.id}
-            onClick={() => onOpen(proposal.id)}
-            className="flex-shrink-0 flex items-center gap-3 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm transition-all"
-          >
-            {proposal.starred && (
-              <Star className="w-3.5 h-3.5 text-amber-500 fill-current" />
-            )}
-            <div className="text-left">
-              <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">
-                {proposal.title}
-              </p>
-              <p className="text-xs text-gray-500">{formatRelativeTime(proposal.updatedAt)}</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-gray-300" />
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ============================================================================
-// KEYBOARD SHORTCUTS MODAL
-// ============================================================================
-
-function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
-  const shortcuts = [
-    { key: '/', description: 'Focus search' },
-    { key: 'n', description: 'New proposal' },
-    { key: 'g', description: 'Grid view' },
-    { key: 'l', description: 'List view' },
-    { key: 'k', description: 'Kanban view' },
-    { key: 'c', description: 'Calendar view' },
-    { key: 'a', description: 'Toggle archive view' },
-    { key: '?', description: 'Show shortcuts' },
-    { key: 'Esc', description: 'Close dialogs' },
-  ]
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/50 z-50" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl z-50 w-[400px] max-w-[90vw]">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <Keyboard className="w-5 h-5 text-gray-500" />
-            <h2 className="font-semibold text-gray-900">Keyboard Shortcuts</h2>
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-        <div className="p-4 space-y-2">
-          {shortcuts.map((shortcut) => (
-            <div key={shortcut.key} className="flex items-center justify-between py-1">
-              <span className="text-sm text-gray-600">{shortcut.description}</span>
-              <kbd className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs font-mono text-gray-700">
-                {shortcut.key}
-              </kbd>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  )
-}
-
-// ============================================================================
 // EMPTY STATES
 // ============================================================================
 
@@ -1020,9 +893,6 @@ export function Dashboard() {
   
   // Recently viewed
   const [recentlyViewed, setRecentlyViewed] = useState<string[]>([])
-  
-  // UI state
-  const [showShortcuts, setShowShortcuts] = useState(false)
 
   // Load proposals from localStorage
   useEffect(() => {
@@ -1035,8 +905,8 @@ export function Dashboard() {
         setProposals(MOCK_PROPOSALS)
       }
     } else {
-  setProposals([])
-  }
+      setProposals([])
+    }
     
     // Load recently viewed
     const recentStored = localStorage.getItem(RECENTLY_VIEWED_KEY)
@@ -1064,51 +934,6 @@ export function Dashboard() {
       localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(recentlyViewed))
     }
   }, [recentlyViewed, isLoaded])
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return
-      }
-      
-      switch (e.key) {
-        case '/':
-          e.preventDefault()
-          document.getElementById('search-input')?.focus()
-          break
-        case 'n':
-          e.preventDefault()
-          handleNewProposal()
-          break
-        case 'g':
-          setViewMode('grid')
-          break
-        case 'l':
-          setViewMode('list')
-          break
-        case 'k':
-          setViewMode('kanban')
-          break
-        case 'c':
-          setViewMode('calendar')
-          break
-        case 'a':
-          setShowArchived(prev => !prev)
-          break
-        case '?':
-          setShowShortcuts(true)
-          break
-        case 'Escape':
-          setShowShortcuts(false)
-          break
-      }
-    }
-    
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
 
   // Unique agencies for filter
   const uniqueAgencies = useMemo(() => getUniqueAgencies(proposals), [proposals])
@@ -1211,35 +1036,35 @@ export function Dashboard() {
   }
 
   const handleImportRFP = () => {
-  setActiveUtilityTool(null)
-  const newId = `prop-${Date.now()}`
-  
-  // Create and save the proposal
-  const newProposal = {
-    id: newId,
-    title: 'New Proposal',
-    solicitation: '',
-    client: '',
-    status: 'draft',
-    totalValue: 0,
-    dueDate: null,
-    updatedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    teamSize: 0,
-    progress: 0,
-    starred: false,
-    archived: false,
-    contractType: 'tm',
-    periodOfPerformance: '',
+    setActiveUtilityTool(null)
+    const newId = `prop-${Date.now()}`
+    
+    // Create and save the proposal
+    const newProposal = {
+      id: newId,
+      title: 'New Proposal',
+      solicitation: '',
+      client: '',
+      status: 'draft',
+      totalValue: 0,
+      dueDate: null,
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      teamSize: 0,
+      progress: 0,
+      starred: false,
+      archived: false,
+      contractType: 'tm',
+      periodOfPerformance: '',
+    }
+    
+    const existing = localStorage.getItem(PROPOSALS_STORAGE_KEY)
+    const existingProposals = existing ? JSON.parse(existing) : []
+    existingProposals.unshift(newProposal)
+    localStorage.setItem(PROPOSALS_STORAGE_KEY, JSON.stringify(existingProposals))
+    
+    router.push(`/${newId}?tab=upload`)
   }
-  
-  const existing = localStorage.getItem(PROPOSALS_STORAGE_KEY)
-  const existingProposals = existing ? JSON.parse(existing) : []
-  existingProposals.unshift(newProposal)
-  localStorage.setItem(PROPOSALS_STORAGE_KEY, JSON.stringify(existingProposals))
-  
-  router.push(`/${newId}?tab=upload`)
-}
 
   const handleOpenProposal = (proposalId: string) => {
     setActiveUtilityTool(null)
@@ -1341,16 +1166,6 @@ export function Dashboard() {
           />
         ) : (
           <>
-            {/* Urgency Banner */}
-            <UrgencyBanner proposals={proposals} onOpen={handleOpenProposal} />
-
-            {/* Recently Viewed */}
-            <RecentlyViewed
-              proposals={proposals}
-              recentIds={recentlyViewed}
-              onOpen={handleOpenProposal}
-            />
-
             {/* Stats Row - Clickable */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <button
@@ -1410,7 +1225,7 @@ export function Dashboard() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <Input
                     id="search-input"
-                    placeholder="Search proposals... (Press /)"
+                    placeholder="Search proposals..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9 h-9"
@@ -1515,7 +1330,7 @@ export function Dashboard() {
                     size="sm"
                     onClick={() => setViewMode('grid')}
                     className="px-2 h-8"
-                    title="Grid view (G)"
+                    title="Grid view"
                   >
                     <Grid3X3 className="w-4 h-4" />
                   </Button>
@@ -1524,7 +1339,7 @@ export function Dashboard() {
                     size="sm"
                     onClick={() => setViewMode('list')}
                     className="px-2 h-8"
-                    title="List view (L)"
+                    title="List view"
                   >
                     <List className="w-4 h-4" />
                   </Button>
@@ -1533,7 +1348,7 @@ export function Dashboard() {
                     size="sm"
                     onClick={() => setViewMode('kanban')}
                     className="px-2 h-8"
-                    title="Kanban view (K)"
+                    title="Kanban view"
                   >
                     <Kanban className="w-4 h-4" />
                   </Button>
@@ -1542,7 +1357,7 @@ export function Dashboard() {
                     size="sm"
                     onClick={() => setViewMode('calendar')}
                     className="px-2 h-8"
-                    title="Calendar view (C)"
+                    title="Calendar view"
                   >
                     <CalendarDays className="w-4 h-4" />
                   </Button>
@@ -1554,7 +1369,7 @@ export function Dashboard() {
                   size="sm"
                   onClick={() => setShowArchived(!showArchived)}
                   className="h-9 gap-1.5"
-                  title="Toggle archive (A)"
+                  title="Toggle archive"
                 >
                   <Archive className="w-4 h-4" />
                   Archive
@@ -1590,17 +1405,6 @@ export function Dashboard() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-
-                {/* Keyboard Shortcuts */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowShortcuts(true)}
-                  className="h-9 w-9 p-0 hidden sm:flex"
-                  title="Keyboard shortcuts (?)"
-                >
-                  <Keyboard className="w-4 h-4" />
-                </Button>
               </div>
             </div>
 
@@ -1627,6 +1431,7 @@ export function Dashboard() {
                       onDuplicate={() => handleDuplicate(proposal.id)}
                       onDelete={() => handleDelete(proposal.id)}
                       onStatusChange={(status) => handleStatusChange(proposal.id, status)}
+                      isRecentlyViewed={recentlyViewed.includes(proposal.id)}
                     />
                   ))}
                 </div>
@@ -1634,38 +1439,65 @@ export function Dashboard() {
 
               {viewMode === 'list' && filteredProposals.length > 0 && (
                 <div className="space-y-2">
-                  {filteredProposals.map((proposal) => (
-                    <div
-                      key={proposal.id}
-                      onClick={() => handleOpenProposal(proposal.id)}
-                      className="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm cursor-pointer transition-all"
-                    >
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleToggleStar(proposal.id); }}
-                        className={`shrink-0 ${
-                          proposal.starred 
-                            ? 'text-amber-500 hover:text-amber-600' 
-                            : 'text-gray-300 hover:text-gray-400'
-                        }`}
+                  {filteredProposals.map((proposal) => {
+                    const daysUntilDue = getDaysUntilDue(proposal.dueDate)
+                    const isUrgent = daysUntilDue !== null && daysUntilDue <= 7 && daysUntilDue >= 0
+                    const isRecent = recentlyViewed.includes(proposal.id)
+                    
+                    return (
+                      <div
+                        key={proposal.id}
+                        onClick={() => handleOpenProposal(proposal.id)}
+                        className={`
+                          flex items-center gap-4 p-4 bg-white border rounded-lg 
+                          hover:shadow-sm cursor-pointer transition-all
+                          ${isUrgent && !proposal.archived
+                            ? 'border-l-4 border-l-amber-400 border-t-gray-200 border-r-gray-200 border-b-gray-200'
+                            : 'border-gray-200 hover:border-blue-400'
+                          }
+                        `}
                       >
-                        <Star className={`w-4 h-4 ${proposal.starred ? 'fill-current' : ''}`} />
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-sm text-gray-900 truncate">{proposal.title}</h3>
-                        <p className="text-xs text-gray-500 truncate">{proposal.client}</p>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleToggleStar(proposal.id); }}
+                          className={`shrink-0 ${
+                            proposal.starred 
+                              ? 'text-amber-500 hover:text-amber-600' 
+                              : 'text-gray-300 hover:text-gray-400'
+                          }`}
+                          title={proposal.starred ? 'Remove from favorites' : 'Add to favorites'}
+                        >
+                          <Star className={`w-4 h-4 ${proposal.starred ? 'fill-current' : ''}`} />
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-sm text-gray-900 truncate">{proposal.title}</h3>
+                            {isRecent && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium shrink-0">
+                                Recently viewed
+                              </span>
+                            )}
+                            {isUrgent && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-medium flex items-center gap-1 shrink-0">
+                                <Clock className="w-3 h-3" />
+                                Due in {daysUntilDue}d
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 truncate">{proposal.client}</p>
+                        </div>
+                        <Badge className={`shrink-0 ${getStatusConfig(proposal.status).bgColor}`}>
+                          {getStatusConfig(proposal.status).label}
+                        </Badge>
+                        <span className="text-sm font-semibold text-gray-900 shrink-0 w-20 text-right">
+                          {formatCurrency(proposal.totalValue)}
+                        </span>
+                        <span className="text-xs text-gray-500 shrink-0 w-24 text-right">
+                          {formatRelativeTime(proposal.updatedAt)}
+                        </span>
+                        <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
                       </div>
-                      <Badge className={`shrink-0 ${getStatusConfig(proposal.status).bgColor}`}>
-                        {getStatusConfig(proposal.status).label}
-                      </Badge>
-                      <span className="text-sm font-semibold text-gray-900 shrink-0 w-20 text-right">
-                        {formatCurrency(proposal.totalValue)}
-                      </span>
-                      <span className="text-xs text-gray-500 shrink-0 w-24 text-right">
-                        {formatRelativeTime(proposal.updatedAt)}
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -1704,11 +1536,6 @@ export function Dashboard() {
           </>
         )}
       </main>
-
-      {/* Keyboard Shortcuts Modal */}
-      {showShortcuts && (
-        <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
-      )}
     </div>
   )
 }
