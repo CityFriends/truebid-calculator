@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AuthLayout } from '@/components/auth/auth-layout'
 import { Button } from '@/components/ui/button'
-import { Mail, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react'
+import { Mail, Loader2, CheckCircle2, ArrowLeft, ArrowRight } from 'lucide-react'
 
 export default function VerifyEmailPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const email = searchParams.get('email') || 'your email'
   
@@ -46,6 +47,11 @@ export default function VerifyEmailPage() {
     return `${maskedLocal}@${domain}`
   }
 
+  // For demo: allow continuing without real verification
+  const handleContinueDemo = () => {
+    router.push('/onboarding')
+  }
+
   return (
     <AuthLayout title="Check your email" showSignIn>
       <div className="text-center space-y-6">
@@ -76,7 +82,21 @@ export default function VerifyEmailPage() {
           </p>
         </div>
 
-        <div className="space-y-3">
+        {/* Demo: Continue without verification */}
+        <div className="pt-2">
+          <Button
+            onClick={handleContinueDemo}
+            className="w-full h-12 bg-black hover:bg-gray-800"
+          >
+            Continue to setup
+            <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
+          <p className="text-xs text-gray-400 mt-2">
+            Demo mode: Click to continue without email verification
+          </p>
+        </div>
+
+        <div className="space-y-3 pt-2">
           {resendSuccess && (
             <div className="flex items-center justify-center gap-2 text-sm text-green-600">
               <CheckCircle2 className="w-4 h-4" />

@@ -46,6 +46,7 @@ import {
   Archive,
   ArchiveRestore,
   Upload,
+  Sparkles,
   ArrowUpDown,
   Kanban,
   CalendarDays,
@@ -177,6 +178,7 @@ const MOCK_PROPOSALS: Proposal[] = [
 // ============================================================================
 
 const formatCurrency = (value: number): string => {
+  if (value === undefined || value === null) return '$0'
   if (value >= 1000000) {
     return `$${(value / 1000000).toFixed(1)}M`
   }
@@ -391,7 +393,7 @@ function ProposalCard({
             </div>
 
             <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 text-[10px] px-1.5 py-0 h-5">
-              {proposal.contractType.toUpperCase()}
+              {(proposal.contractType || 'tm').toUpperCase()}
             </Badge>
             {proposal.archived && (
               <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 text-[10px] px-1.5 py-0 h-5">
@@ -920,12 +922,12 @@ function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
 
 function EmptyState({
   companyName,
-  onNewProposal,
   onImportRFP,
+  onExploreSample,
 }: {
   companyName: string
-  onNewProposal: () => void
   onImportRFP: () => void
+  onExploreSample: () => void
 }) {
   return (
     <div className="py-16 px-4">
@@ -942,35 +944,29 @@ function EmptyState({
         
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md mx-auto">
           <button
-            onClick={onNewProposal}
-            className="group p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-lg transition-all text-left"
+            onClick={onImportRFP}
+            className="group p-6 bg-black border-2 border-black rounded-xl hover:bg-gray-800 transition-all text-left"
           >
-            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
-              <FileText className="w-5 h-5 text-blue-600" />
+            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center mb-4">
+              <Upload className="w-5 h-5 text-white" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-1">Start from scratch</h3>
-            <p className="text-sm text-gray-500 mb-3">
-              Create a blank proposal and build your estimate step by step.
+            <h3 className="font-semibold text-white mb-1">Upload an RFP</h3>
+            <p className="text-sm text-white/70">
+              Our AI will analyze and extract requirements, roles, and estimates.
             </p>
-            <span className="text-sm font-medium text-blue-600 group-hover:text-blue-700">
-              + Blank Proposal
-            </span>
           </button>
           
           <button
-            onClick={onImportRFP}
+            onClick={onExploreSample}
             className="group p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-lg transition-all text-left"
           >
-            <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-100 transition-colors">
-              <Upload className="w-5 h-5 text-green-600" />
+            <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-100 transition-colors">
+              <Sparkles className="w-5 h-5 text-purple-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-1">Import an RFP</h3>
-            <p className="text-sm text-gray-500 mb-3">
-              Upload a PDF and let AI extract requirements and recommend roles.
+            <h3 className="font-semibold text-gray-900 mb-1">Explore a sample</h3>
+            <p className="text-sm text-gray-500">
+              See how TrueBid works with pre-filled example data.
             </p>
-            <span className="text-sm font-medium text-green-600 group-hover:text-green-700">
-              ↑ Upload RFP
-            </span>
           </button>
         </div>
       </div>
@@ -1039,8 +1035,8 @@ export function Dashboard() {
         setProposals(MOCK_PROPOSALS)
       }
     } else {
-      setProposals(MOCK_PROPOSALS)
-    }
+  setProposals([])
+  }
     
     // Load recently viewed
     const recentStored = localStorage.getItem(RECENTLY_VIEWED_KEY)
@@ -1315,8 +1311,8 @@ export function Dashboard() {
         {proposals.length === 0 ? (
           <EmptyState
             companyName={companyName}
-            onNewProposal={handleNewProposal}
             onImportRFP={handleImportRFP}
+            onExploreSample={() => setProposals(MOCK_PROPOSALS)}
           />
         ) : (
           <>
