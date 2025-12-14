@@ -301,7 +301,7 @@ export function TabsNavigation() {
             {/* Left: Breadcrumb */}
             <nav className="flex items-center gap-2 min-w-0" aria-label="Breadcrumb">
               <a 
-                href="/"
+                href="/dashboard"
                 className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors shrink-0"
               >
                 <ChevronLeft className="w-4 h-4" aria-hidden="true" />

@@ -3,8 +3,7 @@ import { GeistSans } from 'geist/font/sans'
 import './globals.css'
 import { AppProvider } from '@/contexts/app-context'
 import { ThemeProvider } from '@/components/shared/theme-provider'
-import { AppHeader } from '@/components/shared/app-header'  // ← Changed
-import { Footer } from '@/components/shared/footer'
+import { LayoutWrapper } from '@/components/shared/layout-wrapper'
 
 export const metadata: Metadata = {
   title: 'TrueBid - Government Contracting Calculator',
@@ -21,11 +20,9 @@ export default function RootLayout({
       <body className={`${GeistSans.className} min-h-screen flex flex-col`}>
         <ThemeProvider>
           <AppProvider>
-            <AppHeader />  {/* ← Changed */}
-            <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950">
+            <LayoutWrapper>
               {children}
-            </div>
-            <Footer />
+            </LayoutWrapper>
           </AppProvider>
         </ThemeProvider>
       </body>

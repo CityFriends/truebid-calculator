@@ -23,6 +23,7 @@ import {
   Building2,
   FileText,
   ExternalLink,
+  LogOut,
 } from 'lucide-react'
 import { SettingsSlideout } from '@/components/settings-slideout'
 
@@ -44,6 +45,11 @@ export function AppHeader() {
     }
   }
 
+  const handleLogout = () => {
+    // TODO: Clear auth state when real auth is implemented
+    router.push('/login')
+  }
+
   return (
     <>
       <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50">
@@ -52,7 +58,7 @@ export function AppHeader() {
           <div className="flex items-center gap-3">
             {/* TrueBid Logo */}
             <Link 
-              href="/"
+              href="/dashboard"
               className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-sm"
               aria-label="Go to dashboard"
             >
@@ -64,7 +70,7 @@ export function AppHeader() {
 
             {/* Company Name */}
             <Link 
-              href="/"
+              href="/dashboard"
               className="text-sm font-medium text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             >
               {companyName}
@@ -127,16 +133,30 @@ export function AppHeader() {
               <span className="hidden sm:inline">Help</span>
             </Button>
 
-            {/* Settings */}
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="gap-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-              onClick={() => setIsSettingsOpen(true)}
-            >
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </Button>
+            {/* Settings Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden sm:inline">Settings</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={handleLogout}
+                  className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
