@@ -2,18 +2,13 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { useAppContext } from '@/contexts/app-context'
 import { 
   Upload, 
   FileText, 
-  CheckCircle2, 
+  CheckCircle2,
   Sparkles,
   ArrowRight,
-  RefreshCw,
-  Clock,
-  FileCheck,
-  Scale,
   ChevronDown,
   ChevronUp,
   Calendar,
@@ -27,8 +22,6 @@ import {
 interface UploadTabProps {
   onContinue?: () => void
 }
-
-type ContractTypeOption = 'T&M' | 'FFP' | 'GSA'
 
 // ==================== MOCK EXTRACTED DATA ====================
 const mockExtractedSolicitation = {
@@ -69,33 +62,6 @@ const mockExtractedRoles = [
   { id: 'rec-5', name: 'Business Analyst', description: 'Business Analyst for requirements gathering and stakeholder coordination', icLevel: 'IC3' as const, baseSalary: 95000, quantity: 1, fte: 1, storyPoints: 20, years: { base: true, option1: true, option2: true, option3: true, option4: true }, confidence: 'low' as const },
 ]
 
-// ==================== CONTRACT TYPE CONFIG ====================
-const contractTypeOptions: {
-  value: ContractTypeOption
-  label: string
-  description: string
-  icon: typeof Clock
-}[] = [
-  {
-    value: 'T&M',
-    label: 'Time & Materials',
-    description: 'Bill hourly rates for actual time worked. Best for evolving scope.',
-    icon: Clock,
-  },
-  {
-    value: 'FFP',
-    label: 'Firm Fixed Price',
-    description: 'Fixed total price regardless of actual costs. Best for well-defined scope.',
-    icon: FileCheck,
-  },
-  {
-    value: 'GSA',
-    label: 'GSA Schedule',
-    description: 'Use pre-negotiated GSA MAS ceiling rates. Faster procurement.',
-    icon: Scale,
-  },
-]
-
 // ==================== HELPERS ====================
 const setAsideLabels: Record<string, string> = {
   'full-open': 'Full & Open',
@@ -113,7 +79,6 @@ export function UploadTab({ onContinue }: UploadTabProps) {
     updateSolicitation, 
     setRecommendedRoles,
     solicitation,
-    companyProfile,
     openSolicitationEditor,
     resetSolicitation,
   } = useAppContext()
@@ -124,16 +89,8 @@ export function UploadTab({ onContinue }: UploadTabProps) {
   const [progress, setProgress] = useState(0)
   const [progressText, setProgressText] = useState('')
   
-  // Contract type selection - sync with context
-  const [selectedContractType, setSelectedContractType] = useState<ContractTypeOption | null>(null)
-  const [detectedContractType, setDetectedContractType] = useState<ContractTypeOption | null>(null)
-  
   // Expanded details view
   const [showDetails, setShowDetails] = useState(false)
-
-  // Check GSA availability
-  const hasGSASchedule = companyProfile?.gsaMasSchedule || false
-  const gsaContractNumber = companyProfile?.gsaContractNumber || ''
 
   // ==================== RESTORE STATE FROM CONTEXT ON MOUNT ====================
   useEffect(() => {
@@ -141,13 +98,7 @@ export function UploadTab({ onContinue }: UploadTabProps) {
     if (solicitation.analyzedFromDocument) {
       setUploadedFileName(solicitation.analyzedFromDocument)
       setState('complete')
-      
-      // Restore contract type selection
-      const contractType = solicitation.contractType as ContractTypeOption
-      if (contractType && ['T&M', 'FFP', 'GSA'].includes(contractType)) {
-        setSelectedContractType(contractType)
-        setDetectedContractType(contractType) // Assume detected = what was saved
-      }
+      setShowDetails(true)
     }
   }, []) // Only run on mount - don't re-run when solicitation changes
 
@@ -199,12 +150,7 @@ export function UploadTab({ onContinue }: UploadTabProps) {
       setProgressText(step.text)
     }
 
-    // Store detected type and pre-select it
-    const detected = mockExtractedSolicitation.contractType as ContractTypeOption
-    setDetectedContractType(detected)
-    setSelectedContractType(detected)
-
-    // Update context with all extracted data
+    // Update context with all extracted data (including detected contract type)
     updateSolicitation({
       ...mockExtractedSolicitation,
       analyzedFromDocument: file.name,
@@ -214,13 +160,7 @@ export function UploadTab({ onContinue }: UploadTabProps) {
 
     setRecommendedRoles(mockExtractedRoles)
     setState('complete')
-  }
-
-  const handleContractTypeSelect = (type: ContractTypeOption) => {
-    if (type === 'GSA' && !hasGSASchedule) return
-    setSelectedContractType(type)
-    // Persist to context immediately
-    updateSolicitation({ contractType: type })
+    setShowDetails(true)
   }
 
   const handleReset = () => {
@@ -229,8 +169,6 @@ export function UploadTab({ onContinue }: UploadTabProps) {
     setState('idle')
     setProgress(0)
     setProgressText('')
-    setSelectedContractType(null)
-    setDetectedContractType(null)
     setShowDetails(false)
     
     // Reset context
@@ -296,24 +234,6 @@ export function UploadTab({ onContinue }: UploadTabProps) {
               </div>
             </div>
           </div>
-
-          {/* What happens next - subtle */}
-          <div className="flex items-center justify-center gap-6 text-xs text-gray-500">
-            <div className="flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5" />
-              <span>Extract details</span>
-            </div>
-            <span className="text-gray-300">→</span>
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>AI analysis</span>
-            </div>
-            <span className="text-gray-300">→</span>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Ready to estimate</span>
-            </div>
-          </div>
         </div>
       )}
 
@@ -349,17 +269,6 @@ export function UploadTab({ onContinue }: UploadTabProps) {
       {/* ==================== COMPLETE STATE ==================== */}
       {state === 'complete' && (
         <div className="space-y-6">
-          {/* Success Header */}
-          <div className="text-center">
-            <div className="w-14 h-14 rounded-lg bg-green-50 mx-auto flex items-center justify-center mb-4">
-              <CheckCircle2 className="w-7 h-7 text-green-600" />
-            </div>
-            <h1 className="text-xl font-semibold text-gray-900 mb-1">RFP Analyzed</h1>
-            <p className="text-sm text-gray-600">
-              Review the details and select your pricing approach
-            </p>
-          </div>
-
           {/* Extracted Summary - Collapsible */}
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             {/* Collapsed Header */}
@@ -368,7 +277,7 @@ export function UploadTab({ onContinue }: UploadTabProps) {
               className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
                 <div className="text-left min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
                     {solicitation.solicitationNumber || mockExtractedSolicitation.solicitationNumber}
@@ -379,10 +288,6 @@ export function UploadTab({ onContinue }: UploadTabProps) {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <Badge className="bg-green-50 text-green-700 border-green-200 text-[10px]">
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  Extracted
-                </Badge>
                 {showDetails ? (
                   <ChevronUp className="w-4 h-4 text-gray-400" />
                 ) : (
@@ -450,12 +355,12 @@ export function UploadTab({ onContinue }: UploadTabProps) {
 
                 {/* Tags */}
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="text-xs">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-gray-200 text-gray-700">
                     NAICS: {solicitation.naicsCode || mockExtractedSolicitation.naicsCode}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
                     {setAsideLabels[(solicitation.setAside || mockExtractedSolicitation.setAside) as string] || 'Unknown'}
-                  </Badge>
+                  </span>
                 </div>
 
                 {/* Edit Button */}
@@ -472,95 +377,16 @@ export function UploadTab({ onContinue }: UploadTabProps) {
             )}
           </div>
 
-          {/* Contract Type Selection - Radio Style */}
-          <div className="space-y-3">
-            <h2 className="text-sm font-medium text-gray-900">
-              How will you price this bid?
-            </h2>
-            
-            <div className="space-y-2">
-              {contractTypeOptions.map((option) => {
-                const isSelected = selectedContractType === option.value
-                const isDetected = detectedContractType === option.value
-                const isDisabled = option.value === 'GSA' && !hasGSASchedule
-                const Icon = option.icon
-                
-                return (
-                  <button
-                    key={option.value}
-                    onClick={() => handleContractTypeSelect(option.value)}
-                    disabled={isDisabled}
-                    className={`
-                      w-full text-left px-4 py-3 rounded-lg border transition-all
-                      ${isSelected 
-                        ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-400' 
-                        : isDisabled
-                          ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer'
-                      }
-                    `}
-                  >
-                    <div className="flex items-start gap-3">
-                      {/* Radio Circle */}
-                      <div className={`
-                        w-4 h-4 mt-0.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center
-                        ${isSelected 
-                          ? 'border-blue-600 bg-blue-600' 
-                          : 'border-gray-300'
-                        }
-                      `}>
-                        {isSelected && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                        )}
-                      </div>
-                      
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <Icon className={`w-4 h-4 ${isSelected ? 'text-blue-600' : 'text-gray-400'}`} />
-                          <span className={`text-sm font-medium ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
-                            {option.label}
-                          </span>
-                          {isDetected && (
-                            <Badge className="bg-blue-100 text-blue-700 border-0 text-[10px] px-1.5 py-0">
-                              Detected
-                            </Badge>
-                          )}
-                        </div>
-                        <p className={`text-xs ${isSelected ? 'text-blue-700' : 'text-gray-500'}`}>
-                          {option.description}
-                        </p>
-                        
-                        {/* GSA Contract Info */}
-                        {option.value === 'GSA' && hasGSASchedule && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Contract: {gsaContractNumber}
-                          </p>
-                        )}
-                        {option.value === 'GSA' && !hasGSASchedule && (
-                          <p className="text-xs text-amber-600 mt-1">
-                            No GSA schedule on file
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
           {/* Actions */}
           <div className="flex items-center justify-between pt-2">
-            <Button variant="ghost" size="sm" onClick={handleReset} className="text-gray-600">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Start Over
-            </Button>
-            
-            <Button 
-              onClick={handleContinue} 
-              disabled={!selectedContractType}
+            <button 
+              onClick={handleReset} 
+              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
             >
+              Start over
+            </button>
+            
+            <Button onClick={handleContinue}>
               Continue to Estimate
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>

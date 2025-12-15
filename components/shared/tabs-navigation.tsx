@@ -313,13 +313,15 @@ export function TabsNavigation() {
               </span>
             </nav>
 
-            {/* Right: Status indicator */}
-            <div className="flex items-center gap-3 shrink-0">
-              <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
-                Saved
-              </span>
-            </div>
+            {/* Right: Status indicator - only show on editing tabs */}
+{activeTab !== 'upload' && (
+  <div className="flex items-center gap-3 shrink-0">
+    <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+      <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
+      Saved
+    </span>
+  </div>
+)}
           </div>
         </div>
       </header>

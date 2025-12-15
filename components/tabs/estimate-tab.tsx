@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { SettingsCallout } from '@/components/shared/settings-callout'
 import {
   Select,
   SelectContent,
@@ -1956,6 +1957,7 @@ const handleAddRoleToTeam = (roleName: string) => {
   return (
     <TooltipProvider>
       <div className="space-y-6">
+      <SettingsCallout proposalId={solicitation?.solicitationNumber} />
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3"><h1 className="text-xl font-semibold text-gray-900">Estimate</h1><Badge variant="outline" className="text-xs">{wbsElements.length} WBS</Badge></div>

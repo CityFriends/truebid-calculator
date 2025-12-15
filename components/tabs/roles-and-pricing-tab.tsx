@@ -132,6 +132,13 @@ const yearsArrayToObject = (years: string[]): { base: boolean; option1: boolean;
   option4: years.includes('option4'),
 })
 
+// Format ordinal numbers (1st, 2nd, 3rd, etc.)
+function formatOrdinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
 // ODC Category labels
 const odcCategoryLabels: Record<string, string> = {
   'travel': 'Travel',
@@ -1391,15 +1398,15 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
                   onClick={() => openSolicitationEditor()}
                   aria-label={`Edit pricing settings: ${profitMargin}% profit margin, ${billableHours.toLocaleString()} billable hours per year, ${showEscalation ? `${laborEscalation}% labor and ${odcEscalation}% ODC annual increases` : 'no annual increases'}`}
                 >
-                  <span>{profitMargin}% profit</span>
+                  <span>{profitMargin}%</span>
                   <span className="text-gray-300" aria-hidden="true">·</span>
-                  <span>{billableHours.toLocaleString()} hours</span>
+                  <span>{billableHours.toLocaleString()} hrs</span>
+                  {showEscalation && laborEscalation > 0 && (
+                  <>
                   <span className="text-gray-300" aria-hidden="true">·</span>
-                  {showEscalation ? (
-                    <span>+{laborEscalation}% labor, +{odcEscalation}% ODCs yearly</span>
-                  ) : (
-                    <span className="text-gray-400">No annual increases</span>
-                  )}
+          <span>+{laborEscalation}%/yr</span>
+  </>
+)}
                   <Settings2 className="w-3.5 h-3.5 text-gray-400" aria-hidden="true" />
                 </button>
               </TooltipTrigger>
@@ -1414,8 +1421,8 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Column 1: Roles From Estimate */}
-          <div className="border border-gray-100 rounded-lg p-4 bg-white">
-            <div className="space-y-4">
+          <div className="border border-gray-100 rounded-lg bg-white flex flex-col max-h-[calc(100vh-220px)]">
+            <div className="flex-shrink-0 p-4 border-b border-gray-100">
               <div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1430,14 +1437,15 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
                 <p className="text-xs text-gray-500 mt-1 ml-6">Hours from WBS · Assign to Prime or Sub</p>
               </div>
 
-              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-gray-400" />
                   <span className="font-medium text-gray-900">{wbsHoursByRole.reduce((sum, r) => sum + r.suggestedFte, 0).toFixed(1)}</span>
-                  <span className="text-gray-500">FTE (suggested)</span>
+                  <span className="text-gray-500">FTE from WBS</span>
                 </div>
               </div>
-
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
               <div className="space-y-2">
                 {wbsHoursByRole.length === 0 ? (
                   <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center">
@@ -1545,10 +1553,9 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
           </div>
 
           {/* Column 2: Team Summary */}
-
-          {/* Column 2: Team Summary */}
-          <div className="border border-gray-100 rounded-lg p-4 bg-white">
-            <div className="space-y-4">
+          <div className="border border-gray-100 rounded-lg bg-white flex flex-col max-h-[calc(100vh-220px)]">
+            <div className="flex-shrink-0 p-4 border-b border-gray-100">
+              <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-gray-400" />
                 <h2 className="font-medium text-gray-900">Team Summary</h2>
@@ -1600,13 +1607,16 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
                             className={`h-full transition-all ${isCompliant ? 'bg-blue-500' : 'bg-red-400'}`}
                             style={{ width: `${primePercent}%` }}
                           />
-                        </div>
-                      </>
-                    )
-                  })()}
-                </div>
+                      </div>
+                    </>
+                  )
+                })()}
+              </div>
               )}
-
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
               {/* Prime Labor Section */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1736,7 +1746,7 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
                               </div>
                               {percentile !== null && (
                                 <span className={`text-[10px] font-medium ${getPercentileColor(percentile)}`}>
-                                  {percentile.toFixed(0)}th %ile
+                                 {formatOrdinal(Math.round(percentile))} %ile
                                 </span>
                               )}
                             </div>
@@ -1859,10 +1869,12 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
               </div>
             </div>
           </div>
+           </div>
 
-          {/* Column 3: Contract Value */}
-          <div className="border border-gray-100 rounded-lg p-4 bg-white">
-            <div className="space-y-4">
+         {/* Column 3: Contract Value */}
+          <div className="border border-gray-100 rounded-lg bg-white flex flex-col max-h-[calc(100vh-220px)]">
+            <div className="flex-shrink-0 p-4 border-b border-gray-100">
+              <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-gray-400" />
                 <h2 className="font-medium text-gray-900">Contract Value</h2>
@@ -1874,7 +1886,10 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
                   : 'Fixed pricing across all years'
                 }
               </p>
-
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
               {/* Year breakdown */}
               <div className="space-y-1">
                 {contractYears.map((year) => {
@@ -2146,9 +2161,10 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
                   </div>
                 </div>
               )}
+             </div>
+              </div>
             </div>
           </div>
-        </div>
 
         {/* ==================== DIALOGS ==================== */}
 
@@ -3289,7 +3305,7 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
                                       <span className="text-xs font-medium text-gray-700">BLS Market Position</span>
                                     </div>
                                     <span className={`text-xs font-semibold px-2 py-0.5 rounded ${getPercentileColor(percentile)}`}>
-                                      {percentile.toFixed(0)}th percentile
+                                      {formatOrdinal(Math.round(percentile))} percentile
                                     </span>
                                   </div>
                                   <div className="flex items-center justify-between text-xs text-gray-600">
@@ -3404,7 +3420,7 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
               </div>
             </div>
           </>
-        )}
+         )}
       </div>
     </TooltipProvider>
   )
