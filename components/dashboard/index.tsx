@@ -31,7 +31,6 @@ import {
   TrendingUp,
   Calendar,
   Building2,
-  CheckCircle2,
   Check,
   Send,
   Trash2,
@@ -467,15 +466,6 @@ function ProposalCard({
             <span className="text-gray-500">Due</span>
             <span className="text-gray-700">
               {new Date(proposal.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </span>
-          </div>
-        )}
-        {proposal.status === 'won' && (
-          <div className="flex items-center justify-between">
-            <span className="text-gray-500">Status</span>
-            <span className="text-green-600 font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              Awarded
             </span>
           </div>
         )}
@@ -991,14 +981,16 @@ export function Dashboard() {
   const stats = useMemo(() => {
     const active = proposals.filter(p => !p.archived && ['draft', 'in-review'].includes(p.status))
     const submitted = proposals.filter(p => !p.archived && p.status === 'submitted')
-    const won = proposals.filter(p => !p.archived && p.status === 'won')
-    const lost = proposals.filter(p => !p.archived && p.status === 'lost')
+    
+    // Win rate includes ALL won/lost (including archived) for accurate historical rate
+    const allWon = proposals.filter(p => p.status === 'won')
+    const allLost = proposals.filter(p => p.status === 'lost')
     
     const pipelineValue = active.reduce((sum, p) => sum + p.totalValue, 0) +
                           submitted.reduce((sum, p) => sum + p.totalValue, 0)
     
-    const winRate = won.length + lost.length > 0
-      ? Math.round((won.length / (won.length + lost.length)) * 100)
+    const winRate = allWon.length + allLost.length > 0
+      ? Math.round((allWon.length / (allWon.length + allLost.length)) * 100)
       : 0
 
     return {
@@ -1338,6 +1330,7 @@ export function Dashboard() {
                     onClick={() => setViewMode('kanban')}
                     className="px-2 h-8"
                     title="Kanban view"
+                    disabled={showArchived}
                   >
                     <Kanban className="w-4 h-4" />
                   </Button>
@@ -1347,6 +1340,7 @@ export function Dashboard() {
                     onClick={() => setViewMode('calendar')}
                     className="px-2 h-8"
                     title="Calendar view"
+                    disabled={showArchived}
                   >
                     <CalendarDays className="w-4 h-4" />
                   </Button>
@@ -1356,7 +1350,14 @@ export function Dashboard() {
                 <Button
                   variant={showArchived ? 'secondary' : 'outline'}
                   size="sm"
-                  onClick={() => setShowArchived(!showArchived)}
+                  onClick={() => {
+                    const newShowArchived = !showArchived
+                    setShowArchived(newShowArchived)
+                    // Reset to grid view when entering archive (kanban/calendar don't apply)
+                    if (newShowArchived && (viewMode === 'kanban' || viewMode === 'calendar')) {
+                      setViewMode('grid')
+                    }
+                  }}
                   className="h-9 gap-1.5"
                   title="Toggle archive"
                   disabled={archivedCount === 0 && !showArchived}
@@ -1378,14 +1379,16 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Results count */}
-            <p className="text-xs text-gray-500 mb-4">
-              {showArchived 
-                ? `Showing ${filteredProposals.length} archived proposal${filteredProposals.length !== 1 ? 's' : ''}`
-                : `Showing ${filteredProposals.length} of ${proposals.filter(p => !p.archived).length} proposals`
-              }
-              {hasActiveFilters && ' (filtered)'}
-            </p>
+            {/* Results count - only for grid/list views */}
+            {(viewMode === 'grid' || viewMode === 'list') && (
+              <p className="text-xs text-gray-500 mb-4">
+                {showArchived 
+                  ? `Showing ${filteredProposals.length} archived proposal${filteredProposals.length !== 1 ? 's' : ''}`
+                  : `Showing ${filteredProposals.length} of ${proposals.filter(p => !p.archived).length} proposals`
+                }
+                {hasActiveFilters && ' (filtered)'}
+              </p>
+            )}
 
             {/* Main Content Area */}
             <div>
@@ -1400,7 +1403,7 @@ export function Dashboard() {
                       onDuplicate={() => handleDuplicate(proposal.id)}
                       onDelete={() => handleDelete(proposal.id)}
                       onStatusChange={(status) => handleStatusChange(proposal.id, status)}
-                      isRecentlyViewed={recentlyViewed.includes(proposal.id)}
+                      isRecentlyViewed={recentlyViewed[0] === proposal.id}
                     />
                   ))}
                 </div>
@@ -1411,7 +1414,7 @@ export function Dashboard() {
                   {filteredProposals.map((proposal) => {
                     const daysUntilDue = getDaysUntilDue(proposal.dueDate)
                     const isUrgent = daysUntilDue !== null && daysUntilDue <= 7 && daysUntilDue >= 0
-                    const isRecent = recentlyViewed.includes(proposal.id)
+                    const isRecent = recentlyViewed[0] === proposal.id
                     
                     return (
                       <div
