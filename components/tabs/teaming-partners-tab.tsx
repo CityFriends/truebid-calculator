@@ -569,23 +569,23 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
           
           {/* Stats Summary */}
           <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 rounded-lg text-xs">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
               <span className="text-gray-500">Active</span>
               <span className="font-semibold text-green-600">{filterCounts.active}</span>
             </div>
-            <span className="text-gray-300">·</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
             <div className="flex items-center gap-1.5">
               <span className="text-gray-500">Roles</span>
               <span className="font-semibold text-gray-900">{subcontractors.length}</span>
             </div>
-            <span className="text-gray-300">·</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
             <div className="flex items-center gap-1.5">
               <span className="text-gray-500">Base FTE</span>
               <span className="font-semibold text-gray-900">{totalSubFte.toFixed(1)}</span>
             </div>
             {totalSubContractCost > 0 && (
               <>
-                <span className="text-gray-300">·</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
                 <div className="flex items-center gap-1.5">
                   <span className="text-gray-500">Total Value</span>
                   <span className="font-semibold text-green-600">{formatCurrency(totalSubContractCost)}</span>
@@ -594,7 +594,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
             )}
             {filterCounts['needs-attention'] > 0 && (
               <>
-                <span className="text-gray-300">·</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
                 <div className="flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5 text-red-500" aria-hidden="true" />
                   <span className="font-semibold text-red-600">{filterCounts['needs-attention']} need attention</span>

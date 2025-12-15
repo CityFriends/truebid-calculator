@@ -244,33 +244,38 @@ const calculatePercentile = (salary: number, blsData: BLSData): number => {
 
 const getPercentileStatus = (percentile: number): { 
   color: string
-  borderColor: string
+  barColor: string
+  textColor: string
   label: string
   description: string 
 } => {
-  if (percentile >= 75) return { 
+  if (percentile > 90) return { 
     color: 'bg-red-50 text-red-700 border-red-200', 
-    borderColor: 'border-l-red-500',
-    label: 'Above typical market rate',
-    description: 'Above 75th percentile - document why this rate is necessary'
+    barColor: 'bg-red-500',
+    textColor: 'text-red-600',
+    label: 'Premium rate',
+    description: 'Above 90th percentile – requires strong justification for audit defense'
   }
-  if (percentile >= 50) return { 
+  if (percentile > 75) return { 
+    color: 'bg-amber-50 text-amber-700 border-amber-200', 
+    barColor: 'bg-amber-500',
+    textColor: 'text-amber-600',
+    label: 'Above market',
+    description: 'Above 75th percentile – document why this rate is necessary'
+  }
+  if (percentile > 50) return { 
     color: 'bg-blue-50 text-blue-700 border-blue-200', 
-    borderColor: 'border-l-blue-500',
-    label: 'Competitive',
-    description: 'Between median and 75th percentile - well-positioned for market'
-  }
-  if (percentile >= 25) return { 
-    color: 'bg-green-50 text-green-700 border-green-200', 
-    borderColor: 'border-l-green-500',
-    label: 'Typical market rate',
-    description: 'Between 25th and 50th percentile - strong position for cost reviews'
+    barColor: 'bg-blue-500',
+    textColor: 'text-blue-600',
+    label: 'At market',
+    description: 'Between median and 75th percentile – typical market positioning'
   }
   return { 
-    color: 'bg-yellow-50 text-yellow-700 border-yellow-200', 
-    borderColor: 'border-l-yellow-500',
-    label: 'Below typical market rate',
-    description: 'Below 25th percentile - may face questions about ability to hire'
+    color: 'bg-green-50 text-green-700 border-green-200', 
+    barColor: 'bg-green-500',
+    textColor: 'text-green-600',
+    label: 'Competitive',
+    description: 'At or below median – strong position for cost-conscious evaluations'
   }
 }
 
@@ -617,23 +622,23 @@ export function RateJustificationTab() {
           
           {/* Stats Summary - compact horizontal bar */}
           <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 rounded-lg text-xs">
-            <div className="flex items-center gap-1.5">
+           <div className="flex items-center gap-1.5">
               <span className="text-gray-500">Prime</span>
               <span className="font-semibold text-gray-900">{primeRoles.length}</span>
             </div>
-            <span className="text-gray-300">·</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
             <div className="flex items-center gap-1.5">
               <span className="text-gray-500">Subs</span>
               <span className="font-semibold text-orange-600">{subRoles.length}</span>
             </div>
-            <span className="text-gray-300">·</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
             <div className="flex items-center gap-1.5">
               <span className="text-gray-500">Avg Market Position</span>
               <span className="font-semibold text-blue-600">{formatOrdinal(blsSummary.avgPercentile)}</span>
             </div>
             {justificationStats.needed > 0 && (
               <>
-                <span className="text-gray-300">·</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
                 <div className="flex items-center gap-1.5">
                   <span className="text-gray-500">Documented</span>
                   <span className={`font-semibold ${justificationStats.completed === justificationStats.needed ? 'text-green-600' : 'text-amber-600'}`}>
@@ -803,11 +808,11 @@ export function RateJustificationTab() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-3">
+                     <div className="flex items-center gap-3">
                           <div className="w-24">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs text-gray-500">Market Position</span>
-                              <span className="text-xs font-semibold text-blue-600">{formatOrdinal(percentile)}</span>
+                              <span className={`text-xs font-semibold ${status.textColor}`}>{formatOrdinal(percentile)}</span>
                             </div>
                             <div 
                               className="h-2 bg-gray-100 rounded-full overflow-hidden"
@@ -818,11 +823,7 @@ export function RateJustificationTab() {
                               aria-label={`Market position: ${formatOrdinal(percentile)} percentile`}
                             >
                               <div 
-                                className={`h-full rounded-full transition-all ${
-                                  percentile >= 75 ? 'bg-red-500' :
-                                  percentile >= 50 ? 'bg-blue-500' :
-                                  percentile >= 25 ? 'bg-green-500' : 'bg-yellow-500'
-                                }`}
+                                className={`h-full rounded-full transition-all ${status.barColor}`}
                                 style={{ width: `${Math.min(percentile, 100)}%` }}
                               />
                             </div>
@@ -1075,12 +1076,11 @@ export function RateJustificationTab() {
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <p className="text-sm font-semibold text-gray-900">Market Position</p>
-                        <p className="text-lg font-bold text-blue-600">{formatOrdinal(percentile)} Percentile</p>
+                        <p className={`text-lg font-bold ${status.textColor}`}>{formatOrdinal(percentile)} Percentile</p>
                       </div>
 
                       <div 
-                        className="relative h-10 bg-gradient-to-r from-green-100 via-blue-100 to-red-100 rounded-lg overflow-hidden border border-gray-200"
-                        role="img"
+                        className="relative h-10 bg-gradient-to-r from-green-100 via-blue-100 via-60% to-amber-100 rounded-lg overflow-hidden border border-gray-200"
                         aria-label={`Market position indicator showing ${formatOrdinal(percentile)} percentile. Scale ranges from green (below market) on left, through blue (competitive) in middle, to red (above market) on right.`}
                       >
                         <div className="absolute top-0 bottom-0 w-1 bg-gray-900" style={{ left: `${Math.min(percentile, 100)}%` }}>

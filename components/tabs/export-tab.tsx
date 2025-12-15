@@ -1132,7 +1132,7 @@ export function ExportTab() {
             {selectedRoles.length} roles
           </span>
         </div>
-        <span className="text-gray-300">•</span>
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
         <div className="flex items-center gap-2">
           {checks.hasWBS ? (
             <CheckCircle2 className="w-4 h-4 text-green-500" />
@@ -1143,7 +1143,7 @@ export function ExportTab() {
             {wbsElements.length} WBS elements
           </span>
         </div>
-        <span className="text-gray-300">•</span>
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
         <div className="flex items-center gap-2">
           {checks.hasRates ? (
             <CheckCircle2 className="w-4 h-4 text-green-500" />
@@ -1154,7 +1154,7 @@ export function ExportTab() {
             FY{indirectRates.fiscalYear} rates
           </span>
         </div>
-        <span className="text-gray-300">•</span>
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
         <div className="flex items-center gap-2">
           {checks.hasSolicitation ? (
             <CheckCircle2 className="w-4 h-4 text-green-500" />
