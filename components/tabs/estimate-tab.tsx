@@ -165,7 +165,7 @@ interface SelectedRole {
   baseRate: number
 }
 
-type ViewMode = 'grid' | 'list' | 'table'
+type ViewMode = 'grid' | 'table'
 // ============================================================================
 // CONSTANTS & LABELS
 // ============================================================================
@@ -257,27 +257,30 @@ function calculateQualityScore(element: EnhancedWBSElement): { score: number; gr
   let score = 100
   const issues: string[] = []
   
-  if (!element.sowReference) { score -= 15; issues.push('Missing SOW reference') }
-  if (!element.periodOfPerformance.startDate || !element.periodOfPerformance.endDate) { score -= 10; issues.push('Missing period of performance dates') }
-  if (!element.why || element.why.length < 20) { score -= 10; issues.push('Insufficient "Why" description') }
-  if (!element.what || element.what.length < 20) { score -= 10; issues.push('Insufficient "What" description') }
+  if (!element.sowReference) { score -= 15; issues.push('Add SOW/SOO reference for traceability') }
+  if (!element.periodOfPerformance.startDate || !element.periodOfPerformance.endDate) { score -= 10; issues.push('Add start and end dates') }
+  if (!element.why || element.why.length < 20) { score -= 10; issues.push('Expand "Why" to explain business purpose (20+ chars)') }
+  if (!element.what || element.what.length < 20) { score -= 10; issues.push('Expand "What" to describe deliverables (20+ chars)') }
   
   if (element.estimateMethod === 'engineering') {
     const basis = element.engineeringBasis
     const hasGoodBasis = basis && ((basis.similarWork && basis.similarWork.length > 20) || (basis.expertSource && basis.assumptions && basis.assumptions.length > 20))
-    if (hasGoodBasis) { score -= 5; issues.push('Engineering judgment (documented)') }
-    else { score -= 15; issues.push('Engineering judgment needs supporting data') }
-  } else if (element.estimateMethod === 'level-of-effort') { score -= 5; issues.push('LOE should be minimized') }
+    if (hasGoodBasis) { score -= 5; issues.push('Engineering judgment documented - consider adding historical reference') }
+    else { score -= 15; issues.push('Engineering judgment: Add similar work examples or expert source') }
+  } else if (element.estimateMethod === 'level-of-effort') { 
+    score -= 5; 
+    issues.push('LOE: Justify the staffing level (e.g., coverage hours, historical demand)')
+  }
   
-  if (element.estimateMethod === 'historical' && !element.historicalReference?.chargeNumber) { score -= 20; issues.push('Historical method requires charge number') }
-  if (element.complexityFactor !== 1.0 && !element.complexityJustification) { score -= 10; issues.push('Complexity factor needs justification') }
+  if (element.estimateMethod === 'historical' && !element.historicalReference?.chargeNumber) { score -= 20; issues.push('Historical method selected: Add charge code reference') }
+  if (element.complexityFactor !== 1.0 && !element.complexityJustification) { score -= 10; issues.push('Complexity factor changed: Add justification') }
   
-  if (element.laborEstimates.length === 0) { score -= 25; issues.push('No labor estimates defined') }
+  if (element.laborEstimates.length === 0) { score -= 25; issues.push('Add labor estimates (roles and hours)') }
   else {
     const missingRationale = element.laborEstimates.filter(l => !l.rationale || l.rationale.length < 10)
-    if (missingRationale.length > 0) { score -= 10; issues.push(`${missingRationale.length} role(s) missing rationale`) }
+    if (missingRationale.length > 0) { score -= 10; issues.push(`Add rationale for ${missingRationale.length} role(s)`) }
     const orphanedRoles = element.laborEstimates.filter(l => l.isOrphaned)
-    if (orphanedRoles.length > 0) { score -= 10; issues.push(`${orphanedRoles.length} orphaned role(s)`) }
+    if (orphanedRoles.length > 0) { score -= 10; issues.push(`${orphanedRoles.length} role(s) not in team - add to Roles & Pricing`) }
   }
   
   let grade: 'blue' | 'green' | 'yellow' | 'red'
@@ -560,7 +563,7 @@ function LaborSummary({ wbsElements, billableHoursPerYear, onNavigateToRoles }: 
 function ViewModeToggle({ viewMode, setViewMode }: { viewMode: ViewMode; setViewMode: (mode: ViewMode) => void }) {
   return (
     <div className="flex gap-1 border border-gray-100 rounded-lg p-0.5 bg-white">
-      {[{ mode: 'grid', icon: Grid3X3, label: 'Card view' }, { mode: 'list', icon: List, label: 'List view' }, { mode: 'table', icon: Table2, label: 'Table view' }].map(({ mode, icon: Icon, label }) => (
+      {[{ mode: 'grid', icon: Grid3X3, label: 'Card view' }, { mode: 'table', icon: Table2, label: 'Table view' }].map(({ mode, icon: Icon, label }) => (
         <Tooltip key={mode}>
           <TooltipTrigger asChild>
             <Button variant={viewMode === mode ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode(mode as ViewMode)} className="px-2 h-8">
@@ -590,12 +593,12 @@ function WBSCard({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSE
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500">
               {element.sowReference && <span>{element.sowReference}</span>}
-              <span>•</span>
+              {element.sowReference && <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />}
               <span>{formatDateShort(element.periodOfPerformance.startDate)} – {formatDateShort(element.periodOfPerformance.endDate)}</span>
             </div>
           </div>
           <div className="flex gap-1">
-            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onEdit(); }} className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50">
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onClick(); }} className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50">
               <Pencil className="w-3.5 h-3.5" />
             </Button>
             <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onDelete(); }} className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -604,6 +607,22 @@ function WBSCard({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSE
           </div>
         </div>
       </div>
+      
+      {/* Why/What Preview - NEW */}
+      {(element.why || element.what) && (
+        <div className="px-4 py-2 bg-gray-50/50 border-b border-gray-100">
+          {element.why && (
+            <p className="text-xs text-gray-600 line-clamp-1">
+              <span className="font-medium text-gray-700">Why:</span> {element.why}
+            </p>
+          )}
+          {element.what && (
+            <p className="text-xs text-gray-600 line-clamp-1 mt-0.5">
+              <span className="font-medium text-gray-700">What:</span> {element.what}
+            </p>
+          )}
+        </div>
+      )}
       
       <div className="px-4 py-3">
         <div className="flex items-center gap-2 mb-3">
@@ -632,34 +651,6 @@ function WBSCard({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSE
           {element.qualityIssues.length > 0 && <span className="flex items-center gap-1 text-yellow-600"><AlertTriangle className="w-3 h-3" />{element.qualityIssues.length} issues</span>}
         </div>
       )}
-    </div>
-  )
-}
-
-function WBSListItem({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSElement; onClick: () => void; onEdit: () => void; onDelete: () => void }) {
-  const totalHours = getElementTotalHours(element)
-  const gradeConfig = QUALITY_GRADE_CONFIG[element.qualityGrade]
-  
-  return (
-    <div className="group flex items-center gap-4 px-4 py-3 bg-white border border-gray-100 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
-      <div className="w-16 flex-shrink-0"><span className="text-sm font-semibold text-gray-900">{element.wbsNumber}</span></div>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-medium text-gray-900 truncate">{element.title}</h3>
-        <span className="text-xs text-gray-500">{element.sowReference || 'No SOW ref'}</span>
-      </div>
-      <div className="w-24 flex-shrink-0">
-        <Badge className={`${gradeConfig.bgColor} ${gradeConfig.textColor} border ${gradeConfig.borderColor} text-[10px] px-1.5 py-0 h-5`}>{gradeConfig.label}</Badge>
-      </div>
-      <div className="w-32 flex-shrink-0 text-xs text-gray-600">{ESTIMATE_METHOD_LABELS[element.estimateMethod].label}</div>
-      <div className="w-16 flex-shrink-0 text-xs text-gray-600 text-center">{element.laborEstimates.length}</div>
-      <div className="w-24 flex-shrink-0 text-right"><span className="text-sm font-semibold text-gray-900">{totalHours.toLocaleString()}</span></div>
-      <div className="w-16 flex-shrink-0 text-center">
-        {element.qualityIssues.length > 0 ? <span className="text-xs text-yellow-600">{element.qualityIssues.length}</span> : <CheckCircle2 className="w-4 h-4 text-green-500 mx-auto" />}
-      </div>
-      <div className="w-16 flex-shrink-0 flex gap-1 justify-end">
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onEdit(); }} className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"><Pencil className="w-3.5 h-3.5" /></Button>
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onDelete(); }} className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></Button>
-      </div>
     </div>
   )
 }
@@ -698,8 +689,7 @@ function WBSTableView({ elements, onElementClick, onEdit, onDelete, contractPeri
                 <td className="px-4 py-3 text-right font-semibold text-gray-900">{totalHours.toLocaleString()}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1 justify-end">
-                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onEdit(element); }} className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"><Pencil className="w-3.5 h-3.5" /></Button>
-                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onDelete(element.id); }} className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></Button>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onElementClick(element.id); }} className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"><Pencil className="w-3.5 h-3.5" /></Button>                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onDelete(element.id); }} className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
                 </td>
               </tr>
@@ -787,7 +777,7 @@ function ChargeCodeLibrary({ chargeCodes, onAdd, onEdit, onDelete }: { chargeCod
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-xs text-gray-500 mb-2"><Building2 className="w-3 h-3" /><span>{cc.client}</span><span>•</span><Calendar className="w-3 h-3" /><span>{cc.dateRange}</span></div>
+            <div className="flex items-center gap-2 text-xs text-gray-500 mb-2"><Building2 className="w-3 h-3" /><span>{cc.client}</span><span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" /><Calendar className="w-3 h-3" /><span>{cc.dateRange}</span></div>
             <p className="text-xs text-gray-600 mb-2">{cc.description}</p>
             <div className="flex flex-wrap gap-1">{cc.roles.map(role => <Badge key={role} variant="secondary" className="text-[10px] px-1.5 py-0 h-5">{role}</Badge>)}</div>
           </div>
@@ -826,8 +816,17 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Requirements & Traceability</h2>
-          <p className="text-xs text-gray-600 mt-1">{stats.total} requirements · {stats.mapped} mapped · {stats.shallCoverage}% "shall" covered{stats.unmapped > 0 && <span className="text-red-600 ml-1">· {stats.unmapped} gaps</span>}</p>
-        </div>
+<p className="text-xs text-gray-600 mt-1 flex items-center gap-1.5">
+  <span>{stats.total} requirements</span>
+  <span className="w-1 h-1 rounded-full bg-gray-400" aria-hidden="true" />
+  <span>{stats.mapped} mapped</span>
+  <span className="w-1 h-1 rounded-full bg-gray-400" aria-hidden="true" />
+  <span>{stats.shallCoverage}% "shall" covered</span>
+  {stats.unmapped > 0 && <>
+    <span className="w-1 h-1 rounded-full bg-red-400" aria-hidden="true" />
+    <span className="text-red-600">{stats.unmapped} gaps</span>
+  </>}
+</p>        </div>
         <div className="flex items-center gap-3">
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}><List className="w-4 h-4 inline mr-1.5" />List</button>
@@ -857,10 +856,18 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
                       </div>
                       <div className="flex items-center gap-1 flex-wrap">
                         {linkedWbs.map(wbs => <Badge key={wbs.id} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 cursor-pointer hover:bg-red-100" onClick={() => onUnlinkWbs(req.id, wbs.id)}>{wbs.wbsNumber} ×</Badge>)}
-                        <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
-                          <SelectTrigger className="h-5 w-auto px-2 text-[10px] text-blue-600 border-none bg-transparent hover:bg-blue-50"><span>+ Link WBS</span></SelectTrigger>
-                          <SelectContent>{wbsElements.filter(wbs => !req.linkedWbsIds.includes(wbs.id)).map(wbs => <SelectItem key={wbs.id} value={wbs.id} className="text-xs">{wbs.wbsNumber} - {wbs.title}</SelectItem>)}</SelectContent>
-                        </Select>
+                      <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
+  <SelectTrigger className="h-5 w-auto px-2 text-[10px] text-blue-600 border-none bg-transparent hover:bg-blue-50">
+    <span>+ Link WBS</span>
+  </SelectTrigger>
+  <SelectContent position="popper" sideOffset={4} className="z-[100] max-h-[200px] overflow-y-auto">
+    {wbsElements.filter(wbs => !req.linkedWbsIds.includes(wbs.id)).map(wbs => (
+      <SelectItem key={wbs.id} value={wbs.id} className="text-xs">
+        {wbs.wbsNumber} - {wbs.title}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
                       </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -929,16 +936,19 @@ interface WBSSlideoutProps {
   chargeCodes: ChargeCode[]
   onOpenLaborDialog: (labor?: EnhancedLaborEstimate) => void
   onDeleteLabor: (laborId: string) => void
-  onOpenEditElement: () => void
 }
 
-function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, selectedRoles, allWbsElements, chargeCodes, onOpenLaborDialog, onDeleteLabor, onOpenEditElement }: WBSSlideoutProps) {
+function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, selectedRoles, allWbsElements, chargeCodes, onOpenLaborDialog, onDeleteLabor }: Omit<WBSSlideoutProps, 'onOpenEditElement'>) {
   const [activeTab, setActiveTab] = useState('details')
   const [showRiskDialog, setShowRiskDialog] = useState(false)
   const [editingRisk, setEditingRisk] = useState<WBSRisk | null>(null)
   const [riskForm, setRiskForm] = useState<Partial<WBSRisk>>({ description: '', probability: 3, impact: 3, mitigation: '', status: 'open' })
   const [showDepDialog, setShowDepDialog] = useState(false)
   const [depForm, setDepForm] = useState<Partial<WBSDependency>>({ predecessorWbsId: '', type: 'FS', lagDays: 0 })
+  
+  // Editable fields state
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleBuffer, setTitleBuffer] = useState('')
   
   // State for editing estimation basis
   const [showHistoricalDialog, setShowHistoricalDialog] = useState(false)
@@ -955,6 +965,32 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
   const gradeConfig = QUALITY_GRADE_CONFIG[element.qualityGrade]
   const totalHours = getElementTotalHours(element)
   const methodConfig = ESTIMATE_METHOD_LABELS[element.estimateMethod]
+  
+  // Inline edit handlers
+  const handleStartEditTitle = () => {
+    setTitleBuffer(element.title)
+    setEditingTitle(true)
+  }
+  
+  const handleSaveTitle = () => {
+    if (titleBuffer.trim()) {
+      onUpdate(element.id, { title: titleBuffer.trim() })
+    }
+    setEditingTitle(false)
+  }
+  
+  const handleFieldChange = (field: keyof EnhancedWBSElement, value: string | number) => {
+    onUpdate(element.id, { [field]: value })
+  }
+  
+  const handlePeriodChange = (field: 'startDate' | 'endDate', value: string) => {
+    onUpdate(element.id, { 
+      periodOfPerformance: { 
+        ...element.periodOfPerformance, 
+        [field]: value 
+      } 
+    })
+  }
   
   const handleOpenRiskDialog = (risk?: WBSRisk) => {
     if (risk) { setEditingRisk(risk); setRiskForm({ description: risk.description, probability: risk.probability, impact: risk.impact, mitigation: risk.mitigation, status: risk.status }) }
@@ -1060,28 +1096,54 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
         {/* Header */}
         <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4">
           <div className="flex items-start justify-between">
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-lg font-semibold text-gray-900">{element.wbsNumber}</span>
-                <h3 id="slideout-title" className="text-lg font-semibold text-gray-900">{element.title}</h3>
+                {editingTitle ? (
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
+                      value={titleBuffer}
+                      onChange={(e) => setTitleBuffer(e.target.value)}
+                      className="h-8 text-lg font-semibold"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveTitle()
+                        if (e.key === 'Escape') setEditingTitle(false)
+                      }}
+                    />
+                    <Button size="sm" variant="ghost" onClick={handleSaveTitle} className="h-7 w-7 p-0">
+                      <Check className="w-4 h-4 text-green-600" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingTitle(false)} className="h-7 w-7 p-0">
+                      <X className="w-4 h-4 text-gray-400" />
+                    </Button>
+                  </div>
+                ) : (
+                  <h3 
+                    id="slideout-title" 
+                    className="text-lg font-semibold text-gray-900 cursor-pointer hover:text-blue-600 truncate"
+                    onClick={handleStartEditTitle}
+                    title="Click to edit"
+                  >
+                    {element.title}
+                  </h3>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Badge className={`${gradeConfig.bgColor} ${gradeConfig.textColor} border ${gradeConfig.borderColor} text-[10px] px-1.5 py-0 h-5`}>
                   {gradeConfig.label} ({element.qualityScore}%)
                 </Badge>
-                {element.sowReference && <span className="text-sm text-gray-600">{element.sowReference}</span>}
-                <span className="text-sm font-semibold text-gray-900 ml-auto">{totalHours.toLocaleString()} hrs</span>
+                {element.sowReference && <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
+                  <span className="text-sm text-gray-600">{element.sowReference}</span>
+                </>}
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-300 ml-auto" aria-hidden="true" />
+                <span className="text-sm font-semibold text-gray-900">{totalHours.toLocaleString()} hrs</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={onOpenEditElement} className="h-8">
-                <Pencil className="w-4 h-4 mr-1" aria-hidden="true" />
-                Edit
-              </Button>
-              <Button variant="ghost" size="sm" onClick={onClose} className="text-2xl leading-none h-8 w-8 p-0" aria-label="Close panel">
-                ×
-              </Button>
-            </div>
+            <Button variant="ghost" size="sm" onClick={onClose} className="text-2xl leading-none h-8 w-8 p-0 ml-4" aria-label="Close panel">
+              ×
+            </Button>
           </div>
         </div>
         
@@ -1115,35 +1177,119 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
               </TabsTrigger>
             </TabsList>
             
-            {/* DETAILS TAB */}
+            {/* DETAILS TAB - Now Editable */}
             <TabsContent value="details" className="space-y-6">
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <Calendar className="w-4 h-4" aria-hidden="true" />
-                <span>{formatDate(element.periodOfPerformance.startDate)} – {formatDate(element.periodOfPerformance.endDate)}</span>
-                {element.clin && <><span>•</span><span>CLIN {element.clin}</span></>}
+              {/* Reference Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-gray-500">SOW Reference</Label>
+                  <Input 
+                    value={element.sowReference || ''} 
+                    onChange={(e) => handleFieldChange('sowReference', e.target.value)}
+                    placeholder="e.g., SOW 3.2.1"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-gray-500">CLIN</Label>
+                  <Input 
+                    value={element.clin || ''} 
+                    onChange={(e) => handleFieldChange('clin', e.target.value)}
+                    placeholder="e.g., 0001"
+                    className="h-9"
+                  />
+                </div>
               </div>
               
-              {element.why && (
-                <div>
-                  <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Why (Purpose)</h4>
-                  <p className="text-sm text-gray-900">{element.why}</p>
+              {/* Period of Performance */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-gray-500">Start Date</Label>
+                  <Input 
+                    type="date"
+                    value={element.periodOfPerformance.startDate || ''} 
+                    onChange={(e) => handlePeriodChange('startDate', e.target.value)}
+                    className="h-9"
+                  />
                 </div>
-              )}
-              
-              {element.what && (
-                <div>
-                  <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">What (Deliverables)</h4>
-                  <p className="text-sm text-gray-900">{element.what}</p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-gray-500">End Date</Label>
+                  <Input 
+                    type="date"
+                    value={element.periodOfPerformance.endDate || ''} 
+                    onChange={(e) => handlePeriodChange('endDate', e.target.value)}
+                    className="h-9"
+                  />
                 </div>
-              )}
+              </div>
               
-              {element.notIncluded && (
-                <div>
-                  <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Not Included</h4>
-                  <p className="text-sm text-gray-600">{element.notIncluded}</p>
+              {/* Why - Critical BD-to-Delivery field */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs font-medium text-gray-700">Why (Purpose)</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-sm">Explain the business purpose. This helps delivery teams understand the intent behind the work.</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-              )}
+                <Textarea 
+                  value={element.why || ''} 
+                  onChange={(e) => handleFieldChange('why', e.target.value)}
+                  placeholder="Why is this work needed? What problem does it solve?"
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
               
+              {/* What - Critical BD-to-Delivery field */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs font-medium text-gray-700">What (Deliverables)</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-sm">Describe the specific deliverables. Be concrete about what will be produced.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Textarea 
+                  value={element.what || ''} 
+                  onChange={(e) => handleFieldChange('what', e.target.value)}
+                  placeholder="What specific work products or outcomes will be delivered?"
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+              
+              {/* Not Included - Critical BD-to-Delivery field */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs font-medium text-gray-700">Not Included</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-sm">Explicitly state what's out of scope. This prevents scope creep and sets clear boundaries.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Textarea 
+                  value={element.notIncluded || ''} 
+                  onChange={(e) => handleFieldChange('notIncluded', e.target.value)}
+                  placeholder="What is explicitly NOT part of this work?"
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+              
+              {/* Assumptions */}
               {element.assumptions.length > 0 && (
                 <div>
                   <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Assumptions</h4>
@@ -1160,15 +1306,51 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
               {/* Estimate Method Box */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg" aria-hidden="true">{methodConfig.icon}</span>
-                    <span className="text-sm font-semibold text-gray-900">{methodConfig.label}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="space-y-1.5 flex-1">
+                      <Label className="text-xs text-gray-500">Estimate Method</Label>
+                      <Select value={element.estimateMethod} onValueChange={(v) => handleFieldChange('estimateMethod', v)}>
+                        <SelectTrigger className="w-[200px] h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(ESTIMATE_METHOD_LABELS).map(([key, { label, icon }]) => (
+                            <SelectItem key={key} value={key}>{icon} {label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {element.complexityFactor !== 1.0 && (
                       <Badge variant="outline" className="text-[10px]">{element.complexityFactor}x complexity</Badge>
                     )}
                   </div>
                 </div>
                 <p className="text-xs text-gray-600">{methodConfig.description}</p>
+                
+                {/* Complexity Factor */}
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-200">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-gray-500">Complexity Factor</Label>
+                    <Input 
+                      type="number" 
+                      step="0.1" 
+                      min="0.5" 
+                      max="3.0" 
+                      value={element.complexityFactor} 
+                      onChange={(e) => handleFieldChange('complexityFactor', parseFloat(e.target.value) || 1.0)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-gray-500">Justification</Label>
+                    <Input 
+                      value={element.complexityJustification || ''} 
+                      onChange={(e) => handleFieldChange('complexityJustification', e.target.value)}
+                      placeholder="Why factor differs from 1.0..."
+                      className="h-9"
+                    />
+                  </div>
+                </div>
                 
                 {/* Historical Reference - Editable */}
                 {element.estimateMethod === 'historical' && (
@@ -1189,11 +1371,11 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
                           <span className="font-mono text-sm font-semibold text-blue-900">{element.historicalReference.chargeNumber}</span>
                         </div>
                         <div className="text-sm text-blue-800 mb-1">{element.historicalReference.projectName}</div>
-                        <div className="flex items-center gap-3 text-xs text-blue-600">
-                          <span>{element.historicalReference.dateRange}</span>
-                          <span>•</span>
-                          <span>{element.historicalReference.actualHours.toLocaleString()} actual hours</span>
-                        </div>
+                        <div className="flex items-center gap-2 text-xs text-blue-600">
+                        <span>{element.historicalReference.dateRange}</span>
+                        <span className="w-1 h-1 rounded-full bg-blue-400" aria-hidden="true" />
+                       <span>{element.historicalReference.actualHours.toLocaleString()} actual hours</span>
+                      </div>
                         {element.historicalReference.notes && (
                           <p className="text-xs text-blue-700 mt-2 italic">{element.historicalReference.notes}</p>
                         )}
@@ -1261,14 +1443,6 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
                         <p className="text-xs text-purple-500">Document similar work, expert sources, and assumptions</p>
                       </button>
                     )}
-                  </div>
-                )}
-                
-                {/* Complexity Factor */}
-                {element.complexityFactor !== 1.0 && element.complexityJustification && (
-                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <span className="text-xs font-medium text-yellow-800">Complexity Factor ({element.complexityFactor}x): </span>
-                    <span className="text-xs text-yellow-900">{element.complexityJustification}</span>
                   </div>
                 )}
               </div>
@@ -1776,9 +1950,6 @@ export function EstimateTab() {
   const [showLaborDialog, setShowLaborDialog] = useState(false)
   const [editingLabor, setEditingLabor] = useState<EnhancedLaborEstimate | null>(null)
   const [laborForm, setLaborForm] = useState<{ roleId: string; rationale: string; confidence: 'high' | 'medium' | 'low'; hoursByPeriod: PeriodHours }>({ roleId: '', rationale: '', confidence: 'medium', hoursByPeriod: { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 } })
-  const [showEditElement, setShowEditElement] = useState(false)
-  const [editElementBuffer, setEditElementBuffer] = useState<Partial<EnhancedWBSElement>>({})
-  const [directEditElementId, setDirectEditElementId] = useState<string | null>(null)
   
   // State for editing requirements
   const [showReqDialog, setShowReqDialog] = useState(false)
@@ -1795,15 +1966,6 @@ export function EstimateTab() {
     if (labor) { setEditingLabor(labor); setLaborForm({ roleId: labor.roleId, rationale: labor.rationale, confidence: labor.confidence, hoursByPeriod: { ...labor.hoursByPeriod } }) }
     else { setEditingLabor(null); setLaborForm({ roleId: '', rationale: '', confidence: 'medium', hoursByPeriod: { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 } }) }
     setShowLaborDialog(true)
-  }
-  
-  const handleOpenEditElement = () => {
-    if (selectedElement) { setDirectEditElementId(null); setEditElementBuffer({ wbsNumber: selectedElement.wbsNumber, title: selectedElement.title, sowReference: selectedElement.sowReference, clin: selectedElement.clin, periodOfPerformance: { ...selectedElement.periodOfPerformance }, why: selectedElement.why, what: selectedElement.what, notIncluded: selectedElement.notIncluded, estimateMethod: selectedElement.estimateMethod, complexityFactor: selectedElement.complexityFactor, complexityJustification: selectedElement.complexityJustification }); setShowEditElement(true) }
-  }
-  
-  const handleDirectEditElement = (element: EnhancedWBSElement) => {
-    setEditElementBuffer({ wbsNumber: element.wbsNumber, title: element.title, sowReference: element.sowReference, clin: element.clin, periodOfPerformance: { ...element.periodOfPerformance }, why: element.why, what: element.what, notIncluded: element.notIncluded, estimateMethod: element.estimateMethod, complexityFactor: element.complexityFactor, complexityJustification: element.complexityJustification })
-    setDirectEditElementId(element.id); setShowEditElement(true)
   }
   
   const handleUpdateElement = (id: string, updates: Partial<EnhancedWBSElement>) => {
@@ -1829,7 +1991,6 @@ export function EstimateTab() {
   }
   
   const handleDeleteLabor = (laborId: string) => { if (selectedElement) handleUpdateElement(selectedElement.id, { laborEstimates: selectedElement.laborEstimates.filter(l => l.id !== laborId) }) }
-  const handleSaveEditElement = () => { const elementId = directEditElementId || selectedElement?.id; if (elementId) { handleUpdateElement(elementId, editElementBuffer); setShowEditElement(false); setDirectEditElementId(null) } }
   const handleDeleteElement = (id: string) => { setWbsElements(prev => prev.filter(el => el.id !== id)); if (selectedElementId === id) setSelectedElementId(null) }
   
   const handleAddElement = () => {
@@ -1961,14 +2122,14 @@ const handleAddRoleToTeam = (roleName: string) => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3"><h1 className="text-xl font-semibold text-gray-900">Estimate</h1><Badge variant="outline" className="text-xs">{wbsElements.length} WBS</Badge></div>
-          <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 rounded-lg text-xs">
-            <div className="flex items-center gap-1.5"><span className="text-gray-500">Hours</span><span className="font-semibold text-gray-900">{stats.totalHours.toLocaleString()}</span></div>
-            <span className="text-gray-300">·</span>
-            <div className="flex items-center gap-1.5"><span className="text-gray-500">Quality</span><span className="font-semibold text-gray-900">{stats.avgQuality}%</span></div>
-            <span className="text-gray-300">·</span>
-            <div className="flex items-center gap-1.5"><span className="text-gray-500">Reqs</span><span className={`font-semibold ${stats.requirementsCoverage === 100 ? 'text-green-600' : 'text-yellow-600'}`}>{stats.requirementsCoverage}%</span></div>
-            {stats.issueCount > 0 && <><span className="text-gray-300">·</span><div className="flex items-center gap-1.5"><span className="text-yellow-600">Issues</span><span className="font-semibold text-yellow-600">{stats.issueCount}</span></div></>}
-          </div>
+         <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 rounded-lg text-xs">
+         <div className="flex items-center gap-1.5"><span className="text-gray-500">Hours</span><span className="font-semibold text-gray-900">{stats.totalHours.toLocaleString()}</span></div>
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
+         <div className="flex items-center gap-1.5"><span className="text-gray-500">Quality</span><span className="font-semibold text-gray-900">{stats.avgQuality}%</span></div>
+         <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
+         <div className="flex items-center gap-1.5"><span className="text-gray-500">Reqs</span><span className={`font-semibold ${stats.requirementsCoverage === 100 ? 'text-green-600' : 'text-yellow-600'}`}>{stats.requirementsCoverage}%</span></div>
+           {stats.issueCount > 0 && <><span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" /><div className="flex items-center gap-1.5"><span className="text-yellow-600">Issues</span><span className="font-semibold text-yellow-600">{stats.issueCount}</span></div></>}
+        </div>
         </div>
         
         {/* Tabs */}
@@ -1993,16 +2154,13 @@ const handleAddRoleToTeam = (roleName: string) => {
               <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
             </div>
             
-            {filteredElements.length === 0 ? (
+           {filteredElements.length === 0 ? (
               <div className="text-center py-12 bg-white border border-gray-100 rounded-lg"><Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-sm text-gray-600">No WBS elements found</p><Button variant="outline" size="sm" className="mt-3" onClick={() => setShowAddElement(true)}><Plus className="w-4 h-4 mr-2" />Add First Element</Button></div>
             ) : viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">{filteredElements.map(element => <WBSCard key={element.id} element={element} onClick={() => setSelectedElementId(element.id)} onEdit={() => handleDirectEditElement(element)} onDelete={() => handleDeleteElement(element.id)} />)}</div>
-            ) : viewMode === 'list' ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-4 px-4 py-2 text-xs font-medium text-gray-500"><div className="w-16">WBS</div><div className="flex-1">Title</div><div className="w-24">Quality</div><div className="w-32">Method</div><div className="w-16 text-center">Roles</div><div className="w-24 text-right">Hours</div><div className="w-16 text-center">Issues</div><div className="w-16"></div></div>
-                {filteredElements.map(element => <WBSListItem key={element.id} element={element} onClick={() => setSelectedElementId(element.id)} onEdit={() => handleDirectEditElement(element)} onDelete={() => handleDeleteElement(element.id)} />)}
-              </div>
-            ) : <WBSTableView elements={filteredElements} onElementClick={setSelectedElementId} onEdit={handleDirectEditElement} onDelete={handleDeleteElement} contractPeriods={contractPeriods} />}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">{filteredElements.map(element => <WBSCard key={element.id} element={element} onClick={() => setSelectedElementId(element.id)} onEdit={() => setSelectedElementId(element.id)} onDelete={() => handleDeleteElement(element.id)} />)}</div>
+            ) : (
+              <WBSTableView elements={filteredElements} onElementClick={setSelectedElementId} onEdit={(el) => setSelectedElementId(el.id)} onDelete={handleDeleteElement} contractPeriods={contractPeriods} />
+            )}
           </TabsContent>
           
           <TabsContent value="requirements" className="mt-0"><RequirementsSection requirements={requirements} wbsElements={wbsElements} onAdd={() => handleOpenReqDialog()} onEdit={handleOpenReqDialog} onDelete={(id) => setRequirements(prev => prev.filter(r => r.id !== id))} onLinkWbs={handleLinkWbs} onUnlinkWbs={handleUnlinkWbs} /></TabsContent>
@@ -2011,7 +2169,7 @@ const handleAddRoleToTeam = (roleName: string) => {
         </Tabs>
         
         {/* Slideout */}
-        {selectedElement && <WBSSlideout element={selectedElement} isOpen={!!selectedElementId} onClose={() => setSelectedElementId(null)} onUpdate={handleUpdateElement} contractPeriods={contractPeriods} selectedRoles={selectedRoles} allWbsElements={wbsElements} chargeCodes={chargeCodes} onOpenLaborDialog={handleOpenLaborDialog} onDeleteLabor={handleDeleteLabor} onOpenEditElement={handleOpenEditElement} />}
+        {selectedElement && <WBSSlideout element={selectedElement} isOpen={!!selectedElementId} onClose={() => setSelectedElementId(null)} onUpdate={handleUpdateElement} contractPeriods={contractPeriods} selectedRoles={selectedRoles} allWbsElements={wbsElements} chargeCodes={chargeCodes} onOpenLaborDialog={handleOpenLaborDialog} onDeleteLabor={handleDeleteLabor} />}
         
        {/* Add Element Dialog */}
         <Dialog open={showAddElement} onOpenChange={setShowAddElement}>
@@ -2100,22 +2258,6 @@ const handleAddRoleToTeam = (roleName: string) => {
               <div className="space-y-2"><Label>Rationale</Label><Textarea value={laborForm.rationale} onChange={(e) => setLaborForm(prev => ({ ...prev, rationale: e.target.value }))} rows={3} placeholder="Explain how you determined these hours..." /></div>
             </div>
             <DialogFooter><Button variant="outline" onClick={() => setShowLaborDialog(false)}>Cancel</Button><Button onClick={handleSaveLabor} disabled={!laborForm.roleId}>{editingLabor ? 'Save Changes' : 'Add Labor'}</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
-        
-        {/* Edit Element Dialog */}
-        <Dialog open={showEditElement} onOpenChange={(open) => { setShowEditElement(open); if (!open) setDirectEditElementId(null) }}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Edit WBS Element</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-3 gap-4"><div className="space-y-2"><Label>WBS Number</Label><Input value={editElementBuffer.wbsNumber || ''} onChange={(e) => setEditElementBuffer(prev => ({ ...prev, wbsNumber: e.target.value }))} /></div><div className="col-span-2 space-y-2"><Label>Title</Label><Input value={editElementBuffer.title || ''} onChange={(e) => setEditElementBuffer(prev => ({ ...prev, title: e.target.value }))} /></div></div>
-              <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>SOW Reference</Label><Input value={editElementBuffer.sowReference || ''} onChange={(e) => setEditElementBuffer(prev => ({ ...prev, sowReference: e.target.value }))} /></div><div className="space-y-2"><Label>Estimate Method</Label><Select value={editElementBuffer.estimateMethod || 'engineering'} onValueChange={(v) => setEditElementBuffer(prev => ({ ...prev, estimateMethod: v as EstimateMethod }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(ESTIMATE_METHOD_LABELS).map(([key, { label, icon }]) => <SelectItem key={key} value={key}>{icon} {label}</SelectItem>)}</SelectContent></Select></div></div>
-              <div className="space-y-2"><Label>Why (Purpose)</Label><Textarea value={editElementBuffer.why || ''} onChange={(e) => setEditElementBuffer(prev => ({ ...prev, why: e.target.value }))} rows={2} /></div>
-              <div className="space-y-2"><Label>What (Deliverables)</Label><Textarea value={editElementBuffer.what || ''} onChange={(e) => setEditElementBuffer(prev => ({ ...prev, what: e.target.value }))} rows={2} /></div>
-              <div className="space-y-2"><Label>Not Included</Label><Textarea value={editElementBuffer.notIncluded || ''} onChange={(e) => setEditElementBuffer(prev => ({ ...prev, notIncluded: e.target.value }))} rows={2} placeholder="What is explicitly not part of this work..." /></div>
-              <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Complexity Factor</Label><Input type="number" step="0.1" min="0.5" max="3.0" value={editElementBuffer.complexityFactor || 1.0} onChange={(e) => setEditElementBuffer(prev => ({ ...prev, complexityFactor: parseFloat(e.target.value) || 1.0 }))} /></div><div className="space-y-2"><Label>Complexity Justification</Label><Input value={editElementBuffer.complexityJustification || ''} onChange={(e) => setEditElementBuffer(prev => ({ ...prev, complexityJustification: e.target.value }))} placeholder="Why factor differs from 1.0..." /></div></div>
-            </div>
-            <DialogFooter><Button variant="outline" onClick={() => setShowEditElement(false)}>Cancel</Button><Button onClick={handleSaveEditElement}>Save Changes</Button></DialogFooter>
           </DialogContent>
         </Dialog>
         
