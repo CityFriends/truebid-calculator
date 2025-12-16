@@ -12,6 +12,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
                      pathname?.startsWith('/forgot-password') ||
                      pathname?.startsWith('/reset-password') ||
                      pathname?.startsWith('/onboarding') 
+                     pathname?.startsWith('/account')
 
   if (isAuthPage) {
     return <>{children}</>

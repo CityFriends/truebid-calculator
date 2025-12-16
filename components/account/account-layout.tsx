@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ArrowLeft, User, Building2, Users, CreditCard, Lock } from 'lucide-react'
+import { ArrowLeft, User, Building2, DollarSign, Users, UserPlus, CreditCard, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 
@@ -14,7 +14,10 @@ interface AccountLayoutProps {
 const navigation = [
   { name: 'Profile', href: '/account/profile', icon: User },
   { name: 'Company', href: '/account/company', icon: Building2 },
-  { name: 'Team', href: '/account/team', icon: Users, locked: true },
+  { name: 'Rates & Margins', href: '/account/rates', icon: DollarSign },
+  { name: 'GSA Schedule', href: '/account/gsa', icon: FileText },
+  { name: 'Labor Categories', href: '/account/labor', icon: Users },
+  { name: 'Team', href: '/account/team', icon: UserPlus, locked: true },
   { name: 'Billing', href: '/account/billing', icon: CreditCard, locked: true },
 ]
 
@@ -41,7 +44,7 @@ export function AccountLayout({ children }: AccountLayoutProps) {
         <div className="flex gap-8">
           {/* Sidebar */}
           <aside className="w-56 flex-shrink-0">
-            <h1 className="text-lg font-semibold text-gray-900 mb-6">Account</h1>
+            <h1 className="text-lg font-semibold text-gray-900 mb-6">Settings</h1>
             <nav className="space-y-1">
               {navigation.map((item) => {
                 const isActive = pathname === item.href
