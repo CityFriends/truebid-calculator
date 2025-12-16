@@ -6,6 +6,7 @@ import { SubRatesTab } from '@/components/tabs/sub-rates-tab'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, Wrench, DollarSign, Calculator, Building2 } from 'lucide-react'
 import Link from 'next/link'
+import { useAppContext, UtilityToolType } from '@/contexts/app-context'
 
 export default function ToolsPage() {
   const { activeUtilityTool, setActiveUtilityTool } = useAppContext()
@@ -21,7 +22,7 @@ export default function ToolsPage() {
     { id: 'sub-rates', label: 'Sub Rates Calculator', icon: DollarSign, available: true },
     { id: 'rate-builder', label: 'Rate Builder', icon: Calculator, available: false },
     { id: 'wrap-rate', label: 'Wrap Rate Analyzer', icon: Building2, available: false },
-  ]
+  ] as const
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -52,7 +53,7 @@ export default function ToolsPage() {
               return (
                 <button
                   key={tool.id}
-                  onClick={() => tool.available && setActiveUtilityTool(tool.id)}
+                  onClick={() => tool.available && setActiveUtilityTool(tool.id as UtilityToolType)}
                   disabled={!tool.available}
                   className={`
                     flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg
