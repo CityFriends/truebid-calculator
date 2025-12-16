@@ -24,6 +24,7 @@ import {
   FileText,
   ExternalLink,
   LogOut,
+  User,
 } from 'lucide-react'
 import { SettingsSlideout } from '@/components/settings-slideout'
 
@@ -134,29 +135,35 @@ export function AppHeader() {
             </Button>
 
             {/* Settings Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                  <Settings className="w-4 h-4" />
-                  <span className="hidden sm:inline">Settings</span>
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={handleLogout}
-                  className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Log out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+<DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="ghost" size="sm" className="gap-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+      <Settings className="w-4 h-4" />
+      <span className="hidden sm:inline">Settings</span>
+      <ChevronDown className="w-3.5 h-3.5" />
+    </Button>
+  </DropdownMenuTrigger>
+  <DropdownMenuContent align="end" className="w-48">
+    <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+      <Settings className="w-4 h-4 mr-2" />
+      Settings
+    </DropdownMenuItem>
+    <DropdownMenuItem asChild>
+      <Link href="/account" className="flex items-center">
+        <User className="w-4 h-4 mr-2" />
+        Account
+      </Link>
+    </DropdownMenuItem>
+    <DropdownMenuSeparator />
+    <DropdownMenuItem 
+      onClick={handleLogout}
+      className="text-red-600 focus:text-red-600 focus:bg-red-50"
+    >
+      <LogOut className="w-4 h-4 mr-2" />
+      Log out
+    </DropdownMenuItem>
+ </DropdownMenuContent>
+</DropdownMenu>
           </div>
         </div>
       </header>

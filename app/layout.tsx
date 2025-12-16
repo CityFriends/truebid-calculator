@@ -4,6 +4,7 @@ import './globals.css'
 import { AppProvider } from '@/contexts/app-context'
 import { ThemeProvider } from '@/components/shared/theme-provider'
 import { LayoutWrapper } from '@/components/shared/layout-wrapper'
+import { Toaster } from '@/components/ui/sonner'
 
 export const metadata: Metadata = {
   title: 'TrueBid - Government Contracting Calculator',
@@ -25,6 +26,7 @@ export default function RootLayout({
             </LayoutWrapper>
           </AppProvider>
         </ThemeProvider>
+        <Toaster position="bottom-right" />
       </body>
     </html>
   )
