@@ -1918,14 +1918,38 @@ export function EstimateTab() {
     setActiveMainTab,
     // Shared WBS elements state - this is the key change!
     estimateWbsElements,
-    setEstimateWbsElements
+    setEstimateWbsElements,
+    // Company roles from Account Center
+    companyRoles,
   } = useAppContext()
   
   // Use context state for WBS elements (shared with Roles & Pricing tab)
   // Type assertion needed because context uses simpler type, but EnhancedWBSElement is compatible
   const wbsElements = estimateWbsElements as unknown as EnhancedWBSElement[]
   const setWbsElements = setEstimateWbsElements as unknown as (elements: EnhancedWBSElement[]) => void
-  const selectedRoles = ROLE_LIBRARY
+  
+  // Derive available roles from Account Center labor categories, fallback to mock data
+  const selectedRoles: SelectedRole[] = useMemo(() => {
+    if (companyRoles.length > 0) {
+      return companyRoles.map(role => {
+        // Get IC4 (Senior) salary as default, or first available level
+        const ic4Level = role.levels.find(l => l.level === 'IC4')
+        const firstLevel = role.levels[0]
+        const level = ic4Level || firstLevel
+        const baseSalary = level?.steps[0]?.salary || 120000
+        const baseRate = Math.round(baseSalary / 2080) // Convert to hourly
+        
+        return {
+          id: role.id,
+          name: role.title,
+          category: role.laborCategory || 'General',
+          baseRate,
+        }
+      })
+    }
+    // Fallback to mock data if no company roles defined
+    return ROLE_LIBRARY
+  }, [companyRoles])
   
   const contractPeriods = useMemo(() => {
     const periods: { key: PeriodKey; label: string }[] = []

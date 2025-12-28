@@ -1,6 +1,16 @@
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+
+// ==================== LOCALSTORAGE KEYS ====================
+
+const STORAGE_KEYS = {
+  COMPANY_ROLES: 'truebid-company-roles',
+  COMPANY_SETTINGS: 'truebid-company-settings',
+} as const;
+
+// Save status for UI indicators
+export type SaveStatus = 'idle' | 'saving' | 'saved';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -1098,6 +1108,7 @@ interface AppContextType {
   addCompanyRole: (role: CompanyRole) => void;
   updateCompanyRole: (id: string, updates: Partial<CompanyRole>) => void;
   removeCompanyRole: (id: string) => void;
+  companyRolesSaveStatus: SaveStatus;
   
   // Bid-Specific Roles
   recommendedRoles: Role[];
@@ -1241,6 +1252,7 @@ interface AppContextType {
   
   // Get years array for iteration
   getContractYearsArray: () => { key: string; label: string; enabled: boolean }[];
+  getIcLevelSalaries: () => Record<string, number>;
   
   // Legacy compatibility
   costMultipliers: { fringe: number; overhead: number; ga: number };
@@ -1254,6 +1266,131 @@ interface AppContextType {
 // ==================== CONTEXT CREATION ====================
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+// ==================== DEFAULT COMPANY ROLES ====================
+
+const DEFAULT_COMPANY_ROLES: CompanyRole[] = [
+  {
+    id: 'cr-1',
+    title: 'Product Designer',
+    laborCategory: 'UX/UI Designer',
+    description: 'User research and product design',
+    blsOccCode: '15-1252',
+    blsOccTitle: 'Software Developers',
+    gsaLaborCategory: 'UX/UI Designer',
+    gsaSin: '54151S',
+    levels: [
+      {
+        level: 'IC1',
+        levelName: 'Temp',
+        yearsExperience: '0-1',
+        monthsBeforePromotionReady: 12,
+        isTerminal: false,
+        steps: [
+          { step: 1, salary: 79850, monthsToNextStep: null },
+        ]
+      },
+      {
+        level: 'IC2',
+        levelName: 'Junior',
+        yearsExperience: '0-2',
+        monthsBeforePromotionReady: 18,
+        isTerminal: false,
+        steps: [
+          { step: 1, salary: 79850, monthsToNextStep: 12 },
+          { step: 2, salary: 82246, monthsToNextStep: null },
+        ]
+      },
+      {
+        level: 'IC3',
+        levelName: 'Intermediate',
+        yearsExperience: '2-4',
+        monthsBeforePromotionReady: 24,
+        isTerminal: false,
+        steps: [
+          { step: 1, salary: 103100, monthsToNextStep: 12 },
+          { step: 2, salary: 106193, monthsToNextStep: 12 },
+          { step: 3, salary: 109379, monthsToNextStep: null },
+        ]
+      },
+      {
+        level: 'IC4',
+        levelName: 'Senior',
+        yearsExperience: '4-7',
+        monthsBeforePromotionReady: 30,
+        isTerminal: false,
+        steps: [
+          { step: 1, salary: 133100, monthsToNextStep: 15 },
+          { step: 2, salary: 137093, monthsToNextStep: 15 },
+          { step: 3, salary: 141206, monthsToNextStep: null },
+        ]
+      },
+      {
+        level: 'IC5',
+        levelName: 'Staff',
+        yearsExperience: '7-10',
+        monthsBeforePromotionReady: 36,
+        isTerminal: false,
+        steps: [
+          { step: 1, salary: 169000, monthsToNextStep: 18 },
+          { step: 2, salary: 174070, monthsToNextStep: 18 },
+          { step: 3, salary: 179292, monthsToNextStep: null },
+        ]
+      },
+      {
+        level: 'IC6',
+        levelName: 'Principal',
+        yearsExperience: '10+',
+        monthsBeforePromotionReady: null,
+        isTerminal: true,
+        steps: [
+          { step: 1, salary: 211400, monthsToNextStep: 24 },
+          { step: 2, salary: 217742, monthsToNextStep: 24 },
+          { step: 3, salary: 224274, monthsToNextStep: null },
+        ]
+      }
+    ]
+  },
+];
+
+// ==================== LOCALSTORAGE HELPERS ====================
+
+// Helper to get initial companyRoles from localStorage (handles SSR)
+const getInitialCompanyRoles = (): CompanyRole[] => {
+  // Only access localStorage on client side
+  if (typeof window === 'undefined') return DEFAULT_COMPANY_ROLES;
+  
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.COMPANY_ROLES);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load company roles from localStorage:', e);
+  }
+  
+  return DEFAULT_COMPANY_ROLES;
+};
+
+// Helper to get initial companySettings from localStorage (handles SSR)
+const getInitialCompanySettings = (): CompanySettings => {
+  if (typeof window === 'undefined') return defaultCompanySettings;
+  
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.COMPANY_SETTINGS);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return { ...defaultCompanySettings, ...parsed };
+    }
+  } catch (e) {
+    console.warn('Failed to load company settings from localStorage:', e);
+  }
+  
+  return defaultCompanySettings;
+};
 
 // ==================== PROVIDER COMPONENT ====================
 
@@ -1310,8 +1447,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return solicitation.pricingSettings ?? defaultPricingSettings;
   };
 
-  // ==================== COMPANY SETTINGS ====================
-  const [companySettings, setCompanySettings] = useState<CompanySettings>(defaultCompanySettings);
+  // ==================== COMPANY SETTINGS (with localStorage) ====================
+  const [companySettings, setCompanySettings] = useState<CompanySettings>(getInitialCompanySettings);
+  
+  // Persist companySettings to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEYS.COMPANY_SETTINGS, JSON.stringify(companySettings));
+      } catch (e) {
+        console.warn('Failed to save company settings to localStorage:', e);
+      }
+    }
+  }, [companySettings]);
   
   const updateCompanySettings = (updates: Partial<CompanySettings>) => {
     setCompanySettings(prev => ({ ...prev, ...updates }));
@@ -1379,90 +1527,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ==================== CONTRACT CONFIG ====================
   const [contractType, setContractType] = useState<ContractType>('tm');
 
-  // ==================== COMPANY ROLE LIBRARY ====================
-  const [companyRoles, setCompanyRoles] = useState<CompanyRole[]>([
-    {
-      id: 'cr-1',
-      title: 'Product Designer',
-      laborCategory: 'UX/UI Designer',
-      description: 'User research and product design',
-      blsOccCode: '15-1252',
-      blsOccTitle: 'Software Developers',
-      gsaLaborCategory: 'UX/UI Designer',
-      gsaSin: '54151S',
-      levels: [
-        {
-          level: 'IC1',
-          levelName: 'Temp',
-          yearsExperience: '0-1',
-          monthsBeforePromotionReady: 12,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 79850, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC2',
-          levelName: 'Junior',
-          yearsExperience: '0-2',
-          monthsBeforePromotionReady: 18,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 79850, monthsToNextStep: 12 },
-            { step: 2, salary: 82246, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC3',
-          levelName: 'Intermediate',
-          yearsExperience: '2-4',
-          monthsBeforePromotionReady: 24,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 103100, monthsToNextStep: 12 },
-            { step: 2, salary: 106193, monthsToNextStep: 12 },
-            { step: 3, salary: 109379, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC4',
-          levelName: 'Senior',
-          yearsExperience: '4-7',
-          monthsBeforePromotionReady: 30,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 133100, monthsToNextStep: 15 },
-            { step: 2, salary: 137093, monthsToNextStep: 15 },
-            { step: 3, salary: 141206, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC5',
-          levelName: 'Staff',
-          yearsExperience: '7-10',
-          monthsBeforePromotionReady: 36,
-          isTerminal: false,
-          steps: [
-            { step: 1, salary: 169000, monthsToNextStep: 18 },
-            { step: 2, salary: 174070, monthsToNextStep: 18 },
-            { step: 3, salary: 179292, monthsToNextStep: null },
-          ]
-        },
-        {
-          level: 'IC6',
-          levelName: 'Principal',
-          yearsExperience: '10+',
-          monthsBeforePromotionReady: null,
-          isTerminal: true,
-          steps: [
-            { step: 1, salary: 211400, monthsToNextStep: 24 },
-            { step: 2, salary: 217742, monthsToNextStep: 24 },
-            { step: 3, salary: 224274, monthsToNextStep: null },
-          ]
-        }
-      ]
-    },
-  ]);
+  // ==================== COMPANY ROLE LIBRARY (with localStorage) ====================
+  const [companyRoles, setCompanyRoles] = useState<CompanyRole[]>(getInitialCompanyRoles);
+  const [companyRolesSaveStatus, setCompanyRolesSaveStatus] = useState<SaveStatus>('idle');
+  const saveStatusTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Persist companyRoles to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Clear any pending timeout
+      if (saveStatusTimeoutRef.current) {
+        clearTimeout(saveStatusTimeoutRef.current);
+      }
+      
+      setCompanyRolesSaveStatus('saving');
+      
+      try {
+        localStorage.setItem(STORAGE_KEYS.COMPANY_ROLES, JSON.stringify(companyRoles));
+        setCompanyRolesSaveStatus('saved');
+        
+        // Reset to idle after 2 seconds
+        saveStatusTimeoutRef.current = setTimeout(() => {
+          setCompanyRolesSaveStatus('idle');
+        }, 2000);
+      } catch (e) {
+        console.warn('Failed to save company roles to localStorage:', e);
+        setCompanyRolesSaveStatus('idle');
+      }
+    }
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (saveStatusTimeoutRef.current) {
+        clearTimeout(saveStatusTimeoutRef.current);
+      }
+    };
+  }, [companyRoles]);
 
   // ==================== BID-SPECIFIC DATA ====================
   const [recommendedRoles, setRecommendedRoles] = useState<Role[]>([]);
@@ -1785,7 +1885,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return baseYears + solicitation.periodOfPerformance.optionYears;
   };
 
-  const getContractYearsArray = (): { key: string; label: string; enabled: boolean }[] => {
+const getContractYearsArray = (): { key: string; label: string; enabled: boolean }[] => {
     const years: { key: string; label: string; enabled: boolean }[] = [];
     
     if (solicitation.periodOfPerformance.baseYear) {
@@ -1802,6 +1902,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     return years;
   };
+
+  // Get IC level salaries from company roles (for Roles & Pricing tab)
+  const getIcLevelSalaries = (): Record<string, number> => {
+    // Default salaries if no company roles exist
+    const defaults: Record<string, number> = {
+      IC1: 55000,
+      IC2: 75000,
+      IC3: 95000,
+      IC4: 120000,
+      IC5: 150000,
+      IC6: 180000,
+    };
+
+    // If no company roles, return defaults
+    if (companyRoles.length === 0) return defaults;
+
+    // Build salary map from first matching role for each IC level
+    const salaries: Record<string, number> = { ...defaults };
+    
+    companyRoles.forEach(role => {
+      role.levels.forEach(level => {
+        if (level.steps.length > 0 && level.steps[0].salary) {
+          salaries[level.level] = level.steps[0].salary;
+        }
+      });
+    });
+
+    return salaries;
+  };
+  
 
   // ==================== ROLE MANAGEMENT ====================
 
@@ -2097,6 +2227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addCompanyRole,
     updateCompanyRole,
     removeCompanyRole,
+    companyRolesSaveStatus,
     
     // Bid Roles
     recommendedRoles,
@@ -2192,6 +2323,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Derived values
     getTotalContractYears,
     getContractYearsArray,
+    getIcLevelSalaries,
     
     // Legacy compatibility
     costMultipliers,

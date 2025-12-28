@@ -148,14 +148,7 @@ const odcCategoryLabels: Record<string, string> = {
   'other': 'Other',
 }
 
-// IC Level to base salary mapping
-const icLevelRates: Record<string, number> = {
-  'IC2': 75000,
-  'IC3': 95000,
-  'IC4': 120000,
-  'IC5': 150000,
-  'IC6': 180000,
-}
+// IC Level rates - computed dynamically from Account Center (see useMemo inside component)
 
 const icLevelOptions = ['IC2', 'IC3', 'IC4', 'IC5', 'IC6']
 const fteOptions = [0.25, 0.5, 0.75, 1.0]
@@ -352,6 +345,9 @@ export function RolesAndPricingTab() {
     navigateToRateJustification,
     // WBS Data from Estimate tab (replaces scopingData)
   estimateWbsElements,
+  // Labor categories from Account Center
+  companyRoles,
+  getIcLevelSalaries,
 } = useAppContext()
   
   // Get pricing settings from solicitation (centralized source of truth)
@@ -362,6 +358,12 @@ export function RolesAndPricingTab() {
   const laborEscalation = pricingSettings.laborEscalation
   const odcEscalation = pricingSettings.odcEscalation
   const showEscalation = pricingSettings.escalationEnabled
+
+  // ==================== IC LEVEL RATES (from Account Center) ====================
+  
+  const icLevelRates = useMemo(() => {
+    return getIcLevelSalaries()
+  }, [getIcLevelSalaries, companyRoles])
 
   // ==================== DERIVED VALUES (needed early) ====================
 

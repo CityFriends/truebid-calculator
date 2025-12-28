@@ -21,6 +21,8 @@ import {
   Award,
   ExternalLink,
   DollarSign,
+  Check,
+  Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -73,6 +75,28 @@ const COMMON_CERTIFICATIONS = [
   'Cisco CCNA', 'Cisco CCNP', 'Kubernetes Administrator (CKA)',
 ]
 
+// Save Status Indicator Component
+function SaveStatusIndicator({ status }: { status: 'idle' | 'saving' | 'saved' }) {
+  if (status === 'idle') return null
+  
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-gray-500 animate-in fade-in duration-200">
+      {status === 'saving' && (
+        <>
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <span>Saving...</span>
+        </>
+      )}
+      {status === 'saved' && (
+        <>
+          <Check className="w-3 h-3 text-green-600" />
+          <span className="text-green-600">Saved</span>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function LaborPage() {
   const { 
     companyRoles, 
@@ -81,6 +105,7 @@ export function LaborPage() {
     removeCompanyRole,
     companySettings,
     updateCompanySettings,
+    companyRolesSaveStatus,
   } = useAppContext()
   
   const [searchQuery, setSearchQuery] = useState('')
@@ -131,10 +156,13 @@ export function LaborPage() {
           <h2 className="text-xl font-semibold text-gray-900">Labor Categories</h2>
           <p className="text-sm text-gray-600 mt-1">Define roles with SOC codes, education, and salary data</p>
         </div>
-        <Button onClick={handleAddRole} size="sm">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Role
-        </Button>
+        <div className="flex items-center gap-3">
+          <SaveStatusIndicator status={companyRolesSaveStatus} />
+          <Button onClick={handleAddRole} size="sm">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Role
+          </Button>
+        </div>
       </div>
 
       {/* Salary Structure Selector */}
