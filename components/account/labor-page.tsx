@@ -454,7 +454,7 @@ function EditRoleDialog({
   onClose: () => void
   salaryStructure: SalaryStructure
 }) {
-  const { companyRoles, updateCompanyRole } = useAppContext()
+  const { companyRoles, updateCompanyRole, companySettings } = useAppContext()
   const role = companyRoles.find(r => r.id === roleId) as ExtendedCompanyRole | undefined
   
   const [showSOCLookup, setShowSOCLookup] = useState(false)

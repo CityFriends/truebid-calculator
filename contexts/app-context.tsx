@@ -1530,7 +1530,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [contractType, setContractType] = useState<ContractType>('tm');
 
   // ==================== COMPANY ROLE LIBRARY (with localStorage) ====================
-  const [companyRoles, setCompanyRoles] = useState<CompanyRole[]>(getInitialCompanyRoles);
+  const [companyRoles, setCompanyRoles] = useState<CompanyRole[]>(DEFAULT_COMPANY_ROLES);
+const [isHydrated, setIsHydrated] = useState(false);
+
+// Load from localStorage after hydration
+useEffect(() => {
+  if (typeof window !== 'undefined' && isHydrated) {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.COMPANY_ROLES);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCompanyRoles(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load company roles from localStorage:', e);
+    }
+    setIsHydrated(true);
+  }
+}, []);
   const [companyRolesSaveStatus, setCompanyRolesSaveStatus] = useState<SaveStatus>('idle');
   const saveStatusTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
