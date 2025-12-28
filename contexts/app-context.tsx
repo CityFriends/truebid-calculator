@@ -46,10 +46,12 @@ export interface GSASin {
 // Company-wide settings
 export interface CompanySettings {
   salaryStructure: SalaryStructure;
+  stepIncreasePercent: number;
 }
 
 export const defaultCompanySettings: CompanySettings = {
   salaryStructure: 'steps',
+  stepIncreasePercent: 3,
 };
 
 // ==================== ESTIMATE TAB TYPES (BOE Support) ====================

@@ -166,21 +166,39 @@ export function LaborPage() {
       </div>
 
       {/* Salary Structure Selector */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          <div>
+     <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="flex items-center justify-between gap-6">
+          <div className="flex-1">
             <Label className="text-sm font-medium">Salary Structure</Label>
             <p className="text-xs text-gray-500 mt-0.5">How your company defines compensation levels</p>
+            <select
+              value={salaryStructure}
+              onChange={(e) => setSalaryStructure(e.target.value as SalaryStructure)}
+              className="h-9 mt-2 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900"
+            >
+              <option value="steps">Steps (annual increases within level)</option>
+              <option value="bands">Bands (min/mid/max range)</option>
+              <option value="single">Single (one salary per level)</option>
+            </select>
           </div>
-          <select
-            value={salaryStructure}
-            onChange={(e) => setSalaryStructure(e.target.value as SalaryStructure)}
-            className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900"
-          >
-            <option value="steps">Steps (annual increases within level)</option>
-            <option value="bands">Bands (min/mid/max range)</option>
-            <option value="single">Single (one salary per level)</option>
-          </select>
+          {salaryStructure === 'steps' && (
+            <div className="w-32">
+              <Label className="text-sm font-medium">Step Increase</Label>
+              <p className="text-xs text-gray-500 mt-0.5">Auto-increment %</p>
+              <div className="flex items-center gap-1 mt-2">
+                <Input
+                  type="number"
+                  value={companySettings?.stepIncreasePercent ?? 3}
+                  onChange={(e) => updateCompanySettings?.({ stepIncreasePercent: parseFloat(e.target.value) || 3 })}
+                  className="h-9 w-16 text-sm"
+                  min={0}
+                  max={20}
+                  step={0.5}
+                />
+                <span className="text-sm text-gray-500">%</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -818,7 +836,7 @@ function EditRoleDialog({
                           const lastStep = level.steps[level.steps.length - 1]
                           newLevels[levelIndex].steps.push({
                             step: lastStep.step + 1,
-                            salary: Math.round(lastStep.salary * 1.03),
+                            salary: Math.round(lastStep.salary * (1 + (companySettings?.stepIncreasePercent ?? 3) / 100)),
                             monthsToNextStep: null,
                           })
                           handleChange('levels', newLevels)
