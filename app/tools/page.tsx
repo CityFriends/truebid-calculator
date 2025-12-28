@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useAppContext } from '@/contexts/app-context'
 import { SubRatesTab } from '@/components/tabs/sub-rates-tab'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, Wrench, DollarSign, Calculator, Building2 } from 'lucide-react'
