@@ -148,9 +148,7 @@ const odcCategoryLabels: Record<string, string> = {
   'other': 'Other',
 }
 
-// IC Level rates - computed dynamically from Account Center (see useMemo inside component)
-
-const icLevelOptions = ['IC2', 'IC3', 'IC4', 'IC5', 'IC6']
+// icLevelOptions is now derived dynamically inside the component from icLevelRates
 const fteOptions = [0.25, 0.5, 0.75, 1.0]
 
 // ==================== BLS DATA FOR RATE JUSTIFICATION ====================
@@ -361,9 +359,15 @@ export function RolesAndPricingTab() {
 
   // ==================== IC LEVEL RATES (from Account Center) ====================
   
-  const icLevelRates = useMemo(() => {
+   const icLevelRates = useMemo(() => {
     return getIcLevelSalaries()
   }, [getIcLevelSalaries, companyRoles])
+
+  // Derive IC level options from actual company data
+  const icLevelOptions = useMemo(() => {
+    const levels = Object.keys(icLevelRates)
+    return levels.length > 0 ? levels.sort() : ['IC3', 'IC4', 'IC5'] // Fallback if no company data
+  }, [icLevelRates])
 
   // ==================== DERIVED VALUES (needed early) ====================
 

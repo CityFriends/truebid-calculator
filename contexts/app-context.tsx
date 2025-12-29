@@ -461,8 +461,6 @@ export const setAsideLabels: Record<string, string> = {
 
 // ==================== RATE JUSTIFICATION TYPES ====================
 
-// ==================== RATE JUSTIFICATION TYPES ====================
-
 export type JustificationStrength = 'strong' | 'adequate' | 'weak' | 'missing'
 
 export interface RateComparison {
@@ -1357,26 +1355,6 @@ const DEFAULT_COMPANY_ROLES: CompanyRole[] = [
 
 // ==================== LOCALSTORAGE HELPERS ====================
 
-// Helper to get initial companyRoles from localStorage (handles SSR)
-const getInitialCompanyRoles = (): CompanyRole[] => {
-  // Only access localStorage on client side
-  if (typeof window === 'undefined') return DEFAULT_COMPANY_ROLES;
-  
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.COMPANY_ROLES);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to load company roles from localStorage:', e);
-  }
-  
-  return DEFAULT_COMPANY_ROLES;
-};
-
 // Helper to get initial companySettings from localStorage (handles SSR)
 const getInitialCompanySettings = (): CompanySettings => {
   if (typeof window === 'undefined') return defaultCompanySettings;
@@ -1531,31 +1509,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ==================== COMPANY ROLE LIBRARY (with localStorage) ====================
   const [companyRoles, setCompanyRoles] = useState<CompanyRole[]>(DEFAULT_COMPANY_ROLES);
-const [isHydrated, setIsHydrated] = useState(false);
-
-// Load from localStorage after hydration
-useEffect(() => {
-  if (typeof window !== 'undefined' && isHydrated) {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.COMPANY_ROLES);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCompanyRoles(parsed);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load company roles from localStorage:', e);
-    }
-    setIsHydrated(true);
-  }
-}, []);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [companyRolesSaveStatus, setCompanyRolesSaveStatus] = useState<SaveStatus>('idle');
   const saveStatusTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const isInitialMount = React.useRef(true);
 
-  // Persist companyRoles to localStorage whenever it changes
+  // Load from localStorage after hydration (runs once on mount)
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEYS.COMPANY_ROLES);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCompanyRoles(parsed);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load company roles from localStorage:', e);
+      }
+      setIsHydrated(true);
+    }
+  }, []);
+
+  // Persist companyRoles to localStorage whenever it changes (skip initial mount)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isHydrated) {
+      // Skip the first render after hydration to avoid overwriting with same data
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+        return;
+      }
+      
       // Clear any pending timeout
       if (saveStatusTimeoutRef.current) {
         clearTimeout(saveStatusTimeoutRef.current);
@@ -1583,7 +1568,7 @@ useEffect(() => {
         clearTimeout(saveStatusTimeoutRef.current);
       }
     };
-  }, [companyRoles]);
+  }, [companyRoles, isHydrated]);
 
   // ==================== BID-SPECIFIC DATA ====================
   const [recommendedRoles, setRecommendedRoles] = useState<Role[]>([]);
@@ -1924,7 +1909,7 @@ const getContractYearsArray = (): { key: string; label: string; enabled: boolean
     return years;
   };
 
-  // Get IC level salaries from company roles (for Roles & Pricing tab)
+ // Get IC level salaries from company roles (for Roles & Pricing tab)
   const getIcLevelSalaries = (): Record<string, number> => {
     // Default salaries if no company roles exist
     const defaults: Record<string, number> = {
@@ -1939,18 +1924,22 @@ const getContractYearsArray = (): { key: string; label: string; enabled: boolean
     // If no company roles, return defaults
     if (companyRoles.length === 0) return defaults;
 
-    // Build salary map from first matching role for each IC level
-    const salaries: Record<string, number> = { ...defaults };
+    // Build salary map ONLY from company roles (no defaults mixed in)
+    const salaries: Record<string, number> = {};
     
     companyRoles.forEach(role => {
       role.levels.forEach(level => {
         if (level.steps.length > 0 && level.steps[0].salary) {
-          salaries[level.level] = level.steps[0].salary;
+          // Only add if not already set (first role's value wins)
+          if (!(level.level in salaries)) {
+            salaries[level.level] = level.steps[0].salary;
+          }
         }
       });
     });
 
-    return salaries;
+    // If somehow no levels were found, return defaults
+    return Object.keys(salaries).length > 0 ? salaries : defaults;
   };
   
 
