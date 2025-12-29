@@ -48,6 +48,9 @@ import {
   ArrowUpDown,
   Kanban,
   CalendarDays,
+  Settings2,
+  SlidersHorizontal,
+  Eye,
 } from 'lucide-react'
 
 // ============================================================================
@@ -74,6 +77,31 @@ interface Proposal {
   archived: boolean
   contractType: 'tm' | 'ffp' | 'hybrid'
   periodOfPerformance: string
+}
+
+// Card display settings - what shows on proposal cards
+interface CardDisplaySettings {
+  showStatus: boolean
+  showContractType: boolean
+  showDueDate: boolean
+  showValue: boolean
+  showClient: boolean
+  showTeamSize: boolean
+  showSolicitation: boolean
+  showProgress: boolean
+  showLastUpdated: boolean
+}
+
+const DEFAULT_CARD_SETTINGS: CardDisplaySettings = {
+  showStatus: true,
+  showContractType: true,
+  showDueDate: true,
+  showValue: true,
+  showClient: true,
+  showTeamSize: true,
+  showSolicitation: true,
+  showProgress: true,
+  showLastUpdated: true,
 }
 
 // ============================================================================
@@ -231,6 +259,7 @@ const getUniqueAgencies = (proposals: Proposal[]): string[] => {
 
 const PROPOSALS_STORAGE_KEY = 'truebid-proposals'
 const RECENTLY_VIEWED_KEY = 'truebid-recently-viewed'
+const CARD_SETTINGS_KEY = 'truebid-card-display-settings'
 
 const STATUS_OPTIONS: { value: ProposalStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All Statuses' },
@@ -258,6 +287,81 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 ]
 
 // ============================================================================
+// CARD DISPLAY SETTINGS DROPDOWN
+// ============================================================================
+
+function CardSettingsDropdown({
+  settings,
+  onSettingsChange,
+}: {
+  settings: CardDisplaySettings
+  onSettingsChange: (settings: CardDisplaySettings) => void
+}) {
+  const toggleSetting = (key: keyof CardDisplaySettings) => {
+    onSettingsChange({
+      ...settings,
+      [key]: !settings[key],
+    })
+  }
+
+  const settingsOptions: { key: keyof CardDisplaySettings; label: string }[] = [
+    { key: 'showStatus', label: 'Status' },
+    { key: 'showContractType', label: 'Contract Type' },
+    { key: 'showDueDate', label: 'Due Date' },
+    { key: 'showValue', label: 'Contract Value' },
+    { key: 'showClient', label: 'Agency / Client' },
+    { key: 'showTeamSize', label: 'Team Size' },
+    { key: 'showSolicitation', label: 'Solicitation #' },
+    { key: 'showProgress', label: 'Progress Bar' },
+    { key: 'showLastUpdated', label: 'Last Updated' },
+  ]
+
+  const enabledCount = Object.values(settings).filter(Boolean).length
+  const totalCount = Object.keys(settings).length
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="h-9 gap-1.5"
+          title="Show/hide card fields"
+        >
+          <Eye className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Fields</span>
+          <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+            {enabledCount}/{totalCount}
+          </Badge>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuLabel className="text-xs text-gray-500">
+          Show on cards
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {settingsOptions.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={option.key}
+            checked={settings[option.key]}
+            onCheckedChange={() => toggleSetting(option.key)}
+          >
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => onSettingsChange(DEFAULT_CARD_SETTINGS)}
+          className="text-xs text-gray-500 justify-center"
+        >
+          Reset to defaults
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+// ============================================================================
 // PROPOSAL CARD COMPONENT
 // ============================================================================
 
@@ -269,6 +373,7 @@ function ProposalCard({
   onToggleArchive,
   onStatusChange,
   isRecentlyViewed,
+  displaySettings,
 }: {
   proposal: Proposal
   onOpen: () => void
@@ -277,6 +382,7 @@ function ProposalCard({
   onToggleArchive: () => void
   onStatusChange: (status: ProposalStatus) => void
   isRecentlyViewed?: boolean
+  displaySettings: CardDisplaySettings
 }) {
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const statusConfig = getStatusConfig(proposal.status)
@@ -293,6 +399,14 @@ function ProposalCard({
     { id: 'no-bid', label: 'No Bid' },
   ]
 
+  // Check if we have any metadata to show in footer
+  const hasFooterContent = displaySettings.showSolicitation || 
+    displaySettings.showValue || 
+    displaySettings.showDueDate || 
+    displaySettings.showTeamSize || 
+    displaySettings.showLastUpdated ||
+    displaySettings.showProgress
+
   return (
     <div
       className={`
@@ -300,7 +414,7 @@ function ProposalCard({
         hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] 
         transition-all cursor-pointer bg-white
         ${proposal.archived ? 'opacity-60 border-gray-200' : ''}
-        ${isUrgent && !proposal.archived 
+        ${isUrgent && !proposal.archived && displaySettings.showDueDate
           ? 'border-l-4 border-l-amber-400 border-t-gray-200 border-r-gray-200 border-b-gray-200' 
           : 'border-gray-200 hover:border-blue-400'
         }
@@ -316,14 +430,14 @@ function ProposalCard({
       }}
     >
       {/* Tags row - Recently viewed & Due soon */}
-      {(isRecentlyViewed || isUrgent) && !proposal.archived && (
+      {(isRecentlyViewed || (isUrgent && displaySettings.showDueDate)) && !proposal.archived && (
         <div className="flex items-center gap-2 mb-2">
           {isRecentlyViewed && (
             <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">
               Recently viewed
             </span>
           )}
-          {isUrgent && (
+          {isUrgent && displaySettings.showDueDate && (
             <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-medium flex items-center gap-1">
               <Clock className="w-3 h-3" />
               Due in {daysUntilDue}d
@@ -341,70 +455,76 @@ function ProposalCard({
           </h3>
           
           {/* Badges */}
-          <div className="flex items-center gap-1.5 mb-2">
-            {/* Clickable Status Badge */}
-            <div className="relative">
-              <button
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  setShowStatusMenu(!showStatusMenu); 
-                }}
-                className={`
-                  inline-flex items-center text-[10px] px-1.5 py-0.5 h-5 rounded-md border-0 
-                  font-medium transition-all hover:ring-2 hover:ring-blue-200
-                  ${statusConfig.bgColor}
-                `}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${statusConfig.dotColor}`} />
-                {statusConfig.label}
-                <ChevronDown className="w-3 h-3 ml-1 opacity-60" />
-              </button>
-              
-              {/* Status Dropdown */}
-              {showStatusMenu && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-10" 
-                    onClick={(e) => { e.stopPropagation(); setShowStatusMenu(false); }}
-                  />
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 min-w-[140px]">
-                    {allStatuses.map((status) => {
-                      const config = getStatusConfig(status.id)
-                      const isSelected = proposal.status === status.id
-                      return (
-                        <button
-                          key={status.id}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onStatusChange(status.id)
-                            setShowStatusMenu(false)
-                          }}
-                          className={`
-                            w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left
-                            hover:bg-gray-50 transition-colors
-                            ${isSelected ? 'bg-gray-50 font-medium' : ''}
-                          `}
-                        >
-                          <span className={`w-2 h-2 rounded-full ${config.dotColor}`} />
-                          {status.label}
-                          {isSelected && <Check className="w-3 h-3 ml-auto text-blue-600" />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </>
+          {(displaySettings.showStatus || displaySettings.showContractType || proposal.archived) && (
+            <div className="flex items-center gap-1.5 mb-2">
+              {/* Clickable Status Badge */}
+              {displaySettings.showStatus && (
+                <div className="relative">
+                  <button
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setShowStatusMenu(!showStatusMenu); 
+                    }}
+                    className={`
+                      inline-flex items-center text-[10px] px-1.5 py-0.5 h-5 rounded-md border-0 
+                      font-medium transition-all hover:ring-2 hover:ring-blue-200
+                      ${statusConfig.bgColor}
+                    `}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${statusConfig.dotColor}`} />
+                    {statusConfig.label}
+                    <ChevronDown className="w-3 h-3 ml-1 opacity-60" />
+                  </button>
+                  
+                  {/* Status Dropdown */}
+                  {showStatusMenu && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-10" 
+                        onClick={(e) => { e.stopPropagation(); setShowStatusMenu(false); }}
+                      />
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 min-w-[140px]">
+                        {allStatuses.map((status) => {
+                          const config = getStatusConfig(status.id)
+                          const isSelected = proposal.status === status.id
+                          return (
+                            <button
+                              key={status.id}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onStatusChange(status.id)
+                                setShowStatusMenu(false)
+                              }}
+                              className={`
+                                w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left
+                                hover:bg-gray-50 transition-colors
+                                ${isSelected ? 'bg-gray-50 font-medium' : ''}
+                              `}
+                            >
+                              <span className={`w-2 h-2 rounded-full ${config.dotColor}`} />
+                              {status.label}
+                              {isSelected && <Check className="w-3 h-3 ml-auto text-blue-600" />}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {displaySettings.showContractType && (
+                <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 text-[10px] px-1.5 py-0 h-5">
+                  {(proposal.contractType || 'tm').toUpperCase()}
+                </Badge>
+              )}
+              {proposal.archived && (
+                <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 text-[10px] px-1.5 py-0 h-5">
+                  Archived
+                </Badge>
               )}
             </div>
-
-            <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 text-[10px] px-1.5 py-0 h-5">
-              {(proposal.contractType || 'tm').toUpperCase()}
-            </Badge>
-            {proposal.archived && (
-              <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 text-[10px] px-1.5 py-0 h-5">
-                Archived
-              </Badge>
-            )}
-          </div>
+          )}
         </div>
         
         {/* Action buttons - visible on hover */}
@@ -446,63 +566,75 @@ function ProposalCard({
       </div>
 
       {/* Client */}
-      <div className="flex items-center gap-2 text-xs text-gray-600 mb-3">
-        <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-        <span className="truncate">{proposal.client}</span>
-      </div>
+      {displaySettings.showClient && (
+        <div className="flex items-center gap-2 text-xs text-gray-600 mb-3">
+          <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <span className="truncate">{proposal.client || 'No agency specified'}</span>
+        </div>
+      )}
 
       {/* Metadata footer */}
-      <div className="space-y-1.5 text-xs border-t border-gray-100 pt-3">
-        <div className="flex items-center justify-between">
-          <span className="text-gray-500">Solicitation</span>
-          <span className="font-mono text-gray-700">{proposal.solicitation || '—'}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-gray-500">Value</span>
-          <span className="font-semibold text-gray-900">{formatCurrency(proposal.totalValue)}</span>
-        </div>
-        {proposal.dueDate && ['draft', 'in-review'].includes(proposal.status) && !isUrgent && (
-          <div className="flex items-center justify-between">
-            <span className="text-gray-500">Due</span>
-            <span className="text-gray-700">
-              {new Date(proposal.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </span>
-          </div>
-        )}
-        <div className="flex items-center justify-between">
-          <span className="text-gray-500">Team</span>
-          <span className="flex items-center gap-1 text-gray-700">
-            <Users className="w-3 h-3" />
-            {proposal.teamSize} members
-          </span>
-        </div>
-        
-        {/* Last updated */}
-        <div className="flex items-center justify-between pt-1 border-t border-gray-50">
-          <span className="text-gray-400">Updated</span>
-          <span className="text-gray-400">{formatRelativeTime(proposal.updatedAt)}</span>
-        </div>
-        
-        {/* Progress bar for active proposals */}
-        {['draft', 'in-review'].includes(proposal.status) && (
-          <div className="pt-2">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-gray-500">Progress</span>
-              <span className="text-gray-700">{proposal.progress}%</span>
+      {hasFooterContent && (
+        <div className="space-y-1.5 text-xs border-t border-gray-100 pt-3">
+          {displaySettings.showSolicitation && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Solicitation</span>
+              <span className="font-mono text-gray-700">{proposal.solicitation || '—'}</span>
             </div>
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  proposal.progress >= 90 ? 'bg-green-500' :
-                  proposal.progress >= 50 ? 'bg-blue-500' :
-                  'bg-yellow-500'
-                }`}
-                style={{ width: `${proposal.progress}%` }}
-              />
+          )}
+          {displaySettings.showValue && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Value</span>
+              <span className="font-semibold text-gray-900">{formatCurrency(proposal.totalValue)}</span>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+          {displaySettings.showDueDate && proposal.dueDate && ['draft', 'in-review'].includes(proposal.status) && !isUrgent && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Due</span>
+              <span className="text-gray-700">
+                {new Date(proposal.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+            </div>
+          )}
+          {displaySettings.showTeamSize && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Team</span>
+              <span className="flex items-center gap-1 text-gray-700">
+                <Users className="w-3 h-3" />
+                {proposal.teamSize} members
+              </span>
+            </div>
+          )}
+          
+          {/* Last updated */}
+          {displaySettings.showLastUpdated && (
+            <div className="flex items-center justify-between pt-1 border-t border-gray-50">
+              <span className="text-gray-400">Updated</span>
+              <span className="text-gray-400">{formatRelativeTime(proposal.updatedAt)}</span>
+            </div>
+          )}
+          
+          {/* Progress bar for active proposals */}
+          {displaySettings.showProgress && ['draft', 'in-review'].includes(proposal.status) && (
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-gray-500">Progress</span>
+                <span className="text-gray-700">{proposal.progress}%</span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    proposal.progress >= 90 ? 'bg-green-500' :
+                    proposal.progress >= 50 ? 'bg-blue-500' :
+                    'bg-yellow-500'
+                  }`}
+                  style={{ width: `${proposal.progress}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -863,6 +995,9 @@ export function Dashboard() {
   // Recently viewed
   const [recentlyViewed, setRecentlyViewed] = useState<string[]>([])
 
+  // Card display settings
+  const [cardSettings, setCardSettings] = useState<CardDisplaySettings>(DEFAULT_CARD_SETTINGS)
+
   // Load proposals from localStorage
   useEffect(() => {
     const stored = localStorage.getItem(PROPOSALS_STORAGE_KEY)
@@ -886,6 +1021,16 @@ export function Dashboard() {
         console.error('Failed to parse recently viewed:', e)
       }
     }
+
+    // Load card display settings
+    const cardSettingsStored = localStorage.getItem(CARD_SETTINGS_KEY)
+    if (cardSettingsStored) {
+      try {
+        setCardSettings({ ...DEFAULT_CARD_SETTINGS, ...JSON.parse(cardSettingsStored) })
+      } catch (e) {
+        console.error('Failed to parse card settings:', e)
+      }
+    }
     
     setIsLoaded(true)
   }, [])
@@ -903,6 +1048,13 @@ export function Dashboard() {
       localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(recentlyViewed))
     }
   }, [recentlyViewed, isLoaded])
+
+  // Save card settings when they change
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem(CARD_SETTINGS_KEY, JSON.stringify(cardSettings))
+    }
+  }, [cardSettings, isLoaded])
 
   // Auto-switch back from archive view if no archived proposals
   useEffect(() => {
@@ -1145,6 +1297,18 @@ export function Dashboard() {
               </div>
             )}
 
+            {/* Page Header with New Proposal CTA */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Proposals</h1>
+                <p className="text-sm text-gray-500">Manage and track your government contract proposals</p>
+              </div>
+              <Button onClick={handleImportRFP} className="gap-2">
+                <Plus className="w-4 h-4" />
+                New Proposal
+              </Button>
+            </div>
+
             {/* Stats Row - Clickable (hidden in archive view) */}
             {!showArchived && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -1275,6 +1439,14 @@ export function Dashboard() {
                 {/* Spacer */}
                 <div className="flex-1" />
 
+                {/* Card Display Settings */}
+                {(viewMode === 'grid' || viewMode === 'list') && (
+                  <CardSettingsDropdown
+                    settings={cardSettings}
+                    onSettingsChange={setCardSettings}
+                  />
+                )}
+
                 {/* Sort */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1370,12 +1542,6 @@ export function Dashboard() {
                     </Badge>
                   )}
                 </Button>
-
-                {/* New Proposal */}
-                <Button size="sm" className="h-9 gap-1.5" onClick={handleImportRFP}>
-                  <Plus className="w-4 h-4" />
-                  New Proposal
-                </Button>
               </div>
             </div>
 
@@ -1404,6 +1570,7 @@ export function Dashboard() {
                       onDelete={() => handleDelete(proposal.id)}
                       onStatusChange={(status) => handleStatusChange(proposal.id, status)}
                       isRecentlyViewed={recentlyViewed[0] === proposal.id}
+                      displaySettings={cardSettings}
                     />
                   ))}
                 </div>
@@ -1423,7 +1590,7 @@ export function Dashboard() {
                         className={`
                           flex items-center gap-4 p-4 bg-white border rounded-lg 
                           hover:shadow-sm cursor-pointer transition-all
-                          ${isUrgent && !proposal.archived
+                          ${isUrgent && !proposal.archived && cardSettings.showDueDate
                             ? 'border-l-4 border-l-amber-400 border-t-gray-200 border-r-gray-200 border-b-gray-200'
                             : 'border-gray-200 hover:border-blue-400'
                           }
@@ -1437,24 +1604,32 @@ export function Dashboard() {
                                 Recently viewed
                               </span>
                             )}
-                            {isUrgent && (
+                            {isUrgent && cardSettings.showDueDate && (
                               <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-medium flex items-center gap-1 shrink-0">
                                 <Clock className="w-3 h-3" />
                                 Due in {daysUntilDue}d
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-500 truncate">{proposal.client}</p>
+                          {cardSettings.showClient && (
+                            <p className="text-xs text-gray-500 truncate">{proposal.client}</p>
+                          )}
                         </div>
-                        <Badge className={`shrink-0 ${getStatusConfig(proposal.status).bgColor}`}>
-                          {getStatusConfig(proposal.status).label}
-                        </Badge>
-                        <span className="text-sm font-semibold text-gray-900 shrink-0 w-20 text-right">
-                          {formatCurrency(proposal.totalValue)}
-                        </span>
-                        <span className="text-xs text-gray-500 shrink-0 w-24 text-right">
-                          {formatRelativeTime(proposal.updatedAt)}
-                        </span>
+                        {cardSettings.showStatus && (
+                          <Badge className={`shrink-0 ${getStatusConfig(proposal.status).bgColor}`}>
+                            {getStatusConfig(proposal.status).label}
+                          </Badge>
+                        )}
+                        {cardSettings.showValue && (
+                          <span className="text-sm font-semibold text-gray-900 shrink-0 w-20 text-right">
+                            {formatCurrency(proposal.totalValue)}
+                          </span>
+                        )}
+                        {cardSettings.showLastUpdated && (
+                          <span className="text-xs text-gray-500 shrink-0 w-24 text-right">
+                            {formatRelativeTime(proposal.updatedAt)}
+                          </span>
+                        )}
                         <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
                       </div>
                     )
