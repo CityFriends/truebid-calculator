@@ -27,7 +27,7 @@ interface UserProfile {
   avatarUrl: string | null
 }
 
-export function ProfilePage() {
+export default function ProfilePage() {
   const router = useRouter()
   const [profile, setProfile] = useState<UserProfile>({
     fullName: '',
@@ -320,4 +320,4 @@ export function ProfilePage() {
   )
 }
 
-export default ProfilePage
+// export default ProfilePage
