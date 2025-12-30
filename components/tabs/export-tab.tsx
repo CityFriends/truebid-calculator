@@ -79,6 +79,61 @@ const formatCurrency = (amount: number): string => {
   return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+/**
+ * Find matching company role with improved matching logic
+ * Priority: 1) companyRoleId, 2) exact title, 3) laborCategory, 4) fuzzy match
+ */
+const findMatchingCompanyRole = (
+  role: { 
+    companyRoleId?: string
+    name?: string
+    title?: string
+    icLevel?: string
+    laborCategory?: string 
+  },
+  companyRoles: any[]
+): any | null => {
+  if (!companyRoles || companyRoles.length === 0) return null
+
+  const roleName = (role.title || role.name || '').toLowerCase().trim()
+  const roleLaborCat = (role.laborCategory || '').toLowerCase().trim()
+
+  // 1. Match by companyRoleId (most reliable)
+  if (role.companyRoleId) {
+    const match = companyRoles.find(cr => cr.id === role.companyRoleId)
+    if (match) return match
+  }
+
+  // 2. Exact title match
+  const exactMatch = companyRoles.find(cr => 
+    cr.title.toLowerCase().trim() === roleName
+  )
+  if (exactMatch) return exactMatch
+
+  // 3. Match by labor category
+  if (roleLaborCat) {
+    const laborCatMatch = companyRoles.find(cr =>
+      (cr.laborCategory || '').toLowerCase().trim() === roleLaborCat
+    )
+    if (laborCatMatch) return laborCatMatch
+  }
+
+  // 4. Fuzzy match - title contains or is contained by
+  const fuzzyMatch = companyRoles.find(cr => {
+    const crTitle = cr.title.toLowerCase().trim()
+    return (
+      crTitle.includes(roleName) ||
+      roleName.includes(crTitle) ||
+      // Also check words overlap (e.g., "Senior Software Engineer" matches "Software Engineer")
+      roleName.split(' ').filter(w => w.length > 3).some(word => crTitle.includes(word))
+    )
+  })
+  if (fuzzyMatch) return fuzzyMatch
+
+  // 5. No match found
+  return null
+}
+
 // ============================================================================
 // MOCK WBS DATA
 // ============================================================================
@@ -499,12 +554,8 @@ function SectionSlideout({
                 <h4 className="text-sm font-semibold text-gray-900">Labor Categories ({selectedRoles.length})</h4>
                 <div className="space-y-3">
                   {selectedRoles.map((role) => {
-                    // Find matching company role
-                    const companyRole = companyRoles.find(cr => 
-                      cr.title.toLowerCase().includes(role.name?.toLowerCase() || '') ||
-                      (role.name?.toLowerCase() || '').includes(cr.title.toLowerCase()) ||
-                      cr.title === role.title
-                    )
+                    // Use improved matching function
+                    const companyRole = findMatchingCompanyRole(role, companyRoles)
                     
                     // Find level info
                     const levelInfo = companyRole?.levels?.find((l: any) => l.level === role.icLevel)
@@ -566,7 +617,14 @@ function SectionSlideout({
                       <div key={role.id} className="p-4 border border-gray-200 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                           <h5 className="font-medium text-gray-900">{role.title || role.name}</h5>
-                          <Badge variant="outline">{role.icLevel}</Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{role.icLevel}</Badge>
+                            {companyRole && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Matched
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         
                         {/* Description */}
@@ -865,7 +923,6 @@ export function ExportTab() {
     calculateEscalatedRate,
     companyRoles,
     solicitation,
-    setActiveTab,
     wbsElements: contextWbsElements,
   } = useAppContext()
 
@@ -1013,11 +1070,9 @@ export function ExportTab() {
         escalationRate: escalationRates.laborDefault,
         productiveHours: companyPolicy.standardHours,
         roles: selectedRoles.map(role => {
-          const companyRole = companyRoles.find(cr => 
-            cr.title.toLowerCase().includes(role.name.toLowerCase()) ||
-            role.name.toLowerCase().includes(cr.title.toLowerCase())
-          )
-          const levelInfo = companyRole?.levels.find(l => l.level === role.icLevel)
+          // Use improved matching function
+          const companyRole = findMatchingCompanyRole(role, companyRoles)
+          const levelInfo = companyRole?.levels?.find((l: any) => l.level === role.icLevel)
           
           return {
             id: role.id,
@@ -1025,7 +1080,7 @@ export function ExportTab() {
             icLevel: role.icLevel,
             baseSalary: role.baseSalary,
             quantity: role.quantity,
-            description: role.description,
+            description: companyRole?.description || role.description,
             blsCode: companyRole?.blsOccCode,
             yearsExperience: levelInfo?.yearsExperience,
             education: levelInfo?.education
@@ -1192,13 +1247,9 @@ export function ExportTab() {
             <div className="text-center py-12 bg-amber-50 border border-amber-200 rounded-lg">
               <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
               <h3 className="text-lg font-semibold text-amber-900 mb-1">No roles selected</h3>
-              <p className="text-sm text-amber-700 mb-4">
-                Add roles in Roles & Pricing to generate export documents.
+              <p className="text-sm text-amber-700">
+                Add roles in the Roles & Pricing tab to generate export documents.
               </p>
-              <Button variant="outline" onClick={() => setActiveTab('roles-pricing')}>
-                Go to Roles & Pricing
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
             </div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
