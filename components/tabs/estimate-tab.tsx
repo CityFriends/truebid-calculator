@@ -2177,7 +2177,7 @@ const handleRequirementSelect = (reqId: string) => {
       ...prev, 
       linkedRequirementId: reqId,
       title: req.title || prev.title,
-      sowReference: req.referenceNumber || prev.sowReference,
+      sowReference: req.source || prev.sowReference,
     }))
   }
 }
@@ -2547,7 +2547,7 @@ const handleAddRoleToTeam = (roleName: string) => {
         <SelectTrigger className="w-[130px] h-9 text-xs">
           <span className="text-gray-500">Add under...</span>
         </SelectTrigger>
-        <SelectContent>
+       <SelectContent position="popper" sideOffset={4}>
           {wbsElements
             .slice()
             .sort((a, b) => a.wbsNumber.localeCompare(b.wbsNumber, undefined, { numeric: true }))
