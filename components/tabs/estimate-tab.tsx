@@ -2413,7 +2413,7 @@ const handleAddRoleToTeam = (roleName: string) => {
       {/* Requirement Selector - NEW! */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <Label htmlFor="linked-requirement">Linked Requirement</Label>
+          <Label htmlFor="linked-requirement">Linked Requirement <span className="text-red-500" aria-label="required">*</span></Label>
           <Tooltip>
             <TooltipTrigger asChild>
               <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
@@ -2422,7 +2422,7 @@ const handleAddRoleToTeam = (roleName: string) => {
               <p className="text-sm">Select a requirement to auto-fill the title and create traceability. Unmapped requirements are shown first.</p>
             </TooltipContent>
           </Tooltip>
-          <span className="text-xs text-gray-500 ml-auto">(optional)</span>
+          <span className="text-red-500 ml-auto" aria-label="required">*</span>
         </div>
         <Select 
           value={newElement.linkedRequirementId || ''} 
@@ -2676,7 +2676,7 @@ const handleAddRoleToTeam = (roleName: string) => {
       <Button variant="outline" onClick={() => setShowAddElement(false)}>Cancel</Button>
       <Button 
         onClick={handleAddElement} 
-        disabled={!newElement.wbsNumber || !newElement.title}
+        disabled={!newElement.wbsNumber || !newElement.title || !newElement.linkedRequirementId}
       >
         <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
         Add Element
