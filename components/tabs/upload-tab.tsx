@@ -16,6 +16,8 @@ import {
   Shield,
   MapPin,
   Pencil,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
 
 // ==================== TYPES ====================
@@ -23,54 +25,101 @@ interface UploadTabProps {
   onContinue?: () => void
 }
 
-// ==================== MOCK EXTRACTED DATA ====================
-const mockExtractedSolicitation = {
-  solicitationNumber: '75D301-24-R-00456',
-  title: 'Enterprise Cloud Migration and DevSecOps Support Services',
-  clientAgency: 'Department of Health and Human Services',
-  subAgency: 'Centers for Medicare & Medicaid Services',
-  proposalDueDate: '2025-01-15',
-  contractType: 'T&M' as const,
-  naicsCode: '541512',
+interface ExtractedMetadata {
+  title: string
+  solicitationNumber: string
+  clientAgency: string
+  contractType: 'ffp' | 'tm' | 'cpff' | 'idiq' | 'unknown'
+  naicsCode: string
+  responseDeadline: string
   periodOfPerformance: {
-    baseYear: true,
-    optionYears: 4,
-  },
-  setAside: 'small-business' as const,
-  requiresClearance: true,
-  clearanceLevel: 'public-trust' as const,
-  placeOfPerformance: {
-    type: 'hybrid' as const,
-    locations: ['Baltimore, MD', 'Washington, DC'],
-    travelRequired: true,
-    travelPercent: 15,
-  },
-  pricingSettings: {
-    billableHours: 1920,
-    profitMargin: 8,
-    escalationEnabled: true,
-    laborEscalation: 3,
-    odcEscalation: 0,
-  },
+    base: number
+    options: number
+  }
+  placeOfPerformance: string
+  setAside: string
 }
 
-const mockExtractedRoles = [
-  { id: 'rec-1', name: 'Technical Lead', description: 'Technical Lead position overseeing architecture and team delivery', icLevel: 'IC5' as const, baseSalary: 150000, quantity: 1, fte: 1, storyPoints: 45, years: { base: true, option1: true, option2: true, option3: true, option4: true }, isKeyPersonnel: true, confidence: 'high' as const },
-  { id: 'rec-2', name: 'Senior Software Engineer', description: 'Senior Software Engineer for cloud migration and DevSecOps implementation', icLevel: 'IC4' as const, baseSalary: 120000, quantity: 3, fte: 1, storyPoints: 120, years: { base: true, option1: true, option2: true, option3: true, option4: true }, confidence: 'high' as const },
-  { id: 'rec-3', name: 'DevOps Engineer', description: 'DevOps Engineer for CI/CD pipeline and infrastructure automation', icLevel: 'IC4' as const, baseSalary: 120000, quantity: 1, fte: 1, storyPoints: 35, years: { base: true, option1: true, option2: true, option3: true, option4: true }, confidence: 'medium' as const },
-  { id: 'rec-4', name: 'Cloud Security Engineer', description: 'Security specialist for FedRAMP compliance and DevSecOps', icLevel: 'IC4' as const, baseSalary: 125000, quantity: 1, fte: 1, storyPoints: 30, years: { base: true, option1: true, option2: true, option3: true, option4: true }, confidence: 'medium' as const },
-  { id: 'rec-5', name: 'Business Analyst', description: 'Business Analyst for requirements gathering and stakeholder coordination', icLevel: 'IC3' as const, baseSalary: 95000, quantity: 1, fte: 1, storyPoints: 20, years: { base: true, option1: true, option2: true, option3: true, option4: true }, confidence: 'low' as const },
-]
+interface ExtractedRequirement {
+  id: string
+  text: string
+  type: 'delivery' | 'reporting' | 'staffing' | 'compliance' | 'governance' | 'transition' | 'other'
+  sourceSection: string
+}
+
+interface SuggestedRole {
+  title: string
+  quantity: number
+  rationale: string
+}
+
+interface ExtractionResponse {
+  success: boolean
+  metadata: ExtractedMetadata
+  requirements: ExtractedRequirement[]
+  suggestedRoles: SuggestedRole[]
+  rawTextLength: number
+  error?: string
+}
 
 // ==================== HELPERS ====================
 const setAsideLabels: Record<string, string> = {
   'full-open': 'Full & Open',
+  'Full & Open': 'Full & Open',
   'small-business': 'Small Business',
+  'Small Business': 'Small Business',
   '8a': '8(a)',
+  '8(a)': '8(a)',
   'hubzone': 'HUBZone',
+  'HUBZone': 'HUBZone',
   'sdvosb': 'SDVOSB',
+  'SDVOSB': 'SDVOSB',
   'wosb': 'WOSB',
-  'edwosb': 'EDWOSB'
+  'WOSB': 'WOSB',
+  'edwosb': 'EDWOSB',
+  'EDWOSB': 'EDWOSB',
+  'N/A': 'Not Specified',
+}
+
+const contractTypeLabels: Record<string, string> = {
+  'ffp': 'Firm Fixed Price',
+  'tm': 'Time & Materials',
+  'cpff': 'Cost Plus Fixed Fee',
+  'idiq': 'IDIQ',
+  'unknown': 'Not Specified',
+}
+
+// Map API contract type to context format
+const mapContractType = (type: string): 'FFP' | 'T&M' | 'CPFF' | 'IDIQ' => {
+  const mapping: Record<string, 'FFP' | 'T&M' | 'CPFF' | 'IDIQ'> = {
+    'ffp': 'FFP',
+    'tm': 'T&M',
+    'cpff': 'CPFF',
+    'idiq': 'IDIQ',
+    'unknown': 'T&M', // Default to T&M if unknown
+  }
+  return mapping[type.toLowerCase()] || 'T&M'
+}
+
+// Map set-aside to context format
+const mapSetAside = (setAside: string): string => {
+  const mapping: Record<string, string> = {
+    'Small Business': 'small-business',
+    'small-business': 'small-business',
+    '8(a)': '8a',
+    '8a': '8a',
+    'HUBZone': 'hubzone',
+    'hubzone': 'hubzone',
+    'SDVOSB': 'sdvosb',
+    'sdvosb': 'sdvosb',
+    'WOSB': 'wosb',
+    'wosb': 'wosb',
+    'EDWOSB': 'edwosb',
+    'edwosb': 'edwosb',
+    'Full & Open': 'full-open',
+    'full-open': 'full-open',
+  }
+  return mapping[setAside] || 'full-open'
 }
 
 // ==================== COMPONENT ====================
@@ -81,13 +130,15 @@ export function UploadTab({ onContinue }: UploadTabProps) {
     solicitation,
     openSolicitationEditor,
     resetSolicitation,
+    setExtractedRequirements,
   } = useAppContext()
   
   const [isDragging, setIsDragging] = useState(false)
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
-  const [state, setState] = useState<'idle' | 'analyzing' | 'complete'>('idle')
+  const [state, setState] = useState<'idle' | 'analyzing' | 'complete' | 'error'>('idle')
   const [progress, setProgress] = useState(0)
   const [progressText, setProgressText] = useState('')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   
   // Expanded details view
   const [showDetails, setShowDetails] = useState(false)
@@ -129,38 +180,122 @@ export function UploadTab({ onContinue }: UploadTabProps) {
     }
   }, [])
 
-  // File upload and analysis
+  // File upload and analysis - NOW CALLS REAL API
   const handleFileUpload = async (file: File) => {
     setUploadedFileName(file.name)
     setState('analyzing')
     setProgress(0)
+    setErrorMessage(null)
 
-    const steps = [
-      { progress: 15, text: 'Uploading document...' },
-      { progress: 30, text: 'Parsing PDF structure...' },
-      { progress: 50, text: 'Extracting solicitation details...' },
-      { progress: 70, text: 'Identifying contract structure...' },
-      { progress: 85, text: 'Analyzing compliance requirements...' },
-      { progress: 100, text: 'Complete!' },
-    ]
+    try {
+      // Stage 1: Uploading
+      setProgress(10)
+      setProgressText('Uploading document...')
+      
+      const formData = new FormData()
+      formData.append('file', file)
 
-    for (const step of steps) {
-      await new Promise(resolve => setTimeout(resolve, 400))
-      setProgress(step.progress)
-      setProgressText(step.text)
+      // Stage 2: Processing
+      setProgress(25)
+      setProgressText('Processing PDF...')
+
+      const response = await fetch('/api/extract-rfp', {
+        method: 'POST',
+        body: formData,
+      })
+
+      // Stage 3: Analyzing
+      setProgress(60)
+      setProgressText('AI analyzing solicitation...')
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Upload failed: ${response.status}`)
+      }
+
+      const data: ExtractionResponse = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || 'Extraction failed')
+      }
+
+      // Stage 4: Finalizing
+      setProgress(90)
+      setProgressText('Finalizing extraction...')
+
+      // Map API response to context format
+      const { metadata, requirements, suggestedRoles } = data
+
+      // Update solicitation in context
+      updateSolicitation({
+        solicitationNumber: metadata.solicitationNumber !== 'N/A' ? metadata.solicitationNumber : '',
+        title: metadata.title,
+        clientAgency: metadata.clientAgency !== 'N/A' ? metadata.clientAgency : '',
+        contractType: mapContractType(metadata.contractType),
+        naicsCode: metadata.naicsCode !== 'N/A' ? metadata.naicsCode : '',
+        proposalDueDate: metadata.responseDeadline !== 'N/A' ? metadata.responseDeadline : '',
+        periodOfPerformance: {
+          baseYear: true,
+          optionYears: metadata.periodOfPerformance.options,
+        },
+        setAside: mapSetAside(metadata.setAside),
+        placeOfPerformance: {
+          type: metadata.placeOfPerformance?.toLowerCase().includes('remote') 
+            ? 'remote' as const
+            : metadata.placeOfPerformance?.toLowerCase().includes('hybrid')
+              ? 'hybrid' as const
+              : 'on-site' as const,
+          locations: metadata.placeOfPerformance !== 'N/A' ? [metadata.placeOfPerformance] : [],
+          travelRequired: false,
+          travelPercent: 0,
+        },
+        analyzedFromDocument: file.name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+
+      // Store extracted requirements for Estimate tab
+      if (setExtractedRequirements && requirements.length > 0) {
+        setExtractedRequirements(requirements)
+      }
+
+      // Map suggested roles to recommended roles format
+      if (suggestedRoles.length > 0) {
+        const mappedRoles = suggestedRoles.map((role, index) => ({
+          id: `rec-${index + 1}`,
+          name: role.title,
+          description: role.rationale,
+          icLevel: 'IC4' as const, // Default to IC4, user can adjust
+          baseSalary: 120000, // Default salary, will be overridden by Account Center
+          quantity: role.quantity,
+          fte: 1,
+          storyPoints: 0,
+          years: { 
+            base: true, 
+            option1: metadata.periodOfPerformance.options >= 1,
+            option2: metadata.periodOfPerformance.options >= 2,
+            option3: metadata.periodOfPerformance.options >= 3,
+            option4: metadata.periodOfPerformance.options >= 4,
+          },
+          confidence: 'medium' as const,
+        }))
+        setRecommendedRoles(mappedRoles)
+      }
+
+      // Complete
+      setProgress(100)
+      setProgressText('Complete!')
+      
+      await new Promise(resolve => setTimeout(resolve, 500)) // Brief pause to show completion
+      
+      setState('complete')
+      setShowDetails(true)
+
+    } catch (error) {
+      console.error('Upload/extraction error:', error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to analyze document')
+      setState('error')
     }
-
-    // Update context with all extracted data (including detected contract type)
-    updateSolicitation({
-      ...mockExtractedSolicitation,
-      analyzedFromDocument: file.name,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    })
-
-    setRecommendedRoles(mockExtractedRoles)
-    setState('complete')
-    setShowDetails(true)
   }
 
   const handleReset = () => {
@@ -170,9 +305,15 @@ export function UploadTab({ onContinue }: UploadTabProps) {
     setProgress(0)
     setProgressText('')
     setShowDetails(false)
+    setErrorMessage(null)
     
     // Reset context
     resetSolicitation()
+  }
+
+  const handleRetry = () => {
+    setState('idle')
+    setErrorMessage(null)
   }
 
   const handleContinue = () => {
@@ -229,11 +370,18 @@ export function UploadTab({ onContinue }: UploadTabProps) {
                   Drop your RFP here
                 </p>
                 <p className="text-xs text-gray-500">
-                  or click to browse • PDF up to 50MB
+                  or click to browse • PDF up to 10MB
                 </p>
               </div>
             </div>
           </div>
+
+          {/* Previous file indicator */}
+          {uploadedFileName && (
+            <p className="text-xs text-gray-500 text-center">
+              Previously uploaded: {uploadedFileName}
+            </p>
+          )}
         </div>
       )}
 
@@ -263,6 +411,38 @@ export function UploadTab({ onContinue }: UploadTabProps) {
             <FileText className="w-3.5 h-3.5" />
             <span>{uploadedFileName}</span>
           </div>
+
+          <p className="text-xs text-gray-400 text-center">
+            This may take 10-30 seconds depending on document size
+          </p>
+        </div>
+      )}
+
+      {/* ==================== ERROR STATE ==================== */}
+      {state === 'error' && (
+        <div className="space-y-6">
+          <div className="text-center">
+            <div className="w-14 h-14 rounded-lg bg-red-50 mx-auto flex items-center justify-center mb-4">
+              <AlertCircle className="w-7 h-7 text-red-600" />
+            </div>
+            <h1 className="text-xl font-semibold text-gray-900 mb-1">Analysis Failed</h1>
+            <p className="text-sm text-red-600">{errorMessage}</p>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+            <FileText className="w-3.5 h-3.5" />
+            <span>{uploadedFileName}</span>
+          </div>
+
+          <div className="flex items-center justify-center gap-3">
+            <Button variant="outline" onClick={handleReset}>
+              Upload Different File
+            </Button>
+            <Button onClick={handleRetry}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Try Again
+            </Button>
+          </div>
         </div>
       )}
 
@@ -280,10 +460,10 @@ export function UploadTab({ onContinue }: UploadTabProps) {
                 <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
                 <div className="text-left min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
-                    {solicitation.solicitationNumber || mockExtractedSolicitation.solicitationNumber}
+                    {solicitation.solicitationNumber || 'No solicitation number'}
                   </p>
                   <p className="text-xs text-gray-500 truncate">
-                    {solicitation.clientAgency || mockExtractedSolicitation.clientAgency} • 1 Base + {solicitation.periodOfPerformance?.optionYears ?? mockExtractedSolicitation.periodOfPerformance.optionYears} Options
+                    {solicitation.clientAgency || 'Unknown agency'} • 1 Base + {solicitation.periodOfPerformance?.optionYears ?? 0} Options
                   </p>
                 </div>
               </div>
@@ -302,7 +482,7 @@ export function UploadTab({ onContinue }: UploadTabProps) {
                 {/* Title */}
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Title</p>
-                  <p className="text-sm text-gray-900">{solicitation.title || mockExtractedSolicitation.title}</p>
+                  <p className="text-sm text-gray-900">{solicitation.title || 'Untitled'}</p>
                 </div>
 
                 {/* Details Grid */}
@@ -311,9 +491,9 @@ export function UploadTab({ onContinue }: UploadTabProps) {
                     <Building2 className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="text-xs text-gray-500">Agency</p>
-                      <p className="text-sm text-gray-900">{solicitation.clientAgency || mockExtractedSolicitation.clientAgency}</p>
-                      {(solicitation.subAgency || mockExtractedSolicitation.subAgency) && (
-                        <p className="text-xs text-gray-500">{solicitation.subAgency || mockExtractedSolicitation.subAgency}</p>
+                      <p className="text-sm text-gray-900">{solicitation.clientAgency || 'Not specified'}</p>
+                      {solicitation.subAgency && (
+                        <p className="text-xs text-gray-500">{solicitation.subAgency}</p>
                       )}
                     </div>
                   </div>
@@ -323,11 +503,14 @@ export function UploadTab({ onContinue }: UploadTabProps) {
                     <div>
                       <p className="text-xs text-gray-500">Proposal Due</p>
                       <p className="text-sm text-gray-900">
-                        {new Date(solicitation.proposalDueDate || mockExtractedSolicitation.proposalDueDate).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        })}
+                        {solicitation.proposalDueDate 
+                          ? new Date(solicitation.proposalDueDate).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })
+                          : 'Not specified'
+                        }
                       </p>
                     </div>
                   </div>
@@ -335,9 +518,9 @@ export function UploadTab({ onContinue }: UploadTabProps) {
                   <div className="flex items-start gap-2">
                     <Shield className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-xs text-gray-500">Clearance</p>
-                      <p className="text-sm text-gray-900 capitalize">
-                        {(solicitation.clearanceLevel || mockExtractedSolicitation.clearanceLevel)?.replace('-', ' ') || 'None'}
+                      <p className="text-xs text-gray-500">Contract Type</p>
+                      <p className="text-sm text-gray-900">
+                        {solicitation.contractType || 'Not specified'}
                       </p>
                     </div>
                   </div>
@@ -347,7 +530,7 @@ export function UploadTab({ onContinue }: UploadTabProps) {
                     <div>
                       <p className="text-xs text-gray-500">Location</p>
                       <p className="text-sm text-gray-900 capitalize">
-                        {solicitation.placeOfPerformance?.type || mockExtractedSolicitation.placeOfPerformance.type}
+                        {solicitation.placeOfPerformance?.type || 'Not specified'}
                       </p>
                     </div>
                   </div>
@@ -355,12 +538,16 @@ export function UploadTab({ onContinue }: UploadTabProps) {
 
                 {/* Tags */}
                 <div className="flex flex-wrap gap-2">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-gray-200 text-gray-700">
-                    NAICS: {solicitation.naicsCode || mockExtractedSolicitation.naicsCode}
-                  </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                    {setAsideLabels[(solicitation.setAside || mockExtractedSolicitation.setAside) as string] || 'Unknown'}
-                  </span>
+                  {solicitation.naicsCode && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-gray-200 text-gray-700">
+                      NAICS: {solicitation.naicsCode}
+                    </span>
+                  )}
+                  {solicitation.setAside && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                      {setAsideLabels[solicitation.setAside] || solicitation.setAside}
+                    </span>
+                  )}
                 </div>
 
                 {/* Edit Button */}

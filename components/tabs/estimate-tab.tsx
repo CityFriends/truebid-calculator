@@ -844,17 +844,27 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
           <div className="relative max-w-xs"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 text-sm" /></div>
           <div className="space-y-2">
             {filteredRequirements.map(req => {
-              const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]; const linkedWbs = getLinkedWbsElements(req.linkedWbsIds); const isMapped = linkedWbs.length > 0
-              return (
-                <div key={req.id} className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300 ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'}`}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
-                        <span className="font-mono text-sm font-medium text-gray-900">{req.referenceNumber}</span>
-                        <span className="text-sm text-gray-700 truncate">{req.title}</span>
-                      </div>
-                      <div className="flex items-center gap-1 flex-wrap">
+          const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
+          const linkedWbs = getLinkedWbsElements(req.linkedWbsIds)
+            const isMapped = linkedWbs.length > 0
+            return (
+    <div key={req.id} className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300 ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'}`}>
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
+            <span className="font-mono text-xs text-gray-500">{req.referenceNumber}</span>
+            <span className="text-sm font-medium text-gray-900 truncate">{req.title || 'Untitled'}</span>
+          </div>
+          {/* ADD: Description preview */}
+          {req.description && (
+            <p className="text-xs text-gray-600 line-clamp-2 mb-1.5">{req.description}</p>
+          )}
+          {/* ADD: Source badge */}
+          {req.source && (
+            <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{req.source}</span>
+          )}
+          <div className="flex items-center gap-1 flex-wrap mt-1.5">
                         {linkedWbs.map(wbs => <Badge key={wbs.id} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 cursor-pointer hover:bg-red-100" onClick={() => onUnlinkWbs(req.id, wbs.id)}>{wbs.wbsNumber} ×</Badge>)}
                       <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
   <SelectTrigger className="h-5 w-auto px-2 text-[10px] text-blue-600 border-none bg-transparent hover:bg-blue-50">
@@ -1910,7 +1920,7 @@ export function EstimateTab() {
   // ==========================================================================
   // CONTEXT - Use shared state for WBS elements (flows to Roles & Pricing tab)
   // ==========================================================================
-  const { 
+   const { 
     selectedRoles: contextRoles, 
     addRole, 
     solicitation, 
@@ -1921,6 +1931,8 @@ export function EstimateTab() {
     setEstimateWbsElements,
     // Company roles from Account Center
     companyRoles,
+    // Extracted requirements from AI analysis
+    extractedRequirements,
   } = useAppContext()
   
   // Use context state for WBS elements (shared with Roles & Pricing tab)
@@ -1960,7 +1972,57 @@ export function EstimateTab() {
   }, [solicitation.periodOfPerformance])
   
   const [chargeCodes, setChargeCodes] = useState<ChargeCode[]>(MOCK_CHARGE_CODES)
-  const [requirements, setRequirements] = useState<SOORequirement[]>(MOCK_REQUIREMENTS)  
+  // Map extracted requirements to SOORequirement format, fallback to mock data
+ const initialRequirements = useMemo((): SOORequirement[] => {
+  if (extractedRequirements && extractedRequirements.length > 0) {
+    const categoryMap: Record<string, RequirementCategory> = {
+      'delivery': 'functional', 'reporting': 'management', 'staffing': 'management',
+      'compliance': 'compliance', 'governance': 'management', 'transition': 'management', 'other': 'other',
+    }
+    return extractedRequirements.map((req) => ({
+      id: req.id,
+      referenceNumber: req.pageNumber ? `p.${req.pageNumber}` : req.id,
+      title: req.title,
+      description: req.text,
+      type: 'shall' as RequirementType,
+      category: categoryMap[req.type] || 'other',
+      priority: 'medium' as const,
+      source: req.sourceSection,
+      linkedWbsIds: [],
+      notes: '',
+      isAIExtracted: true,
+    }))
+  }
+  return MOCK_REQUIREMENTS
+}, [extractedRequirements])
+  
+  const [requirements, setRequirements] = useState<SOORequirement[]>(initialRequirements)
+  
+  // Update requirements when extracted requirements change
+  useEffect(() => {
+    if (extractedRequirements && extractedRequirements.length > 0) {
+      const mapped = extractedRequirements.map((req, idx) => {
+        const categoryMap: Record<string, RequirementCategory> = {
+          'delivery': 'functional', 'reporting': 'management', 'staffing': 'management',
+          'compliance': 'compliance', 'governance': 'management', 'transition': 'management', 'other': 'other',
+        }
+    return {
+  id: req.id,
+  referenceNumber: req.pageNumber ? `p.${req.pageNumber}` : req.id,  // "p.7" or "REQ-001"
+  title: req.title,  // AI keyword title: "Labor Category Pricing"
+  description: req.text,
+  type: 'shall' as RequirementType,
+  category: categoryMap[req.type] || 'other',
+  priority: 'medium' as const,
+  source: req.sourceSection,  // Section header: "TASK ORDER TYPE"
+  linkedWbsIds: [],
+  notes: '',
+  isAIExtracted: true,
+}
+      })
+      setRequirements(mapped)
+    }
+  }, [extractedRequirements]) 
 // Initialize WBS elements with mock data if context is empty
 // This runs once when component mounts and context has no data 
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)

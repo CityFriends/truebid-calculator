@@ -54,6 +54,17 @@ export const defaultCompanySettings: CompanySettings = {
   stepIncreasePercent: 3,
 };
 
+// ==================== EXTRACTED REQUIREMENTS (from AI) ====================
+
+export interface ExtractedRequirement {
+  id: string
+  title: string           // ← Must exist
+  text: string
+  type: 'delivery' | 'reporting' | 'staffing' | 'compliance' | 'governance' | 'transition' | 'other'
+  sourceSection: string
+  pageNumber: number | null  // ← Must exist
+}
+
 // ==================== ESTIMATE TAB TYPES (BOE Support) ====================
 
 // Estimate method types based on BOE document hierarchy (best to worst)
@@ -1113,6 +1124,9 @@ interface AppContextType {
   // Bid-Specific Roles
   recommendedRoles: Role[];
   setRecommendedRoles: (roles: Role[]) => void;
+   // Extracted Requirements (from AI analysis)
+  extractedRequirements: ExtractedRequirement[];
+  setExtractedRequirements: (requirements: ExtractedRequirement[]) => void;
   selectedRoles: Role[];
   setSelectedRoles: (roles: Role[]) => void;
   addRole: (role: Role) => void;
@@ -1572,6 +1586,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ==================== BID-SPECIFIC DATA ====================
   const [recommendedRoles, setRecommendedRoles] = useState<Role[]>([]);
+  const [extractedRequirements, setExtractedRequirements] = useState<ExtractedRequirement[]>([]);
   const [selectedRoles, setSelectedRoles] = useState<Role[]>([])
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
   const [teamingPartners, setTeamingPartners] = useState<TeamingPartner[]>([]);
@@ -2242,6 +2257,9 @@ const getContractYearsArray = (): { key: string; label: string; enabled: boolean
     // Bid Roles
     recommendedRoles,
     setRecommendedRoles,
+    // Extracted Requirements
+    extractedRequirements,
+    setExtractedRequirements,
     selectedRoles,
     setSelectedRoles,
     addRole,
