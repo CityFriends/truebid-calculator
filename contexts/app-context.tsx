@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 const STORAGE_KEYS = {
   COMPANY_ROLES: 'truebid-company-roles',
   COMPANY_SETTINGS: 'truebid-company-settings',
+  CURRENT_BID: 'truebid-current-bid',
 } as const;
 
 // Save status for UI indicators
@@ -53,17 +54,6 @@ export const defaultCompanySettings: CompanySettings = {
   salaryStructure: 'steps',
   stepIncreasePercent: 3,
 };
-
-// ==================== EXTRACTED REQUIREMENTS (from AI) ====================
-
-export interface ExtractedRequirement {
-  id: string
-  title: string           // ← Must exist
-  text: string
-  type: 'delivery' | 'reporting' | 'staffing' | 'compliance' | 'governance' | 'transition' | 'other'
-  sourceSection: string
-  pageNumber: number | null  // ← Must exist
-}
 
 // ==================== ESTIMATE TAB TYPES (BOE Support) ====================
 
@@ -1542,6 +1532,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.warn('Failed to load company roles from localStorage:', e);
       }
+      
+      // Load bid-specific data
+      try {
+        const bidStored = localStorage.getItem(STORAGE_KEYS.CURRENT_BID);
+        if (bidStored) {
+          const data = JSON.parse(bidStored);
+          if (data.solicitation) setSolicitation(data.solicitation);
+          if (data.extractedRequirements?.length) setExtractedRequirements(data.extractedRequirements);
+          if (data.selectedRoles?.length) setSelectedRoles(data.selectedRoles);
+          if (data.recommendedRoles?.length) setRecommendedRoles(data.recommendedRoles);
+          if (data.subcontractors?.length) setSubcontractors(data.subcontractors);
+          if (data.teamingPartners?.length) setTeamingPartners(data.teamingPartners);
+          if (data.rateJustifications) setRateJustifications(data.rateJustifications);
+          if (data.estimateWbsElements?.length) setEstimateWbsElements(data.estimateWbsElements);
+          if (data.odcs?.length) setODCs(data.odcs);
+          if (data.perDiem?.length) setPerDiem(data.perDiem);
+        }
+      } catch (e) {
+        console.warn('Failed to load bid data from localStorage:', e);
+      }
+      
       setIsHydrated(true);
     }
   }, []);
@@ -1601,6 +1612,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   
   // ==================== RATE JUSTIFICATIONS (Persist across tab switches) ====================
   const [rateJustifications, setRateJustifications] = useState<Record<string, RoleJustification>>({});
+
+  // ==================== SAVE BID DATA TO LOCALSTORAGE ====================
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isHydrated) {
+      try {
+        const bidData = {
+          solicitation,
+          extractedRequirements,
+          selectedRoles,
+          recommendedRoles,
+          subcontractors,
+          teamingPartners,
+          rateJustifications,
+          estimateWbsElements,
+          odcs,
+          perDiem,
+        };
+        localStorage.setItem(STORAGE_KEYS.CURRENT_BID, JSON.stringify(bidData));
+      } catch (e) {
+        console.warn('Failed to save bid data to localStorage:', e);
+      }
+    }
+  }, [isHydrated, solicitation, extractedRequirements, selectedRoles, recommendedRoles, 
+      subcontractors, teamingPartners, rateJustifications, estimateWbsElements, odcs, perDiem]);
   
   const updateRateJustification = (roleId: string, justification: RoleJustification) => {
     setRateJustifications(prev => ({
@@ -1924,7 +1959,7 @@ const getContractYearsArray = (): { key: string; label: string; enabled: boolean
     return years;
   };
 
- // Get IC level salaries from company roles (for Roles & Pricing tab)
+  // Get IC level salaries from company roles (for Roles & Pricing tab)
   const getIcLevelSalaries = (): Record<string, number> => {
     // Default salaries if no company roles exist
     const defaults: Record<string, number> = {
@@ -1939,22 +1974,18 @@ const getContractYearsArray = (): { key: string; label: string; enabled: boolean
     // If no company roles, return defaults
     if (companyRoles.length === 0) return defaults;
 
-    // Build salary map ONLY from company roles (no defaults mixed in)
-    const salaries: Record<string, number> = {};
+    // Build salary map from first matching role for each IC level
+    const salaries: Record<string, number> = { ...defaults };
     
     companyRoles.forEach(role => {
       role.levels.forEach(level => {
         if (level.steps.length > 0 && level.steps[0].salary) {
-          // Only add if not already set (first role's value wins)
-          if (!(level.level in salaries)) {
-            salaries[level.level] = level.steps[0].salary;
-          }
+          salaries[level.level] = level.steps[0].salary;
         }
       });
     });
 
-    // If somehow no levels were found, return defaults
-    return Object.keys(salaries).length > 0 ? salaries : defaults;
+    return salaries;
   };
   
 

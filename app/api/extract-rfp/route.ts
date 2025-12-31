@@ -43,32 +43,47 @@ interface ExtractionResponse {
 }
 
 // System prompt for extraction
-const EXTRACTION_PROMPT = `Extract data from this government RFP/SOW.
-
-RESPOND WITH ONLY A JSON OBJECT. No preamble, no explanation.
+const EXTRACTION_PROMPT = `Extract data from this government RFP/SOW. Return ONLY valid JSON, no markdown or explanation.
 
 {
   "metadata": {
-    "title": "project name",
-    "solicitationNumber": "number",
-    "clientAgency": "Department of State",
-    "contractType": "cpff",
-    "naicsCode": "541512",
-    "responseDeadline": "N/A",
-    "periodOfPerformance": { "base": 1, "options": 2 },
-    "placeOfPerformance": "Washington DC",
-    "setAside": "N/A"
+    "title": "Extract actual project/contract name",
+    "solicitationNumber": "Extract actual solicitation number",
+    "clientAgency": "MUST match exactly one of: Department of Defense (DOD)|Health & Human Services (HHS)|Veterans Affairs (VA)|Homeland Security (DHS)|Department of Justice (DOJ)|Department of Treasury|Department of State|Department of Energy (DOE)|Environmental Protection Agency (EPA)|NASA|General Services Administration (GSA)|Social Security Administration (SSA)|Department of Agriculture (USDA)|Department of Commerce|Department of Labor|Department of Interior|Department of Education|Housing & Urban Development (HUD)|Department of Transportation|Office of Personnel Management (OPM)|Small Business Administration (SBA)|Other",
+    "contractType": "ffp|tm|cpff|idiq|hybrid|unknown",
+    "naicsCode": "6-digit code from document",
+    "responseDeadline": "YYYY-MM-DD or N/A",
+    "periodOfPerformance": { "base": 1, "options": 0 },
+    "placeOfPerformance": "City, State",
+    "setAside": "small business|8a|SDVOSB|WOSB|HUBZone|unrestricted|N/A"
   },
-  "requirements": [
-    {"id": "REQ-001", "title": "Short Title", "text": "brief requirement", "type": "delivery", "sourceSection": "Section", "pageNumber": null}
-  ],
+  "requirements": [],
   "suggestedRoles": []
 }
 
-Extract 15-20 requirements. Keep "text" field SHORT (under 100 chars). 
-Include: user stories, security, AWS/infrastructure, compliance.
+METADATA RULES:
+- periodOfPerformance.base = number of BASE YEARS (usually 1)
+- periodOfPerformance.options = number of OPTION YEARS (0-4, NOT months)
+- Look for "1 base year + 2 option years" type language
+- clientAgency: DOS/State Department = "Department of State"
 
-JSON ONLY - must start with { and end with }`
+EXTRACT 30-40 REQUIREMENTS from ALL these categories:
+1. USER STORIES: "As a [user], I want..." - type: "delivery"
+2. SECURITY: clearances, MRPT, authentication, OKTA, FedRAMP - type: "compliance"
+3. INFRASTRUCTURE: AWS, S3, Lambda, ECS, CloudFront, databases - type: "delivery"
+4. DEVELOPMENT: features, APIs, integrations, screens, functionality - type: "delivery"
+5. COMPLIANCE: Section 508, WCAG, accessibility standards - type: "compliance"
+6. OPERATIONS: support, monitoring, maintenance, SLAs - type: "delivery"
+7. STAFFING: labor categories, key personnel, qualifications - type: "staffing"
+8. REPORTING: status reports, deliverables, documentation - type: "reporting"
+9. GOVERNANCE: meetings, reviews, approvals - type: "governance"
+
+Search ALL sections including: Objectives, Operating Constraints, Key Personnel, Security, Technical Requirements.
+
+Each requirement format:
+{"id": "REQ-001", "title": "3-6 word title you create", "text": "verbatim text from document (can be full sentence)", "type": "delivery|staffing|compliance|reporting|governance|other", "sourceSection": "actual section header from document", "pageNumber": null}
+
+IMPORTANT: Extract REAL values from the document. Response must start with { and end with }`
 
 export async function POST(request: NextRequest) {
   try {
@@ -144,14 +159,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Call Claude for extraction
+    // Call Claude for extraction - Using Sonnet 3.5 for better quality and higher token limit
     const message = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 4096,
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8192,
       messages: [
         {
           role: 'user',
-          content: `${EXTRACTION_PROMPT}\n\nExtract ALL requirements from this government solicitation document. Do not limit yourself - extract every single requirement you find:\n\n${truncatedText}`
+          content: `${EXTRACTION_PROMPT}\n\nDocument to analyze:\n\n${truncatedText}`
         }
       ],
     })
@@ -166,12 +181,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Parse the JSON response (handle potential markdown code blocks)
+    // Parse the JSON response - strip any preamble text
     let extracted
     try {
-      // Try to extract JSON from response (Claude might wrap in ```json```)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-      const jsonString = jsonMatch ? jsonMatch[0] : responseText
+      const jsonStart = responseText.indexOf('{')
+      const jsonEnd = responseText.lastIndexOf('}')
+      
+      if (jsonStart === -1 || jsonEnd === -1) {
+        throw new Error('No JSON object found in response')
+      }
+      
+      const jsonString = responseText.slice(jsonStart, jsonEnd + 1)
       extracted = JSON.parse(jsonString)
     } catch (parseError) {
       console.error('Failed to parse AI response:', responseText.substring(0, 500))

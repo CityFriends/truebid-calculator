@@ -291,6 +291,51 @@ function calculateQualityScore(element: EnhancedWBSElement): { score: number; gr
   
   return { score: Math.max(0, score), grade, issues }
 }
+
+// Smart WBS number suggestion
+function getNextWbsNumber(elements: EnhancedWBSElement[], parentPrefix?: string): string {
+  if (!elements.length) return '1.1'
+  
+  if (parentPrefix) {
+    // Looking for children of a specific parent (e.g., "1.3.x" under "1.3")
+    const childNumbers = elements
+      .map(el => el.wbsNumber)
+      .filter(num => 
+        num.startsWith(parentPrefix + '.') && 
+        num.split('.').length === parentPrefix.split('.').length + 1
+      )
+      .map(num => {
+        const parts = num.split('.')
+        return parseInt(parts[parts.length - 1]) || 0
+      })
+    
+    const nextChild = childNumbers.length > 0 ? Math.max(...childNumbers) + 1 : 1
+    return `${parentPrefix}.${nextChild}`
+  } else {
+    // Find the highest top-level number and next sibling
+    const topLevelNumbers = elements
+      .map(el => el.wbsNumber)
+      .filter(num => num.split('.').length === 2) // Only "X.Y" format
+      .map(num => {
+        const parts = num.split('.')
+        return { major: parseInt(parts[0]) || 1, minor: parseInt(parts[1]) || 0 }
+      })
+    
+    if (topLevelNumbers.length === 0) return '1.1'
+    
+    // Get the highest major number
+    const maxMajor = Math.max(...topLevelNumbers.map(n => n.major))
+    
+    // Get the highest minor number for that major
+    const minorsForMaxMajor = topLevelNumbers
+      .filter(n => n.major === maxMajor)
+      .map(n => n.minor)
+    
+    const nextMinor = Math.max(...minorsForMaxMajor) + 1
+    return `${maxMajor}.${nextMinor}`
+  }
+}
+
 // ============================================================================
 // ROLE LIBRARY
 // ============================================================================
@@ -843,17 +888,21 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
         <>
           <div className="relative max-w-xs"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 text-sm" /></div>
           <div className="space-y-2">
-            {filteredRequirements.map(req => {
-          const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
-          const linkedWbs = getLinkedWbsElements(req.linkedWbsIds)
+            {filteredRequirements.map((req, idx) => {
+            const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
+            const linkedWbs = getLinkedWbsElements(req.linkedWbsIds)
             const isMapped = linkedWbs.length > 0
+            // Generate sequential display number based on current position
+             const displayNumber = req.referenceNumber.startsWith('p.') || req.referenceNumber.startsWith('SOO')
+            ? req.referenceNumber  // Keep page refs and SOO refs as-is
+             : `REQ-${String(idx + 1).padStart(3, '0')}`  // Sequential numbering
             return (
-    <div key={req.id} className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300 ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'}`}>
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+            <div key={req.id} className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300 ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'}`}>
+             <div className="flex items-start justify-between">
+             <div className="flex-1 min-w-0">
+             <div className="flex items-center gap-2 mb-1">
             <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
-            <span className="font-mono text-xs text-gray-500">{req.referenceNumber}</span>
+            <span className="font-mono text-xs text-gray-500">{displayNumber}</span>
             <span className="text-sm font-medium text-gray-900 truncate">{req.title || 'Untitled'}</span>
           </div>
           {/* ADD: Description preview */}
@@ -2032,7 +2081,14 @@ export function EstimateTab() {
   const [sortBy, setSortBy] = useState<string>('wbs')
   const [activeSection, setActiveSection] = useState('requirements')
   const [showAddElement, setShowAddElement] = useState(false)
-  const [newElement, setNewElement] = useState<Partial<EnhancedWBSElement>>({ wbsNumber: '', title: '', sowReference: '', estimateMethod: 'engineering', complexityFactor: 1.0 })
+  const [newElement, setNewElement] = useState<Partial<EnhancedWBSElement> & { linkedRequirementId?: string }>({ 
+  wbsNumber: '', 
+  title: '', 
+  sowReference: '', 
+  estimateMethod: 'engineering', 
+  complexityFactor: 1.0,
+  linkedRequirementId: ''
+  })  
   const [showLaborDialog, setShowLaborDialog] = useState(false)
   const [editingLabor, setEditingLabor] = useState<EnhancedLaborEstimate | null>(null)
   const [laborForm, setLaborForm] = useState<{ roleId: string; rationale: string; confidence: 'high' | 'medium' | 'low'; hoursByPeriod: PeriodHours }>({ roleId: '', rationale: '', confidence: 'medium', hoursByPeriod: { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 } })
@@ -2055,38 +2111,127 @@ export function EstimateTab() {
   }
   
   const handleUpdateElement = (id: string, updates: Partial<EnhancedWBSElement>) => {
-    setWbsElements(prev => prev.map(el => {
-      if (el.id !== id) return el
-      const updated = { ...el, ...updates }
-      const { score, grade, issues } = calculateQualityScore(updated)
-      return { ...updated, qualityScore: score, qualityGrade: grade, qualityIssues: issues }
+  setWbsElements(prev => prev.map(el => {
+    if (el.id !== id) return el
+    const updated = { ...el, ...updates }
+    const { score, grade, issues } = calculateQualityScore(updated)
+    return { ...updated, qualityScore: score, qualityGrade: grade, qualityIssues: issues }
+  }))
+}
+
+const handleDeleteElement = (id: string) => {
+  setWbsElements(prev => prev.filter(el => el.id !== id))
+  if (selectedElementId === id) setSelectedElementId(null)
+}
+
+const handleDeleteLabor = (laborId: string) => {
+  if (!selectedElementId) return
+  setWbsElements(prev => prev.map(el => {
+    if (el.id !== selectedElementId) return el
+    return { ...el, laborEstimates: el.laborEstimates.filter(l => l.id !== laborId) }
+  }))
+}
+
+const handleSaveLabor = () => {
+  if (!laborForm.roleId || !selectedElementId) return
+  const role = selectedRoles.find(r => r.id === laborForm.roleId)
+  if (!role) return
+  
+  if (editingLabor) {
+    handleUpdateElement(selectedElementId, {
+      laborEstimates: wbsElements.find(el => el.id === selectedElementId)?.laborEstimates.map(l => 
+        l.id !== editingLabor.id ? l : { ...l, hoursByPeriod: laborForm.hoursByPeriod, rationale: laborForm.rationale, confidence: laborForm.confidence }
+      ) || []
+    })
+  } else {
+    const newLabor: EnhancedLaborEstimate = {
+      id: generateId(),
+      roleId: laborForm.roleId,
+      roleName: role.name,
+      hoursByPeriod: laborForm.hoursByPeriod,
+      rationale: laborForm.rationale,
+      confidence: laborForm.confidence,
+      isAISuggested: false,
+      isOrphaned: false,
+    }
+    handleUpdateElement(selectedElementId, {
+      laborEstimates: [...(wbsElements.find(el => el.id === selectedElementId)?.laborEstimates || []), newLabor]
+    })
+  }
+  setShowLaborDialog(false)
+}
+
+// Handle requirement selection in Add WBS dialog
+const handleRequirementSelect = (reqId: string) => {
+  if (!reqId) {
+    setNewElement(prev => ({ 
+      ...prev, 
+      linkedRequirementId: '',
+    }))
+    return
+  }
+  
+  const req = requirements.find(r => r.id === reqId)
+  if (req) {
+    setNewElement(prev => ({ 
+      ...prev, 
+      linkedRequirementId: reqId,
+      title: req.title || prev.title,
+      sowReference: req.referenceNumber || prev.sowReference,
     }))
   }
+}
+
+const handleAddElement = () => {
+  if (!newElement.wbsNumber || !newElement.title) return
+  const element: EnhancedWBSElement = { 
+    id: generateId(), 
+    wbsNumber: newElement.wbsNumber!, 
+    title: newElement.title!, 
+    sowReference: newElement.sowReference || '', 
+    clin: newElement.clin, 
+    periodOfPerformance: newElement.periodOfPerformance || { startDate: '', endDate: '' }, 
+    why: newElement.why || '', 
+    what: newElement.what || '', 
+    notIncluded: newElement.notIncluded || '', 
+    assumptions: newElement.assumptions || [], 
+    estimateMethod: newElement.estimateMethod || 'engineering', 
+    complexityFactor: newElement.complexityFactor || 1.0, 
+    complexityJustification: newElement.complexityJustification || '', 
+    laborEstimates: [], 
+    risks: [], 
+    dependencies: [], 
+    qualityGrade: 'red', 
+    qualityScore: 0, 
+    qualityIssues: [], 
+    isAIGenerated: false, 
+    aiConfidence: 0 
+  }
+  const { score, grade, issues } = calculateQualityScore(element)
+  element.qualityScore = score
+  element.qualityGrade = grade
+  element.qualityIssues = issues
   
-  const handleSaveLabor = () => {
-    if (!selectedElement || !laborForm.roleId) return
-    const role = selectedRoles.find(r => r.id === laborForm.roleId)
-    if (!role) return
-    
-    if (editingLabor) {
-      handleUpdateElement(selectedElement.id, { laborEstimates: selectedElement.laborEstimates.map(l => l.id !== editingLabor.id ? l : { ...l, roleId: laborForm.roleId, roleName: role.name, rationale: laborForm.rationale, confidence: laborForm.confidence, hoursByPeriod: { ...laborForm.hoursByPeriod } }) })
-    } else {
-      handleUpdateElement(selectedElement.id, { laborEstimates: [...selectedElement.laborEstimates, { id: generateId(), roleId: role.id, roleName: role.name, hoursByPeriod: { ...laborForm.hoursByPeriod }, rationale: laborForm.rationale, confidence: laborForm.confidence, isAISuggested: false, isOrphaned: false }] })
-    }
-    setShowLaborDialog(false); setEditingLabor(null)
+  setWbsElements(prev => [...prev, element])
+  
+  // Auto-link to requirement if one was selected
+  if (newElement.linkedRequirementId) {
+    setTimeout(() => {
+      handleLinkWbs(newElement.linkedRequirementId!, element.id)
+    }, 0)
   }
   
-  const handleDeleteLabor = (laborId: string) => { if (selectedElement) handleUpdateElement(selectedElement.id, { laborEstimates: selectedElement.laborEstimates.filter(l => l.id !== laborId) }) }
-  const handleDeleteElement = (id: string) => { setWbsElements(prev => prev.filter(el => el.id !== id)); if (selectedElementId === id) setSelectedElementId(null) }
-  
-  const handleAddElement = () => {
-    if (!newElement.wbsNumber || !newElement.title) return
-    const element: EnhancedWBSElement = { id: generateId(), wbsNumber: newElement.wbsNumber!, title: newElement.title!, sowReference: newElement.sowReference || '', clin: newElement.clin, periodOfPerformance: newElement.periodOfPerformance || { startDate: '', endDate: '' }, why: newElement.why || '', what: newElement.what || '', notIncluded: newElement.notIncluded || '', assumptions: newElement.assumptions || [], estimateMethod: newElement.estimateMethod || 'engineering', complexityFactor: newElement.complexityFactor || 1.0, complexityJustification: newElement.complexityJustification || '', laborEstimates: [], risks: [], dependencies: [], qualityGrade: 'red', qualityScore: 0, qualityIssues: [], isAIGenerated: false, aiConfidence: 0 }
-    const { score, grade, issues } = calculateQualityScore(element)
-    element.qualityScore = score; element.qualityGrade = grade; element.qualityIssues = issues
-    setWbsElements(prev => [...prev, element]); setShowAddElement(false); setNewElement({ wbsNumber: '', title: '', sowReference: '', estimateMethod: 'engineering', complexityFactor: 1.0 }); setSelectedElementId(element.id)
-  }
-  
+  setShowAddElement(false)
+  setNewElement({ 
+    wbsNumber: '', 
+    title: '', 
+    sowReference: '', 
+    estimateMethod: 'engineering', 
+    complexityFactor: 1.0,
+    linkedRequirementId: ''
+  })
+  setSelectedElementId(element.id)
+}
   const handleLinkWbs = (reqId: string, wbsId: string) => { setRequirements(prev => prev.map(r => (r.id !== reqId || r.linkedWbsIds.includes(wbsId)) ? r : { ...r, linkedWbsIds: [...r.linkedWbsIds, wbsId] })) }
   const handleUnlinkWbs = (reqId: string, wbsId: string) => { setRequirements(prev => prev.map(r => r.id !== reqId ? r : { ...r, linkedWbsIds: r.linkedWbsIds.filter(id => id !== wbsId) })) }
 const handleNavigateToRoles = () => { setActiveMainTab('roles') }
@@ -2257,81 +2402,288 @@ const handleAddRoleToTeam = (roleName: string) => {
         {/* Slideout */}
         {selectedElement && <WBSSlideout element={selectedElement} isOpen={!!selectedElementId} onClose={() => setSelectedElementId(null)} onUpdate={handleUpdateElement} contractPeriods={contractPeriods} selectedRoles={selectedRoles} allWbsElements={wbsElements} chargeCodes={chargeCodes} onOpenLaborDialog={handleOpenLaborDialog} onDeleteLabor={handleDeleteLabor} />}
         
-       {/* Add Element Dialog */}
-        <Dialog open={showAddElement} onOpenChange={setShowAddElement}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader><DialogTitle>Add WBS Element</DialogTitle><DialogDescription>Create a new Work Breakdown Structure element</DialogDescription></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>WBS Number <span className="text-red-500">*</span></Label>
-                  <Input value={newElement.wbsNumber || ''} onChange={(e) => setNewElement(prev => ({ ...prev, wbsNumber: e.target.value }))} placeholder="e.g., 1.4" />
+ {/* Add Element Dialog */}
+<Dialog open={showAddElement} onOpenChange={setShowAddElement}>
+  <DialogContent className="max-w-2xl">
+    <DialogHeader>
+      <DialogTitle>Add WBS Element</DialogTitle>
+      <DialogDescription>Create a new Work Breakdown Structure element to address a requirement</DialogDescription>
+    </DialogHeader>
+    <div className="space-y-4 py-4">
+      {/* Requirement Selector - NEW! */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="linked-requirement">Linked Requirement</Label>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p className="text-sm">Select a requirement to auto-fill the title and create traceability. Unmapped requirements are shown first.</p>
+            </TooltipContent>
+          </Tooltip>
+          <span className="text-xs text-gray-500 ml-auto">(optional)</span>
+        </div>
+        <Select 
+          value={newElement.linkedRequirementId || ''} 
+          onValueChange={handleRequirementSelect}
+        >
+          <SelectTrigger id="linked-requirement" className="w-full">
+            <SelectValue placeholder="Select a requirement to address..." />
+          </SelectTrigger>
+          <SelectContent className="max-h-[300px]">
+            {/* Show unmapped requirements first with a visual indicator */}
+            {requirements.filter(r => r.linkedWbsIds.length === 0).length > 0 && (
+              <>
+                <div className="px-2 py-1.5 text-xs font-medium text-red-600 bg-red-50">
+                  Unmapped Requirements ({requirements.filter(r => r.linkedWbsIds.length === 0).length})
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Title <span className="text-red-500">*</span></Label>
-                  <Input value={newElement.title || ''} onChange={(e) => setNewElement(prev => ({ ...prev, title: e.target.value }))} placeholder="e.g., User Authentication Module" />
+                {requirements
+                  .filter(r => r.linkedWbsIds.length === 0)
+                  .map((req, idx) => (
+                    <SelectItem key={req.id} value={req.id} className="py-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className="text-[10px] px-1 py-0 h-4 bg-red-100 text-red-700 border-red-200">
+                          REQ-{String(idx + 1).padStart(3, '0')}
+                        </Badge>
+                        <span className="truncate max-w-[300px]">{req.title || 'Untitled'}</span>
+                      </div>
+                    </SelectItem>
+                  ))
+                }
+              </>
+            )}
+            {/* Show already-mapped requirements */}
+            {requirements.filter(r => r.linkedWbsIds.length > 0).length > 0 && (
+              <>
+                <div className="px-2 py-1.5 text-xs font-medium text-gray-500 bg-gray-50 border-t">
+                  Already Mapped ({requirements.filter(r => r.linkedWbsIds.length > 0).length})
                 </div>
+                {requirements
+                  .filter(r => r.linkedWbsIds.length > 0)
+                  .map((req, idx) => {
+                    const unmappedCount = requirements.filter(r => r.linkedWbsIds.length === 0).length
+                    return (
+                      <SelectItem key={req.id} value={req.id} className="py-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+                            REQ-{String(unmappedCount + idx + 1).padStart(3, '0')}
+                          </Badge>
+                          <span className="truncate max-w-[300px] text-gray-600">{req.title || 'Untitled'}</span>
+                          <span className="text-[10px] text-gray-400">({req.linkedWbsIds.length} WBS)</span>
+                        </div>
+                      </SelectItem>
+                    )
+                  })
+                }
+              </>
+            )}
+            {requirements.length === 0 && (
+              <div className="px-2 py-4 text-sm text-gray-500 text-center">
+                No requirements extracted yet. Upload an RFP first.
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>SOW Reference</Label>
-                  <Input value={newElement.sowReference || ''} onChange={(e) => setNewElement(prev => ({ ...prev, sowReference: e.target.value }))} placeholder="e.g., SOW 3.2.1" />
+            )}
+          </SelectContent>
+        </Select>
+        {newElement.linkedRequirementId && (
+          <p className="text-xs text-green-600 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            WBS will be linked to this requirement on save
+          </p>
+        )}
+      </div>
+
+     {/* WBS Number with Smart Picker */}
+<div className="space-y-2">
+  <div className="flex items-center gap-2">
+    <Label htmlFor="wbs-number">WBS Number <span className="text-red-500" aria-label="required">*</span></Label>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        <p className="text-sm">Hierarchical work breakdown number. Use the suggested number or pick a parent to create a sub-element.</p>
+      </TooltipContent>
+    </Tooltip>
+  </div>
+  
+  <div className="flex gap-2">
+    <Input 
+      id="wbs-number"
+      value={newElement.wbsNumber || ''} 
+      onChange={(e) => setNewElement(prev => ({ ...prev, wbsNumber: e.target.value }))} 
+      placeholder="e.g., 1.4" 
+      aria-required="true"
+      className="flex-1"
+    />
+    
+    {/* Quick-fill button with next number */}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button 
+          type="button" 
+          variant="outline" 
+          size="sm"
+          className="h-9 px-3 text-xs whitespace-nowrap font-mono"
+          onClick={() => setNewElement(prev => ({ ...prev, wbsNumber: getNextWbsNumber(wbsElements) }))}
+        >
+          → {getNextWbsNumber(wbsElements)}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="text-sm">Use the next available number</p>
+      </TooltipContent>
+    </Tooltip>
+    
+    {/* Parent selector for creating child elements */}
+    {wbsElements.length > 0 && (
+      <Select 
+        value="" 
+        onValueChange={(parentWbs) => {
+          const nextChild = getNextWbsNumber(wbsElements, parentWbs)
+          setNewElement(prev => ({ ...prev, wbsNumber: nextChild }))
+        }}
+      >
+        <SelectTrigger className="w-[130px] h-9 text-xs">
+          <span className="text-gray-500">Add under...</span>
+        </SelectTrigger>
+        <SelectContent>
+          {wbsElements
+            .slice()
+            .sort((a, b) => a.wbsNumber.localeCompare(b.wbsNumber, undefined, { numeric: true }))
+            .map(el => (
+              <SelectItem key={el.id} value={el.wbsNumber} className="text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-medium">{el.wbsNumber}</span>
+                  <span className="text-gray-500 truncate max-w-[150px]">{el.title}</span>
                 </div>
-                <div className="space-y-2">
-                  <Label>CLIN</Label>
-                  <Input value={newElement.clin || ''} onChange={(e) => setNewElement(prev => ({ ...prev, clin: e.target.value }))} placeholder="e.g., 0001" />
+              </SelectItem>
+            ))
+          }
+        </SelectContent>
+      </Select>
+    )}
+  </div>
+  
+  {/* Show existing WBS numbers as context */}
+  {wbsElements.length > 0 && (
+    <p className="text-xs text-gray-500">
+      Existing: {wbsElements
+        .map(el => el.wbsNumber)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .join(', ')}
+    </p>
+  )}
+</div>
+
+{/* Title */}
+<div className="space-y-2">
+  <Label htmlFor="wbs-title">Title <span className="text-red-500" aria-label="required">*</span></Label>
+  <Input 
+    id="wbs-title"
+    value={newElement.title || ''} 
+    onChange={(e) => setNewElement(prev => ({ ...prev, title: e.target.value }))} 
+    placeholder={newElement.linkedRequirementId ? "Auto-filled from requirement" : "e.g., User Authentication Module"}
+    aria-required="true"
+  />
+  {newElement.linkedRequirementId && newElement.title && (
+    <p className="text-xs text-gray-500">
+      Feel free to edit the title to better describe the work
+    </p>
+  )}
+</div>
+
+      {/* SOW Reference and CLIN */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="sow-ref">SOW/SOO Reference</Label>
+          <Input 
+            id="sow-ref"
+            value={newElement.sowReference || ''} 
+            onChange={(e) => setNewElement(prev => ({ ...prev, sowReference: e.target.value }))} 
+            placeholder={newElement.linkedRequirementId ? "Auto-filled from requirement" : "e.g., SOO 3.2.1"}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="clin">CLIN</Label>
+          <Input 
+            id="clin"
+            value={newElement.clin || ''} 
+            onChange={(e) => setNewElement(prev => ({ ...prev, clin: e.target.value }))} 
+            placeholder="e.g., 0001" 
+          />
+        </div>
+      </div>
+
+      {/* Period of Performance */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="start-date">Start Date</Label>
+          <Input 
+            id="start-date"
+            type="date" 
+            value={newElement.periodOfPerformance?.startDate || ''} 
+            onChange={(e) => setNewElement(prev => ({ 
+              ...prev, 
+              periodOfPerformance: { 
+                startDate: e.target.value, 
+                endDate: prev.periodOfPerformance?.endDate || '' 
+              } 
+            }))} 
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="end-date">End Date</Label>
+          <Input 
+            id="end-date"
+            type="date" 
+            value={newElement.periodOfPerformance?.endDate || ''} 
+            onChange={(e) => setNewElement(prev => ({ 
+              ...prev, 
+              periodOfPerformance: { 
+                startDate: prev.periodOfPerformance?.startDate || '', 
+                endDate: e.target.value 
+              } 
+            }))} 
+          />
+        </div>
+      </div>
+
+      {/* Estimate Method */}
+      <div className="space-y-2">
+        <Label htmlFor="estimate-method">Estimate Method</Label>
+        <Select 
+          value={newElement.estimateMethod || 'engineering'} 
+          onValueChange={(v) => setNewElement(prev => ({ ...prev, estimateMethod: v as EstimateMethod }))}
+        >
+          <SelectTrigger id="estimate-method">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(ESTIMATE_METHOD_LABELS).map(([key, { label, icon, description }]) => (
+              <SelectItem key={key} value={key}>
+                <div className="flex items-center gap-2">
+                  <span>{icon}</span>
+                  <span>{label}</span>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Start Date</Label>
-                  <Input 
-                    type="date" 
-                    value={newElement.periodOfPerformance?.startDate || ''} 
-                    onChange={(e) => setNewElement(prev => ({ 
-                      ...prev, 
-                      periodOfPerformance: { 
-                        startDate: e.target.value, 
-                        endDate: prev.periodOfPerformance?.endDate || '' 
-                      } 
-                    }))} 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>End Date</Label>
-                  <Input 
-                    type="date" 
-                    value={newElement.periodOfPerformance?.endDate || ''} 
-                    onChange={(e) => setNewElement(prev => ({ 
-                      ...prev, 
-                      periodOfPerformance: { 
-                        startDate: prev.periodOfPerformance?.startDate || '', 
-                        endDate: e.target.value 
-                      } 
-                    }))} 
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Estimate Method</Label>
-                <Select value={newElement.estimateMethod || 'engineering'} onValueChange={(v) => setNewElement(prev => ({ ...prev, estimateMethod: v as EstimateMethod }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ESTIMATE_METHOD_LABELS).map(([key, { label, icon }]) => (
-                      <SelectItem key={key} value={key}>{icon} {label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddElement(false)}>Cancel</Button>
-              <Button onClick={handleAddElement} disabled={!newElement.wbsNumber || !newElement.title}>
-                <Plus className="w-4 h-4 mr-2" />Add Element
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setShowAddElement(false)}>Cancel</Button>
+      <Button 
+        onClick={handleAddElement} 
+        disabled={!newElement.wbsNumber || !newElement.title}
+      >
+        <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
+        Add Element
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
         
         {/* Labor Dialog */}
         <Dialog open={showLaborDialog} onOpenChange={setShowLaborDialog}>
@@ -2349,7 +2701,7 @@ const handleAddRoleToTeam = (roleName: string) => {
         
         {/* Requirement Dialog */}
         <Dialog open={showReqDialog} onOpenChange={setShowReqDialog}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-xl">
             <DialogHeader>
               <DialogTitle>{editingReq ? 'Edit' : 'Add'} Requirement</DialogTitle>
               <DialogDescription>Track SOW/SOO requirements and link them to WBS elements.</DialogDescription>
@@ -2369,14 +2721,14 @@ const handleAddRoleToTeam = (roleName: string) => {
                 <Label htmlFor="req-desc">Description</Label>
                 <Textarea id="req-desc" value={reqForm.description || ''} onChange={(e) => setReqForm(prev => ({ ...prev, description: e.target.value }))} rows={2} placeholder="Full requirement text..." />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-8">
                 <div className="space-y-2">
                   <Label>Type</Label>
                   <Select value={reqForm.type || 'shall'} onValueChange={(v) => setReqForm(prev => ({ ...prev, type: v as RequirementType }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="shall">Shall (mandatory)</SelectItem>
-                      <SelectItem value="should">Should (recommended)</SelectItem>
+                      <SelectItem value="should">Should (expected)</SelectItem>
                       <SelectItem value="may">May (optional)</SelectItem>
                       <SelectItem value="will">Will (statement)</SelectItem>
                     </SelectContent>
@@ -2488,4 +2840,4 @@ const handleAddRoleToTeam = (roleName: string) => {
   )
 }
 
-export default EstimateTab
+export default EstimateTab 
