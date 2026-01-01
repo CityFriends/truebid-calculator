@@ -1155,7 +1155,7 @@ export function Dashboard() {
 
   // Handlers
   const handleImportRFP = () => {
-    setActiveUtilityTool(null)
+      setActiveUtilityTool(null)
     const newId = `prop-${Date.now()}`
     
     // Create and save the proposal
@@ -1192,7 +1192,12 @@ export function Dashboard() {
       const filtered = prev.filter(id => id !== proposalId)
       return [proposalId, ...filtered].slice(0, 10)
     })
-    router.push(`/${proposalId}`)
+    
+    // Smart default: go to Estimate if RFP analyzed, otherwise Upload
+    const proposal = proposals.find(p => p.id === proposalId)
+    const defaultTab = proposal?.solicitation ? 'estimate' : 'upload'
+    
+    router.push(`/${proposalId}?tab=${defaultTab}`)
   }
 
   const handleToggleArchive = (proposalId: string) => {
