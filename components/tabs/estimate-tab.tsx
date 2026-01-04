@@ -44,6 +44,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useAppContext } from '@/contexts/app-context'
 
 // ============================================================================
@@ -799,9 +800,37 @@ function ChargeCodeLibrary({ chargeCodes, onAdd, onEdit, onDelete }: { chargeCod
   )
 }
 
-function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelete, onLinkWbs, onUnlinkWbs }: { requirements: SOORequirement[]; wbsElements: EnhancedWBSElement[]; onAdd: (req: SOORequirement) => void; onEdit: (req: SOORequirement) => void; onDelete: (id: string) => void; onLinkWbs: (reqId: string, wbsId: string) => void; onUnlinkWbs: (reqId: string, wbsId: string) => void }) {
+function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelete, onLinkWbs, onUnlinkWbs, onBulkGenerateWbs }: { requirements: SOORequirement[]; wbsElements: EnhancedWBSElement[]; onAdd: (req: SOORequirement) => void; onEdit: (req: SOORequirement) => void; onDelete: (id: string) => void; onLinkWbs: (reqId: string, wbsId: string) => void; onUnlinkWbs: (reqId: string, wbsId: string) => void; onBulkGenerateWbs?: (reqIds: string[]) => void }) {
   const [viewMode, setViewMode] = useState<'list' | 'gaps'>('list')
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedRequirements, setSelectedRequirements] = useState<Set<string>>(new Set())
+
+  // Toggle single requirement selection
+  const toggleRequirementSelection = (reqId: string) => {
+    setSelectedRequirements(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(reqId)) {
+        newSet.delete(reqId)
+      } else {
+        newSet.add(reqId)
+      }
+      return newSet
+    })
+  }
+
+  // Toggle all requirements selection
+  const toggleAllRequirements = () => {
+    if (selectedRequirements.size === filteredRequirements.length) {
+      setSelectedRequirements(new Set())
+    } else {
+      setSelectedRequirements(new Set(filteredRequirements.map(r => r.id)))
+    }
+  }
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedRequirements(new Set())
+  }
   const filteredRequirements = useMemo(() => !searchQuery ? requirements : requirements.filter(req => req.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase()) || req.title.toLowerCase().includes(searchQuery.toLowerCase())), [requirements, searchQuery])
   const stats = useMemo(() => {
     const total = requirements.length; const mapped = requirements.filter(r => r.linkedWbsIds.length > 0).length
@@ -841,16 +870,34 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
       
       {viewMode === 'list' && (
         <>
-          <div className="relative max-w-xs"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 text-sm" /></div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={filteredRequirements.length > 0 && selectedRequirements.size === filteredRequirements.length}
+                onCheckedChange={toggleAllRequirements}
+                className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 border-purple-300 h-5 w-5"
+                aria-label="Select all requirements"
+              />
+              <span className="text-sm text-gray-600">Select all</span>
+            </div>
+            <div className="relative max-w-xs flex-1"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 text-sm" /></div>
+          </div>
           <div className="space-y-2">
             {filteredRequirements.map(req => {
           const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
           const linkedWbs = getLinkedWbsElements(req.linkedWbsIds)
             const isMapped = linkedWbs.length > 0
             return (
-    <div key={req.id} className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300 ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'}`}>
+    <div key={req.id} className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300 ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'} ${selectedRequirements.has(req.id) ? 'ring-2 ring-purple-300 border-purple-300' : ''}`}>
       <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <Checkbox
+            checked={selectedRequirements.has(req.id)}
+            onCheckedChange={() => toggleRequirementSelection(req.id)}
+            className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 border-purple-300 h-5 w-5 mt-0.5 flex-shrink-0"
+            aria-label={`Select requirement ${req.referenceNumber}`}
+          />
+          <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
             <span className="font-mono text-xs text-gray-500">{req.referenceNumber}</span>
@@ -879,6 +926,7 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
   </SelectContent>
 </Select>
                       </div>
+                    </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => onEdit(req)} aria-label="Edit requirement"><Pencil className="w-3.5 h-3.5" /></Button>
@@ -925,6 +973,41 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* Floating Selection Bar */}
+      {selectedRequirements.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-purple-600 text-white rounded-lg shadow-lg px-4 py-3 flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <CheckSquare className="w-5 h-5" />
+              <span className="font-medium">{selectedRequirements.size} requirement{selectedRequirements.size !== 1 ? 's' : ''} selected</span>
+            </div>
+            <div className="h-6 w-px bg-purple-400" />
+            <Button
+              size="sm"
+              variant="secondary"
+              className="bg-white text-purple-700 hover:bg-purple-50 h-8"
+              onClick={() => {
+                if (onBulkGenerateWbs) {
+                  onBulkGenerateWbs(Array.from(selectedRequirements))
+                }
+              }}
+            >
+              <Sparkles className="w-4 h-4 mr-1.5" />
+              Generate WBS
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-white hover:bg-purple-700 h-8 px-2"
+              onClick={clearSelection}
+              aria-label="Clear selection"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -2089,6 +2172,49 @@ export function EstimateTab() {
   
   const handleLinkWbs = (reqId: string, wbsId: string) => { setRequirements(prev => prev.map(r => (r.id !== reqId || r.linkedWbsIds.includes(wbsId)) ? r : { ...r, linkedWbsIds: [...r.linkedWbsIds, wbsId] })) }
   const handleUnlinkWbs = (reqId: string, wbsId: string) => { setRequirements(prev => prev.map(r => r.id !== reqId ? r : { ...r, linkedWbsIds: r.linkedWbsIds.filter(id => id !== wbsId) })) }
+
+  // Bulk WBS generation from selected requirements
+  const handleBulkGenerateWbs = (reqIds: string[]) => {
+    const selectedReqs = requirements.filter(r => reqIds.includes(r.id))
+    const nextWbsNumber = wbsElements.length + 1
+
+    const newElements: EnhancedWBSElement[] = selectedReqs.map((req, index) => {
+      const elementId = generateId()
+      return {
+        id: elementId,
+        wbsNumber: `${nextWbsNumber + index}`,
+        title: req.title || `Requirement ${req.referenceNumber}`,
+        description: req.description,
+        sowReference: req.referenceNumber,
+        clin: '',
+        estimateMethod: 'engineering' as EstimateMethod,
+        complexityFactor: 1.0,
+        periodOfPerformance: { startDate: '', endDate: '' },
+        laborEstimates: [],
+        risks: [],
+        dependencies: [],
+        qualityGrade: 'yellow' as const,
+        qualityIssues: ['No labor estimates'],
+        what: '',
+        why: req.description || '',
+        assumptionsConstraints: '',
+        historicalReference: undefined,
+        engineeringBasis: undefined,
+      }
+    })
+
+    // Add all new WBS elements
+    setWbsElements(prev => [...prev, ...newElements])
+
+    // Link requirements to their corresponding WBS elements
+    setRequirements(prev => prev.map(r => {
+      const reqIndex = selectedReqs.findIndex(sr => sr.id === r.id)
+      if (reqIndex === -1) return r
+      const newWbsId = newElements[reqIndex].id
+      return { ...r, linkedWbsIds: [...r.linkedWbsIds, newWbsId] }
+    }))
+  }
+
 const handleNavigateToRoles = () => { setActiveMainTab('roles') }
   
   // Add role to team (from Labor Summary missing roles)
@@ -2249,7 +2375,7 @@ const handleAddRoleToTeam = (roleName: string) => {
             )}
           </TabsContent>
           
-          <TabsContent value="requirements" className="mt-0"><RequirementsSection requirements={requirements} wbsElements={wbsElements} onAdd={() => handleOpenReqDialog()} onEdit={handleOpenReqDialog} onDelete={(id) => setRequirements(prev => prev.filter(r => r.id !== id))} onLinkWbs={handleLinkWbs} onUnlinkWbs={handleUnlinkWbs} /></TabsContent>
+          <TabsContent value="requirements" className="mt-0"><RequirementsSection requirements={requirements} wbsElements={wbsElements} onAdd={() => handleOpenReqDialog()} onEdit={handleOpenReqDialog} onDelete={(id) => setRequirements(prev => prev.filter(r => r.id !== id))} onLinkWbs={handleLinkWbs} onUnlinkWbs={handleUnlinkWbs} onBulkGenerateWbs={handleBulkGenerateWbs} /></TabsContent>
           <TabsContent value="labor" className="mt-0"><LaborSummary wbsElements={wbsElements} billableHoursPerYear={uiBillableHours} onNavigateToRoles={handleNavigateToRoles} /></TabsContent>
           <TabsContent value="charges" className="mt-0"><ChargeCodeLibrary chargeCodes={chargeCodes} onAdd={() => handleOpenChargeCodeDialog()} onEdit={handleOpenChargeCodeDialog} onDelete={(id) => setChargeCodes(prev => prev.filter(c => c.id !== id))} /></TabsContent>
         </Tabs>
