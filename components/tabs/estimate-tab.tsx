@@ -857,32 +857,6 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
   </>}
 </p>        </div>
         <div className="flex items-center gap-3">
-          {/* Selection actions - shown when requirements selected */}
-          {selectedRequirements.size > 0 && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                className="bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100"
-                onClick={clearSelection}
-              >
-                {selectedRequirements.size} selected <X className="w-3.5 h-3.5 ml-1.5" />
-              </Button>
-              <Button
-                size="sm"
-                className="bg-purple-600 hover:bg-purple-700 text-white"
-                onClick={() => {
-                  if (onBulkGenerateWbs) {
-                    onBulkGenerateWbs(Array.from(selectedRequirements))
-                    clearSelection()
-                  }
-                }}
-              >
-                <Sparkles className="w-4 h-4 mr-1.5" />
-                Generate WBS ({selectedRequirements.size})
-              </Button>
-            </>
-          )}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}><List className="w-4 h-4 inline mr-1.5" />List</button>
             <button onClick={() => setViewMode('gaps')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors relative ${viewMode === 'gaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
@@ -1002,6 +976,34 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
         </div>
       )}
 
+      {/* Fixed floating selection bar at bottom of screen */}
+      {selectedRequirements.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-900 border rounded-lg shadow-lg px-4 py-3 flex items-center gap-4">
+          <span className="text-sm font-medium text-gray-700">{selectedRequirements.size} selected</span>
+          <Button
+            size="sm"
+            className="bg-purple-600 hover:bg-purple-700 text-white"
+            onClick={() => {
+              if (onBulkGenerateWbs) {
+                onBulkGenerateWbs(Array.from(selectedRequirements))
+                clearSelection()
+              }
+            }}
+          >
+            <Sparkles className="w-4 h-4 mr-1.5" />
+            Generate WBS ({selectedRequirements.size})
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-gray-500 hover:text-gray-700 h-8 px-2"
+            onClick={clearSelection}
+            aria-label="Clear selection"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
