@@ -875,7 +875,7 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
               <Checkbox
                 checked={filteredRequirements.length > 0 && selectedRequirements.size === filteredRequirements.length}
                 onCheckedChange={toggleAllRequirements}
-                className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 border-purple-300 h-5 w-5"
+                className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 border-2 border-purple-400 bg-white h-5 w-5 cursor-pointer"
                 aria-label="Select all requirements"
               />
               <span className="text-sm text-gray-600">Select all</span>
@@ -894,7 +894,7 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
           <Checkbox
             checked={selectedRequirements.has(req.id)}
             onCheckedChange={() => toggleRequirementSelection(req.id)}
-            className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 border-purple-300 h-5 w-5 mt-0.5 flex-shrink-0"
+            className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 border-2 border-purple-400 bg-white h-5 w-5 mt-0.5 flex-shrink-0 cursor-pointer"
             aria-label={`Select requirement ${req.referenceNumber}`}
           />
           <div className="flex-1 min-w-0">
