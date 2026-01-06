@@ -1379,7 +1379,7 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
               </div>
               
               {/* Assumptions */}
-              {element.assumptions.length > 0 && (
+              {element.assumptions?.length > 0 && (
                 <div>
                   <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Assumptions</h4>
                   <ul className="space-y-1">
