@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Search, Plus, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Info, HelpCircle,
   Clock, Calendar, AlertTriangle, Link2, Pencil, Trash2, X, Check,
@@ -976,9 +977,9 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
         </div>
       )}
 
-      {/* Fixed floating selection bar at bottom of screen */}
-      {selectedRequirements.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-900 border rounded-lg shadow-lg px-4 py-3 flex items-center gap-4">
+      {/* Fixed floating selection bar at bottom of screen - using portal to escape any transformed containers */}
+      {selectedRequirements.size > 0 && typeof document !== 'undefined' && createPortal(
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] bg-white dark:bg-gray-900 border border-gray-200 rounded-lg shadow-xl px-4 py-3 flex items-center gap-4">
           <span className="text-sm font-medium text-gray-700">{selectedRequirements.size} selected</span>
           <Button
             size="sm"
@@ -1002,7 +1003,8 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
           >
             <X className="w-4 h-4" />
           </Button>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
