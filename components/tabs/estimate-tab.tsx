@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import {
   Search, Plus, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Info, HelpCircle,
   Clock, Calendar, AlertTriangle, Link2, Pencil, Trash2, X, Check,
@@ -858,6 +857,32 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
   </>}
 </p>        </div>
         <div className="flex items-center gap-3">
+          {/* Selection actions - shown when requirements selected */}
+          {selectedRequirements.size > 0 && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100"
+                onClick={clearSelection}
+              >
+                {selectedRequirements.size} selected <X className="w-3.5 h-3.5 ml-1.5" />
+              </Button>
+              <Button
+                size="sm"
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+                onClick={() => {
+                  if (onBulkGenerateWbs) {
+                    onBulkGenerateWbs(Array.from(selectedRequirements))
+                    clearSelection()
+                  }
+                }}
+              >
+                <Sparkles className="w-4 h-4 mr-1.5" />
+                Generate WBS ({selectedRequirements.size})
+              </Button>
+            </>
+          )}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}><List className="w-4 h-4 inline mr-1.5" />List</button>
             <button onClick={() => setViewMode('gaps')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors relative ${viewMode === 'gaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
@@ -977,41 +1002,6 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
         </div>
       )}
 
-      {/* Floating Selection Bar - rendered via portal to escape container constraints */}
-      {selectedRequirements.size > 0 && typeof document !== 'undefined' && createPortal(
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[9999]">
-          <div className="bg-purple-600 text-white rounded-lg shadow-2xl px-4 py-3 flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <CheckSquare className="w-5 h-5" />
-              <span className="font-medium">{selectedRequirements.size} requirement{selectedRequirements.size !== 1 ? 's' : ''} selected</span>
-            </div>
-            <div className="h-6 w-px bg-purple-400" />
-            <Button
-              size="sm"
-              variant="secondary"
-              className="bg-white text-purple-700 hover:bg-purple-50 h-8"
-              onClick={() => {
-                if (onBulkGenerateWbs) {
-                  onBulkGenerateWbs(Array.from(selectedRequirements))
-                }
-              }}
-            >
-              <Sparkles className="w-4 h-4 mr-1.5" />
-              Generate WBS
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-white hover:bg-purple-700 h-8 px-2"
-              onClick={clearSelection}
-              aria-label="Clear selection"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   )
 }
