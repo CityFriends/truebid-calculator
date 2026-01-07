@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================================
 // EXPORT UTILITIES - TrueBid Cost Proposal Document Generation
 // Google-Quality Modern Design

@@ -719,6 +719,14 @@ export interface CompanyProfile {
   gsaEscalationRate?: number;    // e.g., 0.03 for 3%
   gsaBaseYear?: number;          // e.g., 2024
   gsaSins?: GSASin[];
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  dunsNumber?: string;
+  ein?: string;
+  idiqContracts?: any[];
+  gsaExpirationDate?: string;
 }
 
 // ==================== INDIRECT RATES (Audit-Ready) ====================
@@ -965,20 +973,6 @@ export interface PerDiemCalculation {
 
 // ==================== GSA SCHEDULE ====================
 
-export interface GSALaborCategory {
-  id: string;
-  sin: string;
-  title: string;
-  rates: {
-    year1: number | null;
-    year2: number | null;
-    year3: number | null;
-    year4: number | null;
-    year5: number | null;
-  };
-  educationRequirement?: string;
-  yearsExperience?: number;
-}
 
 export interface GSAContractInfo {
   contractNumber: string;
@@ -1013,7 +1007,7 @@ export type MainTabId =
   | 'export';
 
   // Utility tool type - accessed via Tools menu in header
-export type UtilityToolType = 'sub-rates' | null;
+export type UtilityToolType = 'sub-rates' | 'rate-builder' | 'wrap-rate' | null;
 
 // ==================== PROJECT VERSION TYPES ====================
 

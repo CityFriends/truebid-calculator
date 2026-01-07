@@ -27,7 +27,7 @@ interface UserProfile {
   avatarUrl: string | null
 }
 
-export function ProfilePage() {
+function ProfilePage() {
   const router = useRouter()
   const [profile, setProfile] = useState<UserProfile>({
     fullName: '',

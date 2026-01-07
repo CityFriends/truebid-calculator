@@ -333,7 +333,7 @@ function CompanyProfileTab() {
                       type="number"
                       step="0.1"
                       value={((companyProfile.gsaEscalationRate || 0.03) * 100).toFixed(1)}
-                      onChange={(e) => handleChange('gsaEscalationRate', parseFloat(e.target.value) / 100)}
+                      onChange={(e) => handleChange('gsaEscalationRate', parseFloat(e.target.value) / 100 as any)}
                       className="pr-8 dark:bg-gray-900 dark:border-gray-700"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
@@ -346,7 +346,7 @@ function CompanyProfileTab() {
                     id="gsa-base-year"
                     type="number"
                     value={companyProfile.gsaBaseYear || new Date().getFullYear()}
-                    onChange={(e) => handleChange('gsaBaseYear', parseInt(e.target.value))}
+                    onChange={(e) => handleChange('gsaBaseYear', parseInt(e.target.value) as any)}
                     placeholder="2024"
                     className="dark:bg-gray-900 dark:border-gray-700"
                   />

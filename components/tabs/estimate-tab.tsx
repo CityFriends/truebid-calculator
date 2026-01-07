@@ -2549,7 +2549,7 @@ export function EstimateTab() {
         existingWbsNumbers: wbsElements.map(el => el.wbsNumber),
         contractContext: {
           title: solicitation.title || 'Government Contract',
-          agency: solicitation.agency || 'Federal Agency',
+          agency: solicitation.clientAgency || 'Federal Agency',
           contractType: solicitation.contractType || 'tm',
           periodOfPerformance: {
             baseYear: solicitation.periodOfPerformance.baseYear,
@@ -2650,7 +2650,7 @@ export function EstimateTab() {
   })
   
   // Add WBS elements to state
-  setWbsElements(prev => [...prev, ...elementsToAdd])
+  setWbsElements([...wbsElements, ...elementsToAdd])
   
   // Auto-link requirements - SINGLE state update, not multiple
   if (elementMapping.length > 0) {
@@ -2696,7 +2696,7 @@ export function EstimateTab() {
   }
   
   const handleUpdateElement = (id: string, updates: Partial<EnhancedWBSElement>) => {
-  setWbsElements(prev => prev.map(el => {
+  setWbsElements(wbsElements.map(el => {
     if (el.id !== id) return el
     const updated = { ...el, ...updates }
     const { score, grade, issues } = calculateQualityScore(updated)
@@ -2705,13 +2705,13 @@ export function EstimateTab() {
 }
 
 const handleDeleteElement = (id: string) => {
-  setWbsElements(prev => prev.filter(el => el.id !== id))
+  setWbsElements(wbsElements.filter(el => el.id !== id))
   if (selectedElementId === id) setSelectedElementId(null)
 }
 
 const handleDeleteLabor = (laborId: string) => {
   if (!selectedElementId) return
-  setWbsElements(prev => prev.map(el => {
+  setWbsElements(wbsElements.map(el => {
     if (el.id !== selectedElementId) return el
     return { ...el, laborEstimates: el.laborEstimates.filter(l => l.id !== laborId) }
   }))
@@ -2797,7 +2797,7 @@ const handleAddElement = () => {
   element.qualityGrade = grade
   element.qualityIssues = issues
   
-  setWbsElements(prev => [...prev, element])
+  setWbsElements([...wbsElements, element])
   
   // Auto-link to requirement if one was selected
   if (newElement.linkedRequirementId) {

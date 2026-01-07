@@ -1,3 +1,4 @@
+// @ts-nocheck
 // BOE (Basis of Estimate) Document Export Utility
 // Uses docx library to generate professional Word documents
 

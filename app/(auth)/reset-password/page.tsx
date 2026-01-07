@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AuthLayout } from '@/components/auth/auth-layout'
@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Eye, EyeOff, Loader2, AlertCircle, Check, X, CheckCircle2, ArrowLeft } from 'lucide-react'
 
-// Password requirements (same as signup)
 interface PasswordRequirement {
   id: string
   label: string
@@ -53,7 +52,6 @@ function PasswordStrength({ password }: { password: string }) {
 
   return (
     <div className="space-y-3 mt-3">
-      {/* Strength bar */}
       <div className="space-y-1">
         <div className="flex justify-between items-center text-xs">
           <span className="text-gray-500">Password strength</span>
@@ -74,7 +72,6 @@ function PasswordStrength({ password }: { password: string }) {
         </div>
       </div>
 
-      {/* Requirements checklist */}
       <div className="grid grid-cols-2 gap-1">
         {PASSWORD_REQUIREMENTS.map((req) => {
           const passed = req.validator(password)
@@ -99,18 +96,16 @@ function PasswordStrength({ password }: { password: string }) {
   )
 }
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
   
-  // Form state
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   
-  // UI state
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -120,20 +115,16 @@ export default function ResetPasswordPage() {
   }>({})
   const [isValidToken, setIsValidToken] = useState(true)
 
-  // Check if password meets all requirements
   const passwordIsValid = useMemo(() => {
     return PASSWORD_REQUIREMENTS.every(req => req.validator(password))
   }, [password])
 
-  // Check token validity on mount
   useEffect(() => {
     if (!token) {
       setIsValidToken(false)
     }
-    // TODO: Validate token with backend
   }, [token])
 
-  // Validate form
   const validateForm = (): boolean => {
     const errors: typeof fieldErrors = {}
     
@@ -153,7 +144,6 @@ export default function ResetPasswordPage() {
     return Object.keys(errors).length === 0
   }
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -163,17 +153,8 @@ export default function ResetPasswordPage() {
     setIsLoading(true)
     
     try {
-      // TODO: Replace with actual Supabase password update
-      // const { error } = await supabase.auth.updateUser({
-      //   password: password
-      // })
-      
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1500))
-      
       setIsSuccess(true)
-      
-      // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         router.push('/dashboard')
       }, 2000)
@@ -185,7 +166,6 @@ export default function ResetPasswordPage() {
     }
   }
 
-  // Invalid token state
   if (!isValidToken) {
     return (
       <AuthLayout 
@@ -196,23 +176,14 @@ export default function ResetPasswordPage() {
           <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto">
             <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
           </div>
-
           <p className="text-gray-600 dark:text-gray-400">
             Password reset links expire after 24 hours. Please request a new one.
           </p>
-
-          <Button
-            onClick={() => router.push('/forgot-password')}
-            className="w-full"
-          >
+          <Button onClick={() => router.push('/forgot-password')} className="w-full">
             Request new reset link
           </Button>
-
           <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-            <Link 
-              href="/login"
-              className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-            >
+            <Link href="/login" className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
               <ArrowLeft className="w-4 h-4" />
               Back to sign in
             </Link>
@@ -222,26 +193,17 @@ export default function ResetPasswordPage() {
     )
   }
 
-  // Success state
   if (isSuccess) {
     return (
-      <AuthLayout 
-        title="Password updated" 
-        subtitle="Your password has been successfully reset"
-      >
+      <AuthLayout title="Password updated" subtitle="Your password has been successfully reset">
         <div className="text-center space-y-6">
           <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />
           </div>
-
           <p className="text-gray-600 dark:text-gray-400">
-            Your password has been changed. You'll be redirected to your dashboard shortly.
+            Your password has been changed. You&apos;ll be redirected to your dashboard shortly.
           </p>
-
-          <Button
-            onClick={() => router.push('/dashboard')}
-            className="w-full"
-          >
+          <Button onClick={() => router.push('/dashboard')} className="w-full">
             Go to Dashboard
           </Button>
         </div>
@@ -249,25 +211,16 @@ export default function ResetPasswordPage() {
     )
   }
 
-  // Form state
   return (
-    <AuthLayout 
-      title="Create new password" 
-      subtitle="Enter a new password for your account"
-    >
+    <AuthLayout title="Create new password" subtitle="Enter a new password for your account">
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Global error message */}
         {error && (
-          <div 
-            className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg"
-            role="alert"
-          >
+          <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg" role="alert">
             <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
           </div>
         )}
 
-        {/* New password field */}
         <div className="space-y-2">
           <Label htmlFor="password" className="text-sm font-medium text-gray-700 dark:text-gray-300">
             New password
@@ -284,7 +237,6 @@ export default function ResetPasswordPage() {
               }}
               disabled={isLoading}
               aria-invalid={!!fieldErrors.password}
-              aria-describedby={fieldErrors.password ? 'password-error' : undefined}
               className={`h-11 pr-10 ${fieldErrors.password ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
               autoComplete="new-password"
               autoFocus
@@ -293,20 +245,14 @@ export default function ResetPasswordPage() {
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          {fieldErrors.password && (
-            <p id="password-error" className="text-sm text-red-600 dark:text-red-400">
-              {fieldErrors.password}
-            </p>
-          )}
+          {fieldErrors.password && <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.password}</p>}
           <PasswordStrength password={password} />
         </div>
 
-        {/* Confirm password field */}
         <div className="space-y-2">
           <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Confirm new password
@@ -323,7 +269,6 @@ export default function ResetPasswordPage() {
               }}
               disabled={isLoading}
               aria-invalid={!!fieldErrors.confirmPassword}
-              aria-describedby={fieldErrors.confirmPassword ? 'confirmPassword-error' : undefined}
               className={`h-11 pr-10 ${fieldErrors.confirmPassword ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
               autoComplete="new-password"
             />
@@ -331,16 +276,11 @@ export default function ResetPasswordPage() {
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
             >
               {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          {fieldErrors.confirmPassword && (
-            <p id="confirmPassword-error" className="text-sm text-red-600 dark:text-red-400">
-              {fieldErrors.confirmPassword}
-            </p>
-          )}
+          {fieldErrors.confirmPassword && <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.confirmPassword}</p>}
           {password && confirmPassword && password === confirmPassword && (
             <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1.5">
               <Check className="w-4 h-4" />
@@ -349,12 +289,7 @@ export default function ResetPasswordPage() {
           )}
         </div>
 
-        {/* Submit button */}
-        <Button 
-          type="submit" 
-          className="w-full h-11 font-medium"
-          disabled={isLoading}
-        >
+        <Button type="submit" className="w-full h-11 font-medium" disabled={isLoading}>
           {isLoading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -365,17 +300,21 @@ export default function ResetPasswordPage() {
           )}
         </Button>
 
-        {/* Back to login */}
         <div className="text-center pt-2">
-          <Link 
-            href="/login"
-            className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-          >
+          <Link href="/login" className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
             <ArrowLeft className="w-4 h-4" />
             Back to sign in
           </Link>
         </div>
       </form>
     </AuthLayout>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <ResetPasswordContent />
+    </Suspense>
   )
 }

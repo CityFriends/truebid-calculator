@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { useAppContext } from '@/contexts/app-context'
+import { useAppContext, UtilityToolType } from '@/contexts/app-context'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -89,7 +89,7 @@ export function AppHeader() {
   }
 
   const handleToolSelect = (tool: string) => {
-    setActiveUtilityTool(tool)
+    setActiveUtilityTool(tool as UtilityToolType)
     if (isHome) {
       router.push('/tools')
     }
