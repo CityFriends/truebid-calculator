@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import {
   Search, Plus, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Info, HelpCircle,
   Clock, Calendar, AlertTriangle, Link2, Pencil, Trash2, X, Check,
@@ -18,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { SettingsCallout } from '@/components/shared/settings-callout'
+import { Loader2, Wand2 } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -45,7 +45,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Checkbox } from '@/components/ui/checkbox'
 import { useAppContext } from '@/contexts/app-context'
 
 // ============================================================================
@@ -293,6 +292,51 @@ function calculateQualityScore(element: EnhancedWBSElement): { score: number; gr
   
   return { score: Math.max(0, score), grade, issues }
 }
+
+// Smart WBS number suggestion
+function getNextWbsNumber(elements: EnhancedWBSElement[], parentPrefix?: string): string {
+  if (!elements.length) return '1.1'
+  
+  if (parentPrefix) {
+    // Looking for children of a specific parent (e.g., "1.3.x" under "1.3")
+    const childNumbers = elements
+      .map(el => el.wbsNumber)
+      .filter(num => 
+        num.startsWith(parentPrefix + '.') && 
+        num.split('.').length === parentPrefix.split('.').length + 1
+      )
+      .map(num => {
+        const parts = num.split('.')
+        return parseInt(parts[parts.length - 1]) || 0
+      })
+    
+    const nextChild = childNumbers.length > 0 ? Math.max(...childNumbers) + 1 : 1
+    return `${parentPrefix}.${nextChild}`
+  } else {
+    // Find the highest top-level number and next sibling
+    const topLevelNumbers = elements
+      .map(el => el.wbsNumber)
+      .filter(num => num.split('.').length === 2) // Only "X.Y" format
+      .map(num => {
+        const parts = num.split('.')
+        return { major: parseInt(parts[0]) || 1, minor: parseInt(parts[1]) || 0 }
+      })
+    
+    if (topLevelNumbers.length === 0) return '1.1'
+    
+    // Get the highest major number
+    const maxMajor = Math.max(...topLevelNumbers.map(n => n.major))
+    
+    // Get the highest minor number for that major
+    const minorsForMaxMajor = topLevelNumbers
+      .filter(n => n.major === maxMajor)
+      .map(n => n.minor)
+    
+    const nextMinor = Math.max(...minorsForMaxMajor) + 1
+    return `${maxMajor}.${nextMinor}`
+  }
+}
+
 // ============================================================================
 // ROLE LIBRARY
 // ============================================================================
@@ -801,137 +845,269 @@ function ChargeCodeLibrary({ chargeCodes, onAdd, onEdit, onDelete }: { chargeCod
   )
 }
 
-function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelete, onLinkWbs, onUnlinkWbs, onBulkGenerateWbs }: { requirements: SOORequirement[]; wbsElements: EnhancedWBSElement[]; onAdd: (req: SOORequirement) => void; onEdit: (req: SOORequirement) => void; onDelete: (id: string) => void; onLinkWbs: (reqId: string, wbsId: string) => void; onUnlinkWbs: (reqId: string, wbsId: string) => void; onBulkGenerateWbs?: (reqIds: string[]) => void }) {
+function RequirementsSection({ 
+  requirements, 
+  wbsElements, 
+  onAdd, 
+  onEdit, 
+  onDelete, 
+  onLinkWbs, 
+  onUnlinkWbs,
+  selectedRequirements,
+  onToggleSelection,
+  onSelectAllUnmapped,
+  onClearSelection,
+  onBulkGenerate,
+  isGenerating
+}: { 
+  requirements: SOORequirement[]; 
+  wbsElements: EnhancedWBSElement[]; 
+  onAdd: (req: SOORequirement) => void; 
+  onEdit: (req: SOORequirement) => void; 
+  onDelete: (id: string) => void; 
+  onLinkWbs: (reqId: string, wbsId: string) => void; 
+  onUnlinkWbs: (reqId: string, wbsId: string) => void;
+  selectedRequirements: Set<string>;
+  onToggleSelection: (reqId: string) => void;
+  onSelectAllUnmapped: () => void;
+  onClearSelection: () => void;
+  onBulkGenerate: () => void;
+  isGenerating: boolean;
+}) {
   const [viewMode, setViewMode] = useState<'list' | 'gaps'>('list')
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedRequirements, setSelectedRequirements] = useState<Set<string>>(new Set())
-
-  // Toggle single requirement selection
-  const toggleRequirementSelection = (reqId: string) => {
-    setSelectedRequirements(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(reqId)) {
-        newSet.delete(reqId)
-      } else {
-        newSet.add(reqId)
-      }
-      return newSet
-    })
-  }
-
-  // Toggle all requirements selection
-  const toggleAllRequirements = () => {
-    if (selectedRequirements.size === filteredRequirements.length) {
-      setSelectedRequirements(new Set())
-    } else {
-      setSelectedRequirements(new Set(filteredRequirements.map(r => r.id)))
+  
+  const filteredRequirements = useMemo(() => {
+    let filtered = requirements
+    
+    // Apply search filter
+    if (searchQuery) {
+      filtered = filtered.filter(req => 
+        req.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        req.title.toLowerCase().includes(searchQuery.toLowerCase())
+      )
     }
-  }
-
-  // Clear selection
-  const clearSelection = () => {
-    setSelectedRequirements(new Set())
-  }
-  const filteredRequirements = useMemo(() => !searchQuery ? requirements : requirements.filter(req => req.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase()) || req.title.toLowerCase().includes(searchQuery.toLowerCase())), [requirements, searchQuery])
+    
+    // Sort: unmapped first, then mapped
+    return [...filtered].sort((a, b) => {
+      const aUnmapped = a.linkedWbsIds.length === 0 ? 0 : 1
+      const bUnmapped = b.linkedWbsIds.length === 0 ? 0 : 1
+      return aUnmapped - bUnmapped
+    })
+  }, [requirements, searchQuery])
+  
   const stats = useMemo(() => {
-    const total = requirements.length; const mapped = requirements.filter(r => r.linkedWbsIds.length > 0).length
-    const shallCount = requirements.filter(r => r.type === 'shall').length; const shallMapped = requirements.filter(r => r.type === 'shall' && r.linkedWbsIds.length > 0).length
-    return { total, mapped, unmapped: total - mapped, coverage: total > 0 ? Math.round((mapped / total) * 100) : 0, shallCoverage: shallCount > 0 ? Math.round((shallMapped / shallCount) * 100) : 0 }
+    const total = requirements.length
+    const mapped = requirements.filter(r => r.linkedWbsIds.length > 0).length
+    const shallCount = requirements.filter(r => r.type === 'shall').length
+    const shallMapped = requirements.filter(r => r.type === 'shall' && r.linkedWbsIds.length > 0).length
+    return { 
+      total, 
+      mapped, 
+      unmapped: total - mapped, 
+      coverage: total > 0 ? Math.round((mapped / total) * 100) : 0, 
+      shallCoverage: shallCount > 0 ? Math.round((shallMapped / shallCount) * 100) : 0 
+    }
   }, [requirements])
+  
   const unmappedRequirements = requirements.filter(r => r.linkedWbsIds.length === 0)
   const getLinkedWbsElements = (wbsIds: string[]) => wbsElements.filter(el => wbsIds.includes(el.id))
   
+  // Count selected unmapped requirements (only these can generate WBS)
+  const selectedUnmappedCount = Array.from(selectedRequirements).filter(id => {
+    const req = requirements.find(r => r.id === id)
+    return req && req.linkedWbsIds.length === 0
+  }).length
+
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Requirements & Traceability</h2>
-<p className="text-xs text-gray-600 mt-1 flex items-center gap-1.5">
-  <span>{stats.total} requirements</span>
-  <span className="w-1 h-1 rounded-full bg-gray-400" aria-hidden="true" />
-  <span>{stats.mapped} mapped</span>
-  <span className="w-1 h-1 rounded-full bg-gray-400" aria-hidden="true" />
-  <span>{stats.shallCoverage}% "shall" covered</span>
-  {stats.unmapped > 0 && <>
-    <span className="w-1 h-1 rounded-full bg-red-400" aria-hidden="true" />
-    <span className="text-red-600">{stats.unmapped} gaps</span>
-  </>}
-</p>        </div>
+          <p className="text-xs text-gray-600 mt-1 flex items-center gap-1.5">
+            <span>{stats.total} requirements</span>
+            <span className="w-1 h-1 rounded-full bg-gray-400" aria-hidden="true" />
+            <span>{stats.mapped} mapped</span>
+            <span className="w-1 h-1 rounded-full bg-gray-400" aria-hidden="true" />
+            <span>{stats.shallCoverage}% "shall" covered</span>
+            {stats.unmapped > 0 && (
+              <>
+                <span className="w-1 h-1 rounded-full bg-red-400" aria-hidden="true" />
+                <span className="text-red-600">{stats.unmapped} gaps</span>
+              </>
+            )}
+          </p>
+        </div>
         <div className="flex items-center gap-3">
+          {/* Selection indicator */}
+          {selectedRequirements.size > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+              <span className="text-sm font-medium text-blue-700">{selectedRequirements.size} selected</span>
+              <button onClick={onClearSelection} className="text-blue-600 hover:text-blue-800">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          
+          {/* View mode toggle */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}><List className="w-4 h-4 inline mr-1.5" />List</button>
-            <button onClick={() => setViewMode('gaps')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors relative ${viewMode === 'gaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
+            <button 
+              onClick={() => setViewMode('list')} 
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              <List className="w-4 h-4 inline mr-1.5" />List
+            </button>
+            <button 
+              onClick={() => setViewMode('gaps')} 
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors relative ${viewMode === 'gaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+            >
               <AlertTriangle className="w-4 h-4 inline mr-1.5" />Gaps
-              {stats.unmapped > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 text-[10px] bg-red-500 text-white rounded-full flex items-center justify-center">{stats.unmapped}</span>}
+              {stats.unmapped > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 text-[10px] bg-red-500 text-white rounded-full flex items-center justify-center">
+                  {stats.unmapped}
+                </span>
+              )}
             </button>
           </div>
-          <Button size="sm" onClick={() => onAdd({ id: `req-${Date.now()}`, referenceNumber: '', title: '', description: '', type: 'shall', category: 'functional', priority: 'medium', source: '', linkedWbsIds: [], notes: '', isAIExtracted: false })}><Plus className="w-4 h-4 mr-1" />Add</Button>
+          
+          {/* Add button */}
+          <Button 
+            size="sm" 
+            onClick={() => onAdd({ 
+              id: `req-${Date.now()}`, 
+              referenceNumber: '', 
+              title: '', 
+              description: '', 
+              type: 'shall', 
+              category: 'functional', 
+              priority: 'medium', 
+              source: '', 
+              linkedWbsIds: [], 
+              notes: '', 
+              isAIExtracted: false 
+            })}
+          >
+            <Plus className="w-4 h-4 mr-1" />Add
+          </Button>
         </div>
       </div>
       
+      {/* Select All Unmapped prompt */}
+      {stats.unmapped > 0 && selectedRequirements.size === 0 && (
+        <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <Wand2 className="w-5 h-5 text-purple-600" />
+            <span className="text-sm text-purple-800">
+              <strong>{stats.unmapped} unmapped requirement{stats.unmapped !== 1 ? 's' : ''}</strong> ready for AI WBS generation
+            </span>
+          </div>
+          <Button size="sm" variant="outline" onClick={onSelectAllUnmapped} className="border-purple-300 text-purple-700 hover:bg-purple-100">
+            <CheckSquare className="w-4 h-4 mr-1.5" />
+            Select All Unmapped
+          </Button>
+        </div>
+      )}
+      
+      {/* List View */}
       {viewMode === 'list' && (
         <>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={filteredRequirements.length > 0 && selectedRequirements.size === filteredRequirements.length}
-                onCheckedChange={toggleAllRequirements}
-                className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 border-2 border-purple-400 bg-white h-5 w-5 cursor-pointer"
-                aria-label="Select all requirements"
-              />
-              <span className="text-sm text-gray-600">Select all</span>
-            </div>
-            <div className="relative max-w-xs flex-1"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 text-sm" /></div>
+          <div className="relative max-w-xs">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input 
+              placeholder="Search..." 
+              value={searchQuery} 
+              onChange={(e) => setSearchQuery(e.target.value)} 
+              className="pl-9 h-8 text-sm" 
+            />
           </div>
           <div className="space-y-2">
-            {filteredRequirements.map(req => {
-          const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
-          const linkedWbs = getLinkedWbsElements(req.linkedWbsIds)
-            const isMapped = linkedWbs.length > 0
-            return (
-    <div key={req.id} className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300 ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'} ${selectedRequirements.has(req.id) ? 'ring-2 ring-purple-300 border-purple-300' : ''}`}>
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <Checkbox
-            checked={selectedRequirements.has(req.id)}
-            onCheckedChange={() => toggleRequirementSelection(req.id)}
-            className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 border-2 border-purple-400 bg-white h-5 w-5 mt-0.5 flex-shrink-0 cursor-pointer"
-            aria-label={`Select requirement ${req.referenceNumber}`}
-          />
-          <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
-            <span className="font-mono text-xs text-gray-500">{req.referenceNumber}</span>
-            <span className="text-sm font-medium text-gray-900 truncate">{req.title || 'Untitled'}</span>
-          </div>
-          {/* ADD: Description preview */}
-          {req.description && (
-            <p className="text-xs text-gray-600 line-clamp-2 mb-1.5">{req.description}</p>
-          )}
-          {/* ADD: Source badge */}
-          {req.source && (
-            <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{req.source}</span>
-          )}
-          <div className="flex items-center gap-1 flex-wrap mt-1.5">
-                        {linkedWbs.map(wbs => <Badge key={wbs.id} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 cursor-pointer hover:bg-red-100" onClick={() => onUnlinkWbs(req.id, wbs.id)}>{wbs.wbsNumber} ×</Badge>)}
-                      <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
-  <SelectTrigger className="h-5 w-auto px-2 text-[10px] text-blue-600 border-none bg-transparent hover:bg-blue-50">
-    <span>+ Link WBS</span>
-  </SelectTrigger>
-  <SelectContent position="popper" sideOffset={4} className="z-[100] max-h-[200px] overflow-y-auto">
-    {wbsElements.filter(wbs => !req.linkedWbsIds.includes(wbs.id)).map(wbs => (
-      <SelectItem key={wbs.id} value={wbs.id} className="text-xs">
-        {wbs.wbsNumber} - {wbs.title}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
+            {filteredRequirements.map((req, idx) => {
+              const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
+              const linkedWbs = getLinkedWbsElements(req.linkedWbsIds)
+              const isMapped = linkedWbs.length > 0
+              const displayNumber = req.referenceNumber.startsWith('p.') || req.referenceNumber.startsWith('SOO')
+                ? req.referenceNumber
+                : `REQ-${String(idx + 1).padStart(3, '0')}`
+              
+              return (
+                <div 
+                  key={req.id} 
+                  className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300 ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'}`}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Checkbox */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onToggleSelection(req.id) }}
+                      className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        selectedRequirements.has(req.id)
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : 'border-gray-300 hover:border-blue-400'
+                      }`}
+                    >
+                      {selectedRequirements.has(req.id) && <Check className="w-3 h-3" />}
+                    </button>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
+                            <span className="font-mono text-xs text-gray-500">{displayNumber}</span>
+                            <span className="text-sm font-medium text-gray-900 truncate">{req.title || 'Untitled'}</span>
+                          </div>
+                          {req.description && (
+                            <p className="text-xs text-gray-600 line-clamp-2 mb-1.5">{req.description}</p>
+                          )}
+                          {req.source && (
+                            <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{req.source}</span>
+                          )}
+                          <div className="flex items-center gap-1 flex-wrap mt-1.5">
+                            {linkedWbs.map(wbs => (
+                              <Badge 
+                                key={wbs.id} 
+                                variant="secondary" 
+                                className="text-[10px] px-1.5 py-0 h-5 cursor-pointer hover:bg-red-100" 
+                                onClick={() => onUnlinkWbs(req.id, wbs.id)}
+                              >
+                                {wbs.wbsNumber} ×
+                              </Badge>
+                            ))}
+                            <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
+                              <SelectTrigger className="h-5 w-auto px-2 text-[10px] text-blue-600 border-none bg-transparent hover:bg-blue-50">
+                                <span>+ Link WBS</span>
+                              </SelectTrigger>
+                              <SelectContent position="popper" sideOffset={4} className="z-[100] max-h-[200px] overflow-y-auto">
+                                {wbsElements.filter(wbs => !req.linkedWbsIds.includes(wbs.id)).map(wbs => (
+                                  <SelectItem key={wbs.id} value={wbs.id} className="text-xs">
+                                    {wbs.wbsNumber} - {wbs.title}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" 
+                            onClick={() => onEdit(req)} 
+                            aria-label="Edit requirement"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50" 
+                            onClick={() => onDelete(req.id)} 
+                            aria-label="Delete requirement"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => onEdit(req)} aria-label="Edit requirement"><Pencil className="w-3.5 h-3.5" /></Button>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => onDelete(req.id)} aria-label="Delete requirement"><Trash2 className="w-3.5 h-3.5" /></Button>
                     </div>
                   </div>
                 </div>
@@ -941,13 +1117,22 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
         </>
       )}
       
+      {/* Gaps View */}
       {viewMode === 'gaps' && (
         <div className="space-y-4">
           {unmappedRequirements.length === 0 ? (
-            <div className="text-center py-12 bg-green-50 border border-green-200 rounded-lg"><CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" /><p className="text-lg font-semibold text-green-800">All Requirements Mapped!</p></div>
+            <div className="text-center py-12 bg-green-50 border border-green-200 rounded-lg">
+              <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
+              <p className="text-lg font-semibold text-green-800">All Requirements Mapped!</p>
+            </div>
           ) : (
             <>
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4"><div className="flex items-center gap-2 text-red-800"><AlertTriangle className="w-5 h-5" /><span className="font-semibold">{unmappedRequirements.length} Unmapped Requirement{unmappedRequirements.length !== 1 ? 's' : ''}</span></div></div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-red-800">
+                  <AlertTriangle className="w-5 h-5" />
+                  <span className="font-semibold">{unmappedRequirements.length} Unmapped Requirement{unmappedRequirements.length !== 1 ? 's' : ''}</span>
+                </div>
+              </div>
               <div className="space-y-2">
                 {unmappedRequirements.map(req => {
                   const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
@@ -962,49 +1147,70 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
                           <p className="text-sm text-gray-700">{req.title}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}><SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue placeholder="Link to WBS..." /></SelectTrigger><SelectContent>{wbsElements.map(wbs => <SelectItem key={wbs.id} value={wbs.id}>{wbs.wbsNumber} - {wbs.title}</SelectItem>)}</SelectContent></Select>
+                          <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
+                            <SelectTrigger className="w-[180px] h-8 text-xs">
+                              <SelectValue placeholder="Link to WBS..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {wbsElements.map(wbs => (
+                                <SelectItem key={wbs.id} value={wbs.id}>{wbs.wbsNumber} - {wbs.title}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => onEdit(req)} aria-label="Edit requirement"><Pencil className="w-3.5 h-3.5" /></Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" 
+                              onClick={() => onEdit(req)} 
+                              aria-label="Edit requirement"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
                           </div>
                         </div>
                       </div>
                     </div>
                   )
                 })}
-              </div>
+                          </div>
             </>
           )}
         </div>
       )}
 
-      {/* Fixed floating selection bar at bottom of screen - using portal to escape any transformed containers */}
-      {selectedRequirements.size > 0 && typeof document !== 'undefined' && createPortal(
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] bg-white dark:bg-gray-900 border border-gray-200 rounded-lg shadow-xl px-4 py-3 flex items-center gap-4">
-          <span className="text-sm font-medium text-gray-700">{selectedRequirements.size} selected</span>
-          <Button
-            size="sm"
-            className="bg-purple-600 hover:bg-purple-700 text-white"
-            onClick={() => {
-              if (onBulkGenerateWbs) {
-                onBulkGenerateWbs(Array.from(selectedRequirements))
-                clearSelection()
-              }
-            }}
-          >
-            <Sparkles className="w-4 h-4 mr-1.5" />
-            Generate WBS ({selectedRequirements.size})
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-gray-500 hover:text-gray-700 h-8 px-2"
-            onClick={clearSelection}
-            aria-label="Clear selection"
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        </div>,
-        document.body
+      {/* Floating Selection Bar */}
+      {selectedRequirements.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-lg shadow-lg">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center">
+                <span className="text-xs font-semibold text-purple-700">{selectedRequirements.size}</span>
+              </div>
+              <span className="text-sm font-medium text-gray-900">selected</span>
+            </div>
+            <div className="w-px h-5 bg-gray-200" />
+            <button
+              onClick={onClearSelection}
+              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              Clear
+            </button>
+            <Button 
+              size="sm" 
+              onClick={onBulkGenerate}
+              disabled={isGenerating}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {isGenerating ? (
+                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              ) : (
+                <Wand2 className="w-4 h-4 mr-1.5" />
+              )}
+              Generate WBS
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -1012,7 +1218,8 @@ function RequirementsSection({ requirements, wbsElements, onAdd, onEdit, onDelet
 
 // ============================================================================
 // WBS SLIDEOUT PANEL WITH RISKS & DEPENDENCIES
-// ============================================================================
+// 
+
 
 interface WBSSlideoutProps {
   element: EnhancedWBSElement
@@ -1994,6 +2201,139 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
 // ============================================================================
 // MAIN ESTIMATE TAB COMPONENT
 // ============================================================================
+function BulkGenerateDialog({
+  isOpen,
+  onClose,
+  isGenerating,
+  progress,
+  generatedWbs,
+  error,
+  onAccept,
+  onDiscard,
+  selectedCount
+}: {
+  isOpen: boolean
+  onClose: () => void
+  isGenerating: boolean
+  progress: number
+  generatedWbs: EnhancedWBSElement[]
+  error: string | null
+  onAccept: () => void
+  onDiscard: () => void
+  selectedCount: number
+}) {
+  if (!isOpen) return null
+  
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wand2 className="w-5 h-5 text-purple-600" />
+            AI WBS Generation
+          </DialogTitle>
+          <DialogDescription>
+            {isGenerating 
+              ? `Generating WBS elements for ${selectedCount} requirement${selectedCount !== 1 ? 's' : ''}...`
+              : error 
+                ? 'Generation failed'
+                : `Generated ${generatedWbs.length} WBS element${generatedWbs.length !== 1 ? 's' : ''}`
+            }
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="flex-1 overflow-y-auto py-4">
+          {isGenerating && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="w-12 h-12 text-purple-600 animate-spin mb-4" />
+              <p className="text-sm text-gray-600 mb-2">Analyzing requirements and generating WBS...</p>
+              <div className="w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-purple-600 transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-2">{progress}%</p>
+            </div>
+          )}
+          
+          {error && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <XCircle className="w-12 h-12 text-red-500 mb-4" />
+              <p className="text-sm font-medium text-red-700 mb-2">Generation Failed</p>
+              <p className="text-sm text-gray-600 text-center max-w-md">{error}</p>
+            </div>
+          )}
+          
+          {!isGenerating && !error && generatedWbs.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
+                <CheckCircle2 className="w-5 h-5" />
+                <span>Successfully generated {generatedWbs.length} WBS element{generatedWbs.length !== 1 ? 's' : ''}. Review below and accept to add them.</span>
+              </div>
+              
+              {generatedWbs.map((wbs, idx) => (
+                <div key={wbs.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono font-semibold text-gray-900">{wbs.wbsNumber}</span>
+                        <span className="font-medium text-gray-900">{wbs.title}</span>
+                      </div>
+                      {wbs.sowReference && (
+                        <span className="text-xs text-gray-500">{wbs.sowReference}</span>
+                      )}
+                    </div>
+                    <Badge className="bg-purple-100 text-purple-700 border-purple-200">AI Generated</Badge>
+                  </div>
+                  
+                  {wbs.why && (
+                    <p className="text-sm text-gray-600 mb-2">
+                      <span className="font-medium">Why:</span> {wbs.why}
+                    </p>
+                  )}
+                  
+                  {wbs.what && (
+                    <p className="text-sm text-gray-600 mb-2">
+                      <span className="font-medium">What:</span> {wbs.what}
+                    </p>
+                  )}
+                  
+                  {wbs.laborEstimates.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <p className="text-xs font-medium text-gray-500 mb-2">Labor Estimates:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {wbs.laborEstimates.map(labor => (
+                          <Badge key={labor.id} variant="outline" className="text-xs">
+                            {labor.roleName}: {getTotalHours(labor.hoursByPeriod)} hrs
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        <DialogFooter className="border-t pt-4">
+          {error ? (
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          ) : !isGenerating && generatedWbs.length > 0 ? (
+            <>
+              <Button variant="outline" onClick={onDiscard}>Discard All</Button>
+              <Button onClick={onAccept} className="bg-green-600 hover:bg-green-700">
+                <Check className="w-4 h-4 mr-2" />
+                Accept & Add ({generatedWbs.length})
+              </Button>
+            </>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 export function EstimateTab() {
   // ==========================================================================
@@ -2111,7 +2451,14 @@ export function EstimateTab() {
   const [sortBy, setSortBy] = useState<string>('wbs')
   const [activeSection, setActiveSection] = useState('requirements')
   const [showAddElement, setShowAddElement] = useState(false)
-  const [newElement, setNewElement] = useState<Partial<EnhancedWBSElement>>({ wbsNumber: '', title: '', sowReference: '', estimateMethod: 'engineering', complexityFactor: 1.0 })
+  const [newElement, setNewElement] = useState<Partial<EnhancedWBSElement> & { linkedRequirementId?: string }>({ 
+  wbsNumber: '', 
+  title: '', 
+  sowReference: '', 
+  estimateMethod: 'engineering', 
+  complexityFactor: 1.0,
+  linkedRequirementId: ''
+  })  
   const [showLaborDialog, setShowLaborDialog] = useState(false)
   const [editingLabor, setEditingLabor] = useState<EnhancedLaborEstimate | null>(null)
   const [laborForm, setLaborForm] = useState<{ roleId: string; rationale: string; confidence: 'high' | 'medium' | 'low'; hoursByPeriod: PeriodHours }>({ roleId: '', rationale: '', confidence: 'medium', hoursByPeriod: { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 } })
@@ -2126,7 +2473,222 @@ export function EstimateTab() {
   const [editingChargeCode, setEditingChargeCode] = useState<ChargeCode | null>(null)
   const [chargeCodeForm, setChargeCodeForm] = useState<Partial<ChargeCode>>({ chargeNumber: '', projectName: '', client: '', dateRange: '', totalHours: 0, description: '', roles: [] })
   const [newRole, setNewRole] = useState('')
+  // State for bulk WBS generation
+  const [selectedRequirements, setSelectedRequirements] = useState<Set<string>>(new Set())
+  const [showBulkGenerateDialog, setShowBulkGenerateDialog] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generationProgress, setGenerationProgress] = useState(0)
+  const [generatedWbs, setGeneratedWbs] = useState<EnhancedWBSElement[]>([])
+  const [generationError, setGenerationError] = useState<string | null>(null)
   
+// Bulk WBS generation handlers
+  const handleToggleRequirementSelection = (reqId: string) => {
+    setSelectedRequirements(prev => {
+      const next = new Set(prev)
+      if (next.has(reqId)) {
+        next.delete(reqId)
+      } else {
+        next.add(reqId)
+      }
+      return next
+    })
+  }
+
+  const handleSelectAllUnmapped = () => {
+    const unmapped = requirements.filter(r => r.linkedWbsIds.length === 0)
+    setSelectedRequirements(new Set(unmapped.map(r => r.id)))
+  }
+
+  const handleClearSelection = () => {
+    setSelectedRequirements(new Set())
+  }
+
+  const handleBulkGenerateWBS = async () => {
+    if (selectedRequirements.size === 0) return
+    
+    // Limit to 10 requirements per batch for optimal AI performance
+    const MAX_REQUIREMENTS = 5
+    if (selectedRequirements.size > MAX_REQUIREMENTS) {
+      alert(`Please select ${MAX_REQUIREMENTS} or fewer requirements at a time for best results. You have ${selectedRequirements.size} selected.\n\nTip: Generate in batches for higher quality WBS elements.`)
+      return
+    }
+    
+    setIsGenerating(true)
+    setGenerationProgress(0)
+    setGenerationError(null)
+    setGeneratedWbs([])
+    setShowBulkGenerateDialog(true)
+    
+    try {
+      const selectedReqs = requirements.filter(r => selectedRequirements.has(r.id))
+      
+      const payload = {
+        requirements: selectedReqs.map(r => ({
+          id: r.id,
+          referenceNumber: r.referenceNumber,
+          title: r.title,
+          description: r.description,
+          type: r.type,
+          category: r.category,
+          source: r.source,
+        })),
+        availableRoles: companyRoles.length > 0 
+          ? companyRoles.map(r => ({
+              id: r.id,
+              name: r.title,
+              description: r.description || `${r.laborCategory || 'General'} role`,
+              category: r.laborCategory || 'technical',
+            }))
+        : selectedRoles.map(r => ({
+              id: r.id,
+              name: r.name,
+              description: `${r.category} role`,
+              category: r.category || 'technical',
+            })),
+
+        existingWbsNumbers: wbsElements.map(el => el.wbsNumber),
+        contractContext: {
+          title: solicitation.title || 'Government Contract',
+          agency: solicitation.agency || 'Federal Agency',
+          contractType: solicitation.contractType || 'tm',
+          periodOfPerformance: {
+            baseYear: solicitation.periodOfPerformance.baseYear,
+            optionYears: solicitation.periodOfPerformance.optionYears,
+          }
+        }
+      }
+      
+      const progressInterval = setInterval(() => {
+        setGenerationProgress(prev => Math.min(prev + 5, 85))
+      }, 500)
+      
+      const response = await fetch('/api/generate-wbs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      
+      clearInterval(progressInterval)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('API Error:', response.status, errorData)
+        throw new Error(errorData.error || errorData.message || `Generation failed (${response.status})`)
+  }
+      
+      const data = await response.json()
+      setGenerationProgress(100)
+      
+      const newElements: EnhancedWBSElement[] = data.wbsElements.map((el: any) => {
+        const element: EnhancedWBSElement = {
+          id: generateId(),
+          wbsNumber: el.wbsNumber,
+          title: el.title,
+          sowReference: el.sowReference || '',
+          clin: '',
+          periodOfPerformance: { startDate: '', endDate: '' },
+          why: el.why || '',
+          what: el.what || '',
+          notIncluded: el.notIncluded || '',
+          assumptions: el.assumptions || [],
+          estimateMethod: el.estimateMethod || 'engineering',
+          complexityFactor: 1.0,
+          complexityJustification: '',
+          laborEstimates: (el.laborEstimates || []).map((labor: any) => ({
+            id: generateId(),
+            roleId: labor.roleId,
+            roleName: labor.roleName,
+            hoursByPeriod: labor.hoursByPeriod || { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 },
+            rationale: labor.rationale || '',
+            confidence: labor.confidence || 'medium',
+            isAISuggested: true,
+            isOrphaned: !selectedRoles.some(r => r.id === labor.roleId),
+          })),
+          risks: [],
+          dependencies: [],
+          qualityGrade: 'yellow',
+          qualityScore: 0,
+          qualityIssues: [],
+          isAIGenerated: true,
+          aiConfidence: 0.8,
+        }
+        
+        const { score, grade, issues } = calculateQualityScore(element)
+        element.qualityScore = score
+        element.qualityGrade = grade
+        element.qualityIssues = issues
+        
+        // Store linked requirement ID for later
+        ;(element as any)._linkedRequirementId = el.linkedRequirementId
+        
+        return element
+      })
+      
+      setGeneratedWbs(newElements)
+      
+    } catch (error) {
+      console.error('Generation error:', error)
+      setGenerationError(error instanceof Error ? error.message : 'Unknown error')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+ const handleAcceptGeneratedWbs = () => {
+  // Create elements with fresh IDs and track the mapping
+  const elementMapping: { reqId: string; wbsId: string }[] = []
+  
+  const elementsToAdd = generatedWbs.map(el => {
+    const { _linkedRequirementId, ...cleanElement } = el as any
+    const newId = generateId()
+    
+    if (_linkedRequirementId) {
+      elementMapping.push({ reqId: _linkedRequirementId, wbsId: newId })
+    }
+    
+    return { ...cleanElement, id: newId } as EnhancedWBSElement
+  })
+  
+  // Add WBS elements to state
+  setWbsElements(prev => [...prev, ...elementsToAdd])
+  
+  // Auto-link requirements - SINGLE state update, not multiple
+  if (elementMapping.length > 0) {
+    setRequirements(prev => {
+      return prev.map(r => {
+        // Find all WBS IDs that should link to this requirement
+        const wbsIdsToLink = elementMapping
+          .filter(m => m.reqId === r.id)
+          .map(m => m.wbsId)
+        
+        if (wbsIdsToLink.length === 0) return r
+        
+        // Add new WBS IDs that aren't already linked
+        const newLinkedIds = [...r.linkedWbsIds]
+        wbsIdsToLink.forEach(wbsId => {
+          if (!newLinkedIds.includes(wbsId)) {
+            newLinkedIds.push(wbsId)
+          }
+        })
+        
+        return { ...r, linkedWbsIds: newLinkedIds }
+      })
+    })
+  }
+  
+  // Clear selection and close dialog
+  setSelectedRequirements(new Set())
+  setShowBulkGenerateDialog(false)
+  setGeneratedWbs([])
+  setActiveSection('wbs')
+}
+
+  const handleDiscardGeneratedWbs = () => {
+    setShowBulkGenerateDialog(false)
+    setGeneratedWbs([])
+    setGenerationError(null)
+  }
+
   const handleOpenLaborDialog = (labor?: EnhancedLaborEstimate) => {
     if (labor) { setEditingLabor(labor); setLaborForm({ roleId: labor.roleId, rationale: labor.rationale, confidence: labor.confidence, hoursByPeriod: { ...labor.hoursByPeriod } }) }
     else { setEditingLabor(null); setLaborForm({ roleId: '', rationale: '', confidence: 'medium', hoursByPeriod: { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 } }) }
@@ -2134,83 +2696,129 @@ export function EstimateTab() {
   }
   
   const handleUpdateElement = (id: string, updates: Partial<EnhancedWBSElement>) => {
-    setWbsElements(prev => prev.map(el => {
-      if (el.id !== id) return el
-      const updated = { ...el, ...updates }
-      const { score, grade, issues } = calculateQualityScore(updated)
-      return { ...updated, qualityScore: score, qualityGrade: grade, qualityIssues: issues }
+  setWbsElements(prev => prev.map(el => {
+    if (el.id !== id) return el
+    const updated = { ...el, ...updates }
+    const { score, grade, issues } = calculateQualityScore(updated)
+    return { ...updated, qualityScore: score, qualityGrade: grade, qualityIssues: issues }
+  }))
+}
+
+const handleDeleteElement = (id: string) => {
+  setWbsElements(prev => prev.filter(el => el.id !== id))
+  if (selectedElementId === id) setSelectedElementId(null)
+}
+
+const handleDeleteLabor = (laborId: string) => {
+  if (!selectedElementId) return
+  setWbsElements(prev => prev.map(el => {
+    if (el.id !== selectedElementId) return el
+    return { ...el, laborEstimates: el.laborEstimates.filter(l => l.id !== laborId) }
+  }))
+}
+
+const handleSaveLabor = () => {
+  if (!laborForm.roleId || !selectedElementId) return
+  const role = selectedRoles.find(r => r.id === laborForm.roleId)
+  if (!role) return
+  
+  if (editingLabor) {
+    handleUpdateElement(selectedElementId, {
+      laborEstimates: wbsElements.find(el => el.id === selectedElementId)?.laborEstimates.map(l => 
+        l.id !== editingLabor.id ? l : { ...l, hoursByPeriod: laborForm.hoursByPeriod, rationale: laborForm.rationale, confidence: laborForm.confidence }
+      ) || []
+    })
+  } else {
+    const newLabor: EnhancedLaborEstimate = {
+      id: generateId(),
+      roleId: laborForm.roleId,
+      roleName: role.name,
+      hoursByPeriod: laborForm.hoursByPeriod,
+      rationale: laborForm.rationale,
+      confidence: laborForm.confidence,
+      isAISuggested: false,
+      isOrphaned: false,
+    }
+    handleUpdateElement(selectedElementId, {
+      laborEstimates: [...(wbsElements.find(el => el.id === selectedElementId)?.laborEstimates || []), newLabor]
+    })
+  }
+  setShowLaborDialog(false)
+}
+
+// Handle requirement selection in Add WBS dialog
+const handleRequirementSelect = (reqId: string) => {
+  if (!reqId) {
+    setNewElement(prev => ({ 
+      ...prev, 
+      linkedRequirementId: '',
+    }))
+    return
+  }
+  
+  const req = requirements.find(r => r.id === reqId)
+  if (req) {
+    setNewElement(prev => ({ 
+      ...prev, 
+      linkedRequirementId: reqId,
+      title: req.title || prev.title,
+      sowReference: req.source || prev.sowReference,
     }))
   }
+}
+
+const handleAddElement = () => {
+  if (!newElement.wbsNumber || !newElement.title) return
+  const element: EnhancedWBSElement = { 
+    id: generateId(), 
+    wbsNumber: newElement.wbsNumber!, 
+    title: newElement.title!, 
+    sowReference: newElement.sowReference || '', 
+    clin: newElement.clin, 
+    periodOfPerformance: newElement.periodOfPerformance || { startDate: '', endDate: '' }, 
+    why: newElement.why || '', 
+    what: newElement.what || '', 
+    notIncluded: newElement.notIncluded || '', 
+    assumptions: newElement.assumptions || [], 
+    estimateMethod: newElement.estimateMethod || 'engineering', 
+    complexityFactor: newElement.complexityFactor || 1.0, 
+    complexityJustification: newElement.complexityJustification || '', 
+    laborEstimates: [], 
+    risks: [], 
+    dependencies: [], 
+    qualityGrade: 'red', 
+    qualityScore: 0, 
+    qualityIssues: [], 
+    isAIGenerated: false, 
+    aiConfidence: 0 
+  }
+  const { score, grade, issues } = calculateQualityScore(element)
+  element.qualityScore = score
+  element.qualityGrade = grade
+  element.qualityIssues = issues
   
-  const handleSaveLabor = () => {
-    if (!selectedElement || !laborForm.roleId) return
-    const role = selectedRoles.find(r => r.id === laborForm.roleId)
-    if (!role) return
-    
-    if (editingLabor) {
-      handleUpdateElement(selectedElement.id, { laborEstimates: selectedElement.laborEstimates.map(l => l.id !== editingLabor.id ? l : { ...l, roleId: laborForm.roleId, roleName: role.name, rationale: laborForm.rationale, confidence: laborForm.confidence, hoursByPeriod: { ...laborForm.hoursByPeriod } }) })
-    } else {
-      handleUpdateElement(selectedElement.id, { laborEstimates: [...selectedElement.laborEstimates, { id: generateId(), roleId: role.id, roleName: role.name, hoursByPeriod: { ...laborForm.hoursByPeriod }, rationale: laborForm.rationale, confidence: laborForm.confidence, isAISuggested: false, isOrphaned: false }] })
-    }
-    setShowLaborDialog(false); setEditingLabor(null)
+  setWbsElements(prev => [...prev, element])
+  
+  // Auto-link to requirement if one was selected
+  if (newElement.linkedRequirementId) {
+    setTimeout(() => {
+      handleLinkWbs(newElement.linkedRequirementId!, element.id)
+    }, 0)
   }
   
-  const handleDeleteLabor = (laborId: string) => { if (selectedElement) handleUpdateElement(selectedElement.id, { laborEstimates: selectedElement.laborEstimates.filter(l => l.id !== laborId) }) }
-  const handleDeleteElement = (id: string) => { setWbsElements(prev => prev.filter(el => el.id !== id)); if (selectedElementId === id) setSelectedElementId(null) }
-  
-  const handleAddElement = () => {
-    if (!newElement.wbsNumber || !newElement.title) return
-    const element: EnhancedWBSElement = { id: generateId(), wbsNumber: newElement.wbsNumber!, title: newElement.title!, sowReference: newElement.sowReference || '', clin: newElement.clin, periodOfPerformance: newElement.periodOfPerformance || { startDate: '', endDate: '' }, why: newElement.why || '', what: newElement.what || '', notIncluded: newElement.notIncluded || '', assumptions: newElement.assumptions || [], estimateMethod: newElement.estimateMethod || 'engineering', complexityFactor: newElement.complexityFactor || 1.0, complexityJustification: newElement.complexityJustification || '', laborEstimates: [], risks: [], dependencies: [], qualityGrade: 'red', qualityScore: 0, qualityIssues: [], isAIGenerated: false, aiConfidence: 0 }
-    const { score, grade, issues } = calculateQualityScore(element)
-    element.qualityScore = score; element.qualityGrade = grade; element.qualityIssues = issues
-    setWbsElements(prev => [...prev, element]); setShowAddElement(false); setNewElement({ wbsNumber: '', title: '', sowReference: '', estimateMethod: 'engineering', complexityFactor: 1.0 }); setSelectedElementId(element.id)
-  }
-  
+  setShowAddElement(false)
+  setNewElement({ 
+    wbsNumber: '', 
+    title: '', 
+    sowReference: '', 
+    estimateMethod: 'engineering', 
+    complexityFactor: 1.0,
+    linkedRequirementId: ''
+  })
+  setSelectedElementId(element.id)
+}
   const handleLinkWbs = (reqId: string, wbsId: string) => { setRequirements(prev => prev.map(r => (r.id !== reqId || r.linkedWbsIds.includes(wbsId)) ? r : { ...r, linkedWbsIds: [...r.linkedWbsIds, wbsId] })) }
   const handleUnlinkWbs = (reqId: string, wbsId: string) => { setRequirements(prev => prev.map(r => r.id !== reqId ? r : { ...r, linkedWbsIds: r.linkedWbsIds.filter(id => id !== wbsId) })) }
-
-  // Bulk WBS generation from selected requirements
-  const handleBulkGenerateWbs = (reqIds: string[]) => {
-    const selectedReqs = requirements.filter(r => reqIds.includes(r.id))
-    const nextWbsNumber = wbsElements.length + 1
-
-    const newElements: EnhancedWBSElement[] = selectedReqs.map((req, index) => {
-      const elementId = generateId()
-      return {
-        id: elementId,
-        wbsNumber: `${nextWbsNumber + index}`,
-        title: req.title || `Requirement ${req.referenceNumber}`,
-        description: req.description,
-        sowReference: req.referenceNumber,
-        clin: '',
-        estimateMethod: 'engineering' as EstimateMethod,
-        complexityFactor: 1.0,
-        periodOfPerformance: { startDate: '', endDate: '' },
-        laborEstimates: [],
-        risks: [],
-        dependencies: [],
-        qualityGrade: 'yellow' as const,
-        qualityIssues: ['No labor estimates'],
-        what: '',
-        why: req.description || '',
-        assumptionsConstraints: '',
-        historicalReference: undefined,
-        engineeringBasis: undefined,
-      }
-    })
-
-    // Add all new WBS elements
-    setWbsElements(prev => [...prev, ...newElements])
-
-    // Link requirements to their corresponding WBS elements
-    setRequirements(prev => prev.map(r => {
-      const reqIndex = selectedReqs.findIndex(sr => sr.id === r.id)
-      if (reqIndex === -1) return r
-      const newWbsId = newElements[reqIndex].id
-      return { ...r, linkedWbsIds: [...r.linkedWbsIds, newWbsId] }
-    }))
-  }
-
 const handleNavigateToRoles = () => { setActiveMainTab('roles') }
   
   // Add role to team (from Labor Summary missing roles)
@@ -2371,7 +2979,23 @@ const handleAddRoleToTeam = (roleName: string) => {
             )}
           </TabsContent>
           
-          <TabsContent value="requirements" className="mt-0"><RequirementsSection requirements={requirements} wbsElements={wbsElements} onAdd={() => handleOpenReqDialog()} onEdit={handleOpenReqDialog} onDelete={(id) => setRequirements(prev => prev.filter(r => r.id !== id))} onLinkWbs={handleLinkWbs} onUnlinkWbs={handleUnlinkWbs} onBulkGenerateWbs={handleBulkGenerateWbs} /></TabsContent>
+       <TabsContent value="requirements" className="mt-0">
+          <RequirementsSection 
+          requirements={requirements} 
+          wbsElements={wbsElements} 
+          onAdd={() => handleOpenReqDialog()} 
+          onEdit={handleOpenReqDialog} 
+          onDelete={(id) => setRequirements(prev => prev.filter(r => r.id !== id))} 
+          onLinkWbs={handleLinkWbs} 
+          onUnlinkWbs={handleUnlinkWbs}
+          selectedRequirements={selectedRequirements}
+          onToggleSelection={handleToggleRequirementSelection}
+          onSelectAllUnmapped={handleSelectAllUnmapped}
+          onClearSelection={handleClearSelection}
+          onBulkGenerate={handleBulkGenerateWBS}
+         isGenerating={isGenerating}
+  />
+</TabsContent>
           <TabsContent value="labor" className="mt-0"><LaborSummary wbsElements={wbsElements} billableHoursPerYear={uiBillableHours} onNavigateToRoles={handleNavigateToRoles} /></TabsContent>
           <TabsContent value="charges" className="mt-0"><ChargeCodeLibrary chargeCodes={chargeCodes} onAdd={() => handleOpenChargeCodeDialog()} onEdit={handleOpenChargeCodeDialog} onDelete={(id) => setChargeCodes(prev => prev.filter(c => c.id !== id))} /></TabsContent>
         </Tabs>
@@ -2379,81 +3003,288 @@ const handleAddRoleToTeam = (roleName: string) => {
         {/* Slideout */}
         {selectedElement && <WBSSlideout element={selectedElement} isOpen={!!selectedElementId} onClose={() => setSelectedElementId(null)} onUpdate={handleUpdateElement} contractPeriods={contractPeriods} selectedRoles={selectedRoles} allWbsElements={wbsElements} chargeCodes={chargeCodes} onOpenLaborDialog={handleOpenLaborDialog} onDeleteLabor={handleDeleteLabor} />}
         
-       {/* Add Element Dialog */}
-        <Dialog open={showAddElement} onOpenChange={setShowAddElement}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader><DialogTitle>Add WBS Element</DialogTitle><DialogDescription>Create a new Work Breakdown Structure element</DialogDescription></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>WBS Number <span className="text-red-500">*</span></Label>
-                  <Input value={newElement.wbsNumber || ''} onChange={(e) => setNewElement(prev => ({ ...prev, wbsNumber: e.target.value }))} placeholder="e.g., 1.4" />
+ {/* Add Element Dialog */}
+<Dialog open={showAddElement} onOpenChange={setShowAddElement}>
+  <DialogContent className="max-w-2xl">
+    <DialogHeader>
+      <DialogTitle>Add WBS Element</DialogTitle>
+      <DialogDescription>Create a new Work Breakdown Structure element to address a requirement</DialogDescription>
+    </DialogHeader>
+    <div className="space-y-4 py-4">
+      {/* Requirement Selector - NEW! */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="linked-requirement">Linked Requirement <span className="text-red-500" aria-label="required">*</span></Label>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p className="text-sm">Select a requirement to auto-fill the title and create traceability. Unmapped requirements are shown first.</p>
+            </TooltipContent>
+          </Tooltip>
+          <span className="text-red-500 ml-auto" aria-label="required">*</span>
+        </div>
+        <Select 
+          value={newElement.linkedRequirementId || ''} 
+          onValueChange={handleRequirementSelect}
+        >
+          <SelectTrigger id="linked-requirement" className="w-full">
+            <SelectValue placeholder="Select a requirement to address..." />
+          </SelectTrigger>
+          <SelectContent className="max-h-[300px]">
+            {/* Show unmapped requirements first with a visual indicator */}
+            {requirements.filter(r => r.linkedWbsIds.length === 0).length > 0 && (
+              <>
+                <div className="px-2 py-1.5 text-xs font-medium text-red-600 bg-red-50">
+                  Unmapped Requirements ({requirements.filter(r => r.linkedWbsIds.length === 0).length})
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Title <span className="text-red-500">*</span></Label>
-                  <Input value={newElement.title || ''} onChange={(e) => setNewElement(prev => ({ ...prev, title: e.target.value }))} placeholder="e.g., User Authentication Module" />
+                {requirements
+                  .filter(r => r.linkedWbsIds.length === 0)
+                  .map((req, idx) => (
+                    <SelectItem key={req.id} value={req.id} className="py-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className="text-[10px] px-1 py-0 h-4 bg-red-100 text-red-700 border-red-200">
+                          REQ-{String(idx + 1).padStart(3, '0')}
+                        </Badge>
+                        <span className="truncate max-w-[300px]">{req.title || 'Untitled'}</span>
+                      </div>
+                    </SelectItem>
+                  ))
+                }
+              </>
+            )}
+            {/* Show already-mapped requirements */}
+            {requirements.filter(r => r.linkedWbsIds.length > 0).length > 0 && (
+              <>
+                <div className="px-2 py-1.5 text-xs font-medium text-gray-500 bg-gray-50 border-t">
+                  Already Mapped ({requirements.filter(r => r.linkedWbsIds.length > 0).length})
                 </div>
+                {requirements
+                  .filter(r => r.linkedWbsIds.length > 0)
+                  .map((req, idx) => {
+                    const unmappedCount = requirements.filter(r => r.linkedWbsIds.length === 0).length
+                    return (
+                      <SelectItem key={req.id} value={req.id} className="py-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+                            REQ-{String(unmappedCount + idx + 1).padStart(3, '0')}
+                          </Badge>
+                          <span className="truncate max-w-[300px] text-gray-600">{req.title || 'Untitled'}</span>
+                          <span className="text-[10px] text-gray-400">({req.linkedWbsIds.length} WBS)</span>
+                        </div>
+                      </SelectItem>
+                    )
+                  })
+                }
+              </>
+            )}
+            {requirements.length === 0 && (
+              <div className="px-2 py-4 text-sm text-gray-500 text-center">
+                No requirements extracted yet. Upload an RFP first.
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>SOW Reference</Label>
-                  <Input value={newElement.sowReference || ''} onChange={(e) => setNewElement(prev => ({ ...prev, sowReference: e.target.value }))} placeholder="e.g., SOW 3.2.1" />
+            )}
+          </SelectContent>
+        </Select>
+        {newElement.linkedRequirementId && (
+          <p className="text-xs text-green-600 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            WBS will be linked to this requirement on save
+          </p>
+        )}
+      </div>
+
+     {/* WBS Number with Smart Picker */}
+<div className="space-y-2">
+  <div className="flex items-center gap-2">
+    <Label htmlFor="wbs-number">WBS Number <span className="text-red-500" aria-label="required">*</span></Label>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        <p className="text-sm">Hierarchical work breakdown number. Use the suggested number or pick a parent to create a sub-element.</p>
+      </TooltipContent>
+    </Tooltip>
+  </div>
+  
+  <div className="flex gap-2">
+    <Input 
+      id="wbs-number"
+      value={newElement.wbsNumber || ''} 
+      onChange={(e) => setNewElement(prev => ({ ...prev, wbsNumber: e.target.value }))} 
+      placeholder="e.g., 1.4" 
+      aria-required="true"
+      className="flex-1"
+    />
+    
+    {/* Quick-fill button with next number */}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button 
+          type="button" 
+          variant="outline" 
+          size="sm"
+          className="h-9 px-3 text-xs whitespace-nowrap font-mono"
+          onClick={() => setNewElement(prev => ({ ...prev, wbsNumber: getNextWbsNumber(wbsElements) }))}
+        >
+          → {getNextWbsNumber(wbsElements)}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="text-sm">Use the next available number</p>
+      </TooltipContent>
+    </Tooltip>
+    
+    {/* Parent selector for creating child elements */}
+    {wbsElements.length > 0 && (
+      <Select 
+        value="" 
+        onValueChange={(parentWbs) => {
+          const nextChild = getNextWbsNumber(wbsElements, parentWbs)
+          setNewElement(prev => ({ ...prev, wbsNumber: nextChild }))
+        }}
+      >
+        <SelectTrigger className="w-[130px] h-9 text-xs">
+          <span className="text-gray-500">Add under...</span>
+        </SelectTrigger>
+       <SelectContent position="popper" sideOffset={4}>
+          {wbsElements
+            .slice()
+            .sort((a, b) => a.wbsNumber.localeCompare(b.wbsNumber, undefined, { numeric: true }))
+            .map(el => (
+              <SelectItem key={el.id} value={el.wbsNumber} className="text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-medium">{el.wbsNumber}</span>
+                  <span className="text-gray-500 truncate max-w-[150px]">{el.title}</span>
                 </div>
-                <div className="space-y-2">
-                  <Label>CLIN</Label>
-                  <Input value={newElement.clin || ''} onChange={(e) => setNewElement(prev => ({ ...prev, clin: e.target.value }))} placeholder="e.g., 0001" />
+              </SelectItem>
+            ))
+          }
+        </SelectContent>
+      </Select>
+    )}
+  </div>
+  
+  {/* Show existing WBS numbers as context */}
+  {wbsElements.length > 0 && (
+    <p className="text-xs text-gray-500">
+      Existing: {wbsElements
+        .map(el => el.wbsNumber)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .join(', ')}
+    </p>
+  )}
+</div>
+
+{/* Title */}
+<div className="space-y-2">
+  <Label htmlFor="wbs-title">Title <span className="text-red-500" aria-label="required">*</span></Label>
+  <Input 
+    id="wbs-title"
+    value={newElement.title || ''} 
+    onChange={(e) => setNewElement(prev => ({ ...prev, title: e.target.value }))} 
+    placeholder={newElement.linkedRequirementId ? "Auto-filled from requirement" : "e.g., User Authentication Module"}
+    aria-required="true"
+  />
+  {newElement.linkedRequirementId && newElement.title && (
+    <p className="text-xs text-gray-500">
+      Feel free to edit the title to better describe the work
+    </p>
+  )}
+</div>
+
+      {/* SOW Reference and CLIN */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="sow-ref">SOW/SOO Reference</Label>
+          <Input 
+            id="sow-ref"
+            value={newElement.sowReference || ''} 
+            onChange={(e) => setNewElement(prev => ({ ...prev, sowReference: e.target.value }))} 
+            placeholder={newElement.linkedRequirementId ? "Auto-filled from requirement" : "e.g., SOO 3.2.1"}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="clin">CLIN</Label>
+          <Input 
+            id="clin"
+            value={newElement.clin || ''} 
+            onChange={(e) => setNewElement(prev => ({ ...prev, clin: e.target.value }))} 
+            placeholder="e.g., 0001" 
+          />
+        </div>
+      </div>
+
+      {/* Period of Performance */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="start-date">Start Date</Label>
+          <Input 
+            id="start-date"
+            type="date" 
+            value={newElement.periodOfPerformance?.startDate || ''} 
+            onChange={(e) => setNewElement(prev => ({ 
+              ...prev, 
+              periodOfPerformance: { 
+                startDate: e.target.value, 
+                endDate: prev.periodOfPerformance?.endDate || '' 
+              } 
+            }))} 
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="end-date">End Date</Label>
+          <Input 
+            id="end-date"
+            type="date" 
+            value={newElement.periodOfPerformance?.endDate || ''} 
+            onChange={(e) => setNewElement(prev => ({ 
+              ...prev, 
+              periodOfPerformance: { 
+                startDate: prev.periodOfPerformance?.startDate || '', 
+                endDate: e.target.value 
+              } 
+            }))} 
+          />
+        </div>
+      </div>
+
+      {/* Estimate Method */}
+      <div className="space-y-2">
+        <Label htmlFor="estimate-method">Estimate Method</Label>
+        <Select 
+          value={newElement.estimateMethod || 'engineering'} 
+          onValueChange={(v) => setNewElement(prev => ({ ...prev, estimateMethod: v as EstimateMethod }))}
+        >
+          <SelectTrigger id="estimate-method">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(ESTIMATE_METHOD_LABELS).map(([key, { label, icon, description }]) => (
+              <SelectItem key={key} value={key}>
+                <div className="flex items-center gap-2">
+                  <span>{icon}</span>
+                  <span>{label}</span>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Start Date</Label>
-                  <Input 
-                    type="date" 
-                    value={newElement.periodOfPerformance?.startDate || ''} 
-                    onChange={(e) => setNewElement(prev => ({ 
-                      ...prev, 
-                      periodOfPerformance: { 
-                        startDate: e.target.value, 
-                        endDate: prev.periodOfPerformance?.endDate || '' 
-                      } 
-                    }))} 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>End Date</Label>
-                  <Input 
-                    type="date" 
-                    value={newElement.periodOfPerformance?.endDate || ''} 
-                    onChange={(e) => setNewElement(prev => ({ 
-                      ...prev, 
-                      periodOfPerformance: { 
-                        startDate: prev.periodOfPerformance?.startDate || '', 
-                        endDate: e.target.value 
-                      } 
-                    }))} 
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Estimate Method</Label>
-                <Select value={newElement.estimateMethod || 'engineering'} onValueChange={(v) => setNewElement(prev => ({ ...prev, estimateMethod: v as EstimateMethod }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ESTIMATE_METHOD_LABELS).map(([key, { label, icon }]) => (
-                      <SelectItem key={key} value={key}>{icon} {label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddElement(false)}>Cancel</Button>
-              <Button onClick={handleAddElement} disabled={!newElement.wbsNumber || !newElement.title}>
-                <Plus className="w-4 h-4 mr-2" />Add Element
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setShowAddElement(false)}>Cancel</Button>
+      <Button 
+        onClick={handleAddElement} 
+        disabled={!newElement.wbsNumber || !newElement.title || !newElement.linkedRequirementId}
+      >
+        <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
+        Add Element
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
         
         {/* Labor Dialog */}
         <Dialog open={showLaborDialog} onOpenChange={setShowLaborDialog}>
@@ -2471,7 +3302,7 @@ const handleAddRoleToTeam = (roleName: string) => {
         
         {/* Requirement Dialog */}
         <Dialog open={showReqDialog} onOpenChange={setShowReqDialog}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-xl">
             <DialogHeader>
               <DialogTitle>{editingReq ? 'Edit' : 'Add'} Requirement</DialogTitle>
               <DialogDescription>Track SOW/SOO requirements and link them to WBS elements.</DialogDescription>
@@ -2491,14 +3322,14 @@ const handleAddRoleToTeam = (roleName: string) => {
                 <Label htmlFor="req-desc">Description</Label>
                 <Textarea id="req-desc" value={reqForm.description || ''} onChange={(e) => setReqForm(prev => ({ ...prev, description: e.target.value }))} rows={2} placeholder="Full requirement text..." />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-8">
                 <div className="space-y-2">
                   <Label>Type</Label>
                   <Select value={reqForm.type || 'shall'} onValueChange={(v) => setReqForm(prev => ({ ...prev, type: v as RequirementType }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="shall">Shall (mandatory)</SelectItem>
-                      <SelectItem value="should">Should (recommended)</SelectItem>
+                      <SelectItem value="should">Should (expected)</SelectItem>
                       <SelectItem value="may">May (optional)</SelectItem>
                       <SelectItem value="will">Will (statement)</SelectItem>
                     </SelectContent>
@@ -2604,8 +3435,21 @@ const handleAddRoleToTeam = (roleName: string) => {
               <Button onClick={handleSaveChargeCode} disabled={!chargeCodeForm.chargeNumber || !chargeCodeForm.projectName}>{editingChargeCode ? 'Save Changes' : 'Add Charge Code'}</Button>
             </DialogFooter>
           </DialogContent>
-        </Dialog>
+       </Dialog>
       </div>
+   
+      {/* Bulk Generate Dialog */}
+      <BulkGenerateDialog
+        isOpen={showBulkGenerateDialog}
+        onClose={() => setShowBulkGenerateDialog(false)}
+        isGenerating={isGenerating}
+        progress={generationProgress}
+        generatedWbs={generatedWbs}
+        error={generationError}
+        onAccept={handleAcceptGeneratedWbs}
+        onDiscard={handleDiscardGeneratedWbs}
+        selectedCount={selectedRequirements.size}
+      />
     </TooltipProvider>
   )
 }

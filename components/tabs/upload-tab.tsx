@@ -145,13 +145,14 @@ export function UploadTab({ onContinue }: UploadTabProps) {
 
   // ==================== RESTORE STATE FROM CONTEXT ON MOUNT ====================
   useEffect(() => {
-    // If solicitation has data (was previously analyzed), restore the complete state
-    if (solicitation.analyzedFromDocument) {
-      setUploadedFileName(solicitation.analyzedFromDocument)
-      setState('complete')
-      setShowDetails(true)
-    }
-  }, []) // Only run on mount - don't re-run when solicitation changes
+  // If solicitation has data (was previously analyzed), restore the complete state
+  // Also verify the solicitation has actual extracted content (not just leftover localStorage)
+  if (solicitation.analyzedFromDocument && solicitation.solicitationNumber) {
+    setUploadedFileName(solicitation.analyzedFromDocument)
+    setState('complete')
+    setShowDetails(true)
+  }
+}, []) // Only run on mount
 
   // Drag handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -187,6 +188,9 @@ export function UploadTab({ onContinue }: UploadTabProps) {
     setProgress(0)
     setErrorMessage(null)
 
+    // Progress animation interval
+    let progressInterval: NodeJS.Timeout | null = null
+
     try {
       // Stage 1: Uploading
       setProgress(10)
@@ -195,18 +199,43 @@ export function UploadTab({ onContinue }: UploadTabProps) {
       const formData = new FormData()
       formData.append('file', file)
 
-      // Stage 2: Processing
-      setProgress(25)
-      setProgressText('Processing PDF...')
+      // Stage 2: Processing - start animated progress
+      setProgress(15)
+      setProgressText('Extracting text from PDF...')
+      
+      // Animate progress from 15% to 85% over ~60 seconds
+      let currentProgress = 15
+      progressInterval = setInterval(() => {
+        currentProgress += 0.5
+        if (currentProgress >= 85) {
+          currentProgress = 85
+        }
+        setProgress(Math.round(currentProgress))
+        
+        // Update text at milestones
+        if (currentProgress >= 25 && currentProgress < 50) {
+          setProgressText('AI analyzing requirements...')
+        } else if (currentProgress >= 50 && currentProgress < 75) {
+          setProgressText('Extracting metadata and roles...')
+        } else if (currentProgress >= 75) {
+          setProgressText('Finalizing extraction...')
+        }
+      }, 500) // Update every 500ms
 
       const response = await fetch('/api/extract-rfp', {
         method: 'POST',
         body: formData,
       })
 
-      // Stage 3: Analyzing
-      setProgress(60)
-      setProgressText('AI analyzing solicitation...')
+      // Clear the interval once we get a response
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+
+      // Stage 3: Processing response
+      setProgress(90)
+      setProgressText('Processing results...')
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -220,8 +249,8 @@ export function UploadTab({ onContinue }: UploadTabProps) {
       }
 
       // Stage 4: Finalizing
-      setProgress(90)
-      setProgressText('Finalizing extraction...')
+      setProgress(95)
+      setProgressText('Updating workspace...')
 
       // Map API response to context format
       const { metadata, requirements, suggestedRoles } = data
@@ -292,6 +321,10 @@ export function UploadTab({ onContinue }: UploadTabProps) {
       setShowDetails(true)
 
     } catch (error) {
+      // Clear progress interval if still running
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
       console.error('Upload/extraction error:', error)
       setErrorMessage(error instanceof Error ? error.message : 'Failed to analyze document')
       setState('error')
