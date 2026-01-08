@@ -992,9 +992,38 @@ function RequirementsSection({
           </Button>
         </div>
       </div>
-      
+
+      {/* Empty State */}
+      {requirements.length === 0 && (
+        <div className="text-center py-12 bg-white border border-dashed border-gray-200 rounded-lg">
+          <ClipboardCheck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-gray-600 mb-1">No requirements extracted yet</p>
+          <p className="text-xs text-gray-500 mb-4">Upload an RFP to automatically extract requirements, or add them manually</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onAdd({
+              id: `req-${Date.now()}`,
+              referenceNumber: '',
+              title: '',
+              description: '',
+              type: 'shall',
+              category: 'functional',
+              priority: 'medium',
+              source: '',
+              linkedWbsIds: [],
+              notes: '',
+              isAIExtracted: false
+            })}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add First Requirement
+          </Button>
+        </div>
+      )}
+
       {/* Select All Unmapped prompt */}
-      {stats.unmapped > 0 && selectedRequirements.size === 0 && (
+      {requirements.length > 0 && stats.unmapped > 0 && selectedRequirements.size === 0 && (
         <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
           <div className="flex items-center gap-2">
             <Wand2 className="w-5 h-5 text-purple-600" />
@@ -1010,7 +1039,7 @@ function RequirementsSection({
       )}
       
       {/* List View */}
-      {viewMode === 'list' && (
+      {requirements.length > 0 && viewMode === 'list' && (
         <>
           <div className="relative max-w-xs">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -1118,7 +1147,7 @@ function RequirementsSection({
       )}
       
       {/* Gaps View */}
-      {viewMode === 'gaps' && (
+      {requirements.length > 0 && viewMode === 'gaps' && (
         <div className="space-y-4">
           {unmappedRequirements.length === 0 ? (
             <div className="text-center py-12 bg-green-50 border border-green-200 rounded-lg">
