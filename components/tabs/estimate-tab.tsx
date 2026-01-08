@@ -2957,7 +2957,7 @@ const handleAddRoleToTeam = (roleName: string) => {
               <TabsTrigger value="labor" className="text-xs px-4 data-[state=active]:bg-white"><PieChart className="w-3.5 h-3.5 mr-1.5" />Labor Summary</TabsTrigger>
               <TabsTrigger value="charges" className="text-xs px-4 data-[state=active]:bg-white"><Hash className="w-3.5 h-3.5 mr-1.5" />Charge Codes</TabsTrigger>
             </TabsList>
-            {activeSection === 'wbs' && <div className="flex gap-2"><Button variant="outline" size="sm"><Sparkles className="w-4 h-4 mr-2" />Generate AI</Button><Button size="sm" onClick={() => setShowAddElement(true)}><Plus className="w-4 h-4 mr-2" />Add Element</Button></div>}
+            {activeSection === 'wbs' && <div className="flex gap-2"><Button size="sm" onClick={() => setShowAddElement(true)}><Plus className="w-4 h-4 mr-2" />Add Element</Button></div>}
           </div>
           
           {/* WBS Tab */}
