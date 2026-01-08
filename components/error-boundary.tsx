@@ -84,27 +84,3 @@ export function ErrorFallback({ message = 'Failed to load this section', onRetry
     </div>
   )
 }
-
-// Dev-only test button - throws error to test ErrorBoundary
-function BrokenComponent(): never {
-  throw new Error('Test error from ErrorBoundary test button')
-}
-
-export function TestErrorButton() {
-  const [shouldError, setShouldError] = React.useState(false)
-
-  if (process.env.NODE_ENV !== 'development') return null
-
-  if (shouldError) {
-    return <BrokenComponent />
-  }
-
-  return (
-    <button
-      onClick={() => setShouldError(true)}
-      className="fixed bottom-4 left-4 z-50 px-3 py-1.5 text-xs bg-red-100 text-red-700 rounded border border-red-300 hover:bg-red-200"
-    >
-      Test Error
-    </button>
-  )
-}

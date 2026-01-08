@@ -5,7 +5,7 @@ import { AppProvider } from '@/contexts/app-context'
 import { ThemeProvider } from '@/components/shared/theme-provider'
 import { LayoutWrapper } from '@/components/shared/layout-wrapper'
 import { Toaster } from '@/components/ui/sonner'
-import { ErrorBoundary, TestErrorButton } from '@/components/error-boundary'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 export const metadata: Metadata = {
   title: 'TrueBid - Government Contracting Calculator',
@@ -28,7 +28,6 @@ export default function RootLayout({
               </LayoutWrapper>
             </AppProvider>
           </ThemeProvider>
-          <TestErrorButton />
         </ErrorBoundary>
         <Toaster position="bottom-right" />
       </body>
