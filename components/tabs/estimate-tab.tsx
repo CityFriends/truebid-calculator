@@ -1041,8 +1041,8 @@ function RequirementsSection({
                       onClick={(e) => { e.stopPropagation(); onToggleSelection(req.id) }}
                       className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                         selectedRequirements.has(req.id)
-                          ? 'bg-blue-600 border-blue-600 text-white'
-                          : 'border-gray-300 hover:border-blue-400'
+                          ? 'bg-purple-600 border-purple-600 text-white'
+                          : 'border-gray-300 hover:border-purple-400'
                       }`}
                     >
                       {selectedRequirements.has(req.id) && <Check className="w-3 h-3" />}
