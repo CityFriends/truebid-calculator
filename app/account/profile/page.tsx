@@ -49,6 +49,8 @@ function ProfilePage() {
     confirmPassword: '',
   })
   const [passwordError, setPasswordError] = useState('')
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   // Load profile from API
   useEffect(() => {
@@ -99,7 +101,28 @@ function ProfilePage() {
     }
     setEditingName(false)
   }
-  
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingAvatar(true)
+    try {
+      const response = await userApi.uploadAvatar(file) as { avatarUrl: string }
+      setProfile(prev => ({ ...prev, avatarUrl: response.avatarUrl }))
+      toast.success('Avatar updated')
+    } catch (err) {
+      console.error('Avatar upload error:', err)
+      toast.error('Failed to upload avatar')
+    } finally {
+      setUploadingAvatar(false)
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
   const handlePasswordChange = () => {
     setPasswordError('')
     
@@ -165,11 +188,23 @@ function ProfilePage() {
                 {getInitials(profile.fullName)}
               </AvatarFallback>
             </Avatar>
-            <button 
-              className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={() => {/* TODO: Avatar upload */}}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              onChange={handleAvatarUpload}
+              className="hidden"
+            />
+            <button
+              className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity disabled:cursor-not-allowed"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
             >
-              <Camera className="w-6 h-6 text-white" />
+              {uploadingAvatar ? (
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Camera className="w-6 h-6 text-white" />
+              )}
             </button>
           </div>
           <div>
