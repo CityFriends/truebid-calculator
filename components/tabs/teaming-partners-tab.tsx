@@ -637,7 +637,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                   {count > 0 && (
                     <Badge 
                       variant="secondary" 
-                      className={`text-[10px] px-1.5 py-0 h-4 ml-1 ${
+                      className={`text-xs px-1.5 py-0 h-4 ml-1 ${
                         filter.id === 'needs-attention' && count > 0 
                           ? 'bg-red-100 text-red-700' 
                           : ''
@@ -788,7 +788,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                           {partner.businessSize && (
                             <Badge 
                               variant="outline" 
-                              className={`text-[10px] px-1.5 py-0 h-5 ${businessSizeColors[partner.businessSize]}`}
+                              className={`text-xs px-1.5 py-0 h-5 ${businessSizeColors[partner.businessSize]}`}
                             >
                               {partner.businessSize === 'small' ? 'SB' : 'Large'}
                             </Badge>
@@ -828,28 +828,28 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                     {/* Certifications + Agreement Row */}
                     <div className="flex items-center gap-2 flex-wrap mb-2">
                       {partner.certifications.wosb && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">WOSB</Badge>
+                        <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">WOSB</Badge>
                       )}
                       {partner.certifications.sdvosb && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">SDVOSB</Badge>
+                        <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">SDVOSB</Badge>
                       )}
                       {partner.certifications.hubzone && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">HUBZone</Badge>
+                        <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">HUBZone</Badge>
                       )}
                       {partner.certifications.eightA && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">8(a)</Badge>
+                        <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-purple-50 text-purple-700 border-purple-200">8(a)</Badge>
                       )}
                       {(partner as any).isJointVenture && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-blue-50 text-blue-700 border-blue-200">JV</Badge>
+                        <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-blue-50 text-blue-700 border-blue-200">JV</Badge>
                       )}
                       <Badge 
                         variant="outline" 
-                        className={`text-[10px] px-1.5 py-0 h-5 ${agreementStatusColors[partner.teamingAgreementStatus]}`}
+                        className={`text-xs px-1.5 py-0 h-5 ${agreementStatusColors[partner.teamingAgreementStatus]}`}
                       >
                         {agreementStatusLabels[partner.teamingAgreementStatus]}
                       </Badge>
                       {partner.ndaStatus === 'signed' && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-50 text-green-700 border-green-200">NDA</Badge>
+                        <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-green-50 text-green-700 border-green-200">NDA</Badge>
                       )}
                     </div>
 
@@ -869,13 +869,13 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                         {partner.capabilities.slice(0, 2).map(capId => {
                           const cap = capabilityOptions.find(c => c.id === capId)
                           return cap ? (
-                            <Badge key={capId} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-orange-50 text-orange-700 border-0">
+                            <Badge key={capId} variant="secondary" className="text-xs px-1.5 py-0 h-5 bg-orange-50 text-orange-700 border-0">
                               {cap.label}
                             </Badge>
                           ) : null
                         })}
                         {partner.capabilities.length > 2 && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-gray-100 text-gray-600 border-0">
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5 bg-gray-100 text-gray-600 border-0">
                             +{partner.capabilities.length - 2}
                           </Badge>
                         )}
@@ -883,7 +883,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                     )}
 
                     {/* Footer: Roles Summary */}
-                    <div className="pt-2 mt-auto border-t border-gray-100">
+                    <div className="pt-2 mt-auto border-t border-gray-200">
                       {partner.roles.length === 0 ? (
                         <p className="text-[11px] text-gray-400 italic">No roles assigned</p>
                       ) : (
@@ -957,7 +957,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                   <div className="flex items-center gap-2">
                     <Building2 className="w-4 h-4 text-gray-600" aria-hidden="true" />
                     <span className="font-medium text-sm text-gray-900">Company Information</span>
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-red-100 text-red-700">Required</Badge>
+                    <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5 bg-red-100 text-red-700">Required</Badge>
                   </div>
                   {expandedSections.company ? <ChevronUp className="w-4 h-4 text-gray-500" aria-hidden="true" /> : <ChevronDown className="w-4 h-4 text-gray-500" aria-hidden="true" />}
                 </button>
@@ -1160,7 +1160,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                     </div>
 
                     {/* Joint Venture */}
-                    <div className="pt-3 mt-3 border-t border-gray-100">
+                    <div className="pt-3 mt-3 border-t border-gray-200">
                       <div className="flex items-center gap-2">
                         <Checkbox
                           id="cert-jv"
@@ -1278,7 +1278,7 @@ export function TeamingPartnersTab({ onContinue }: TeamingPartnersTabProps) {
                     <Award className="w-4 h-4 text-orange-600" aria-hidden="true" />
                     <span className="font-medium text-sm text-gray-900">Capabilities</span>
                     {selectedCapabilities.length > 0 && (
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
                         {selectedCapabilities.length} selected
                       </Badge>
                     )}

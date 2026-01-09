@@ -206,7 +206,7 @@ const REQUIREMENT_TYPE_CONFIG: Record<RequirementType, { label: string; descript
   'shall': { label: 'Shall', description: 'Mandatory requirement - must be met', color: 'text-red-700 bg-red-50 border-red-200' },
   'should': { label: 'Should', description: 'Expected requirement - strongly recommended', color: 'text-orange-700 bg-orange-50 border-orange-100' },
   'will': { label: 'Will', description: 'Government action or statement of fact', color: 'text-blue-700 bg-blue-50 border-blue-100' },
-  'may': { label: 'May', description: 'Optional - at contractor discretion', color: 'text-gray-700 bg-gray-50 border-gray-100' },
+  'may': { label: 'May', description: 'Optional - at contractor discretion', color: 'text-gray-700 bg-gray-50 border-gray-200' },
 }
 
 const RISK_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -557,7 +557,7 @@ function LaborSummary({ wbsElements, billableHoursPerYear, onNavigateToRoles }: 
               {laborRollup.map((row, idx) => (
                 <tr 
                   key={row.roleName} 
-                  className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                  className={`border-b border-gray-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                 >
                   <td className="px-4 py-3">
                     <span className="font-medium text-gray-900">{row.roleName}</span>
@@ -608,7 +608,7 @@ function LaborSummary({ wbsElements, billableHoursPerYear, onNavigateToRoles }: 
 
 function ViewModeToggle({ viewMode, setViewMode }: { viewMode: ViewMode; setViewMode: (mode: ViewMode) => void }) {
   return (
-    <div className="flex gap-1 border border-gray-100 rounded-lg p-0.5 bg-white">
+    <div className="flex gap-1 border border-gray-200 rounded-lg p-0.5 bg-white">
       {[{ mode: 'grid', icon: Grid3X3, label: 'Card view' }, { mode: 'table', icon: Table2, label: 'Table view' }].map(({ mode, icon: Icon, label }) => (
         <Tooltip key={mode}>
           <TooltipTrigger asChild>
@@ -629,8 +629,8 @@ function WBSCard({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSE
   const methodConfig = ESTIMATE_METHOD_LABELS[element.estimateMethod]
   
   return (
-    <div className="group bg-white border border-gray-100 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
-      <div className="px-4 py-3 border-b border-gray-100">
+    <div className="group bg-white border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
+      <div className="px-4 py-3 border-b border-gray-200">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -656,7 +656,7 @@ function WBSCard({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSE
       
       {/* Why/What Preview - NEW */}
       {(element.why || element.what) && (
-        <div className="px-4 py-2 bg-gray-50/50 border-b border-gray-100">
+        <div className="px-4 py-2 bg-gray-50/50 border-b border-gray-200">
           {element.why && (
             <p className="text-xs text-gray-600 line-clamp-1">
               <span className="font-medium text-gray-700">Why:</span> {element.why}
@@ -672,7 +672,7 @@ function WBSCard({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSE
       
       <div className="px-4 py-3">
         <div className="flex items-center gap-2 mb-3">
-          <Badge className={`${gradeConfig.bgColor} ${gradeConfig.textColor} border ${gradeConfig.borderColor} text-[10px] px-1.5 py-0 h-5`}>{gradeConfig.label}</Badge>
+          <Badge className={`${gradeConfig.bgColor} ${gradeConfig.textColor} border ${gradeConfig.borderColor} text-xs px-1.5 py-0 h-5`}>{gradeConfig.label}</Badge>
           <span className="text-xs text-gray-500">{methodConfig.icon} {methodConfig.label}</span>
         </div>
         <div className="flex items-center justify-between mb-3">
@@ -686,12 +686,12 @@ function WBSCard({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSE
               <span className="text-gray-900">{getTotalHours(labor.hoursByPeriod).toLocaleString()}</span>
             </div>
           ))}
-          {element.laborEstimates.length > 2 && <span className="text-[10px] text-gray-400">+{element.laborEstimates.length - 2} more</span>}
+          {element.laborEstimates.length > 2 && <span className="text-xs text-gray-400">+{element.laborEstimates.length - 2} more</span>}
         </div>
       </div>
       
       {(element.risks.length > 0 || element.dependencies.length > 0 || element.qualityIssues.length > 0) && (
-        <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center gap-3 text-xs text-gray-500">
+        <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center gap-3 text-xs text-gray-500">
           {element.risks.length > 0 && <span className="flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{element.risks.length}</span>}
           {element.dependencies.length > 0 && <span className="flex items-center gap-1"><Link2 className="w-3 h-3" />{element.dependencies.map(d => d.predecessorWbsNumber).join(', ')}</span>}
           {element.qualityIssues.length > 0 && <span className="flex items-center gap-1 text-yellow-600"><AlertTriangle className="w-3 h-3" />{element.qualityIssues.length} issues</span>}
@@ -703,9 +703,9 @@ function WBSCard({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSE
 
 function WBSTableView({ elements, onElementClick, onEdit, onDelete, contractPeriods }: { elements: EnhancedWBSElement[]; onElementClick: (id: string) => void; onEdit: (el: EnhancedWBSElement) => void; onDelete: (id: string) => void; contractPeriods: { key: PeriodKey; label: string }[] }) {
   return (
-    <div className="bg-white border border-gray-100 rounded-lg overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b border-gray-100">
+        <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
             <th className="text-left px-4 py-3 text-xs font-medium text-gray-600">WBS</th>
             <th className="text-left px-4 py-3 text-xs font-medium text-gray-600">Title</th>
@@ -722,11 +722,11 @@ function WBSTableView({ elements, onElementClick, onEdit, onDelete, contractPeri
             const totalHours = getElementTotalHours(element)
             const gradeConfig = QUALITY_GRADE_CONFIG[element.qualityGrade]
             return (
-              <tr key={element.id} className={`group border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`} onClick={() => onElementClick(element.id)}>
+              <tr key={element.id} className={`group border-b border-gray-200 hover:bg-gray-50 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`} onClick={() => onElementClick(element.id)}>
                 <td className="px-4 py-3 font-semibold text-gray-900">{element.wbsNumber}</td>
                 <td className="px-4 py-3 text-gray-900 max-w-[200px] truncate">{element.title}</td>
                 <td className="px-4 py-3 text-gray-500">{element.sowReference || '—'}</td>
-                <td className="px-4 py-3"><Badge className={`${gradeConfig.bgColor} ${gradeConfig.textColor} border ${gradeConfig.borderColor} text-[10px] px-1.5 py-0 h-5`}>{gradeConfig.label}</Badge></td>
+                <td className="px-4 py-3"><Badge className={`${gradeConfig.bgColor} ${gradeConfig.textColor} border ${gradeConfig.borderColor} text-xs px-1.5 py-0 h-5`}>{gradeConfig.label}</Badge></td>
                 <td className="px-4 py-3 text-gray-600">{ESTIMATE_METHOD_LABELS[element.estimateMethod].label}</td>
                 {contractPeriods.slice(0, 3).map(period => {
                   const periodTotal = element.laborEstimates.reduce((sum, l) => sum + l.hoursByPeriod[period.key], 0)
@@ -761,7 +761,7 @@ function HelpBanner() {
       </button>
       {isExpanded && (
         <div className="mt-3 grid grid-cols-2 gap-4">
-          <div className="bg-white border border-gray-100 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-gray-900 mb-3">Quality Grades</h4>
             <div className="space-y-2">
               {Object.entries(QUALITY_GRADE_CONFIG).map(([key, config]) => (
@@ -773,7 +773,7 @@ function HelpBanner() {
               ))}
             </div>
           </div>
-          <div className="bg-white border border-gray-100 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-gray-900 mb-3">Estimate Methods</h4>
             <div className="space-y-2">
               {Object.entries(ESTIMATE_METHOD_LABELS).map(([key, config]) => (
@@ -816,7 +816,7 @@ function ChargeCodeLibrary({ chargeCodes, onAdd, onEdit, onDelete }: { chargeCod
                 <h3 className="text-sm font-medium text-gray-900">{cc.projectName}</h3>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">{cc.totalHours.toLocaleString()} hrs</Badge>
+                <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">{cc.totalHours.toLocaleString()} hrs</Badge>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => onEdit(cc)} aria-label="Edit charge code"><Pencil className="w-3.5 h-3.5" /></Button>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => onDelete(cc.id)} aria-label="Delete charge code"><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -825,7 +825,7 @@ function ChargeCodeLibrary({ chargeCodes, onAdd, onEdit, onDelete }: { chargeCod
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-2"><Building2 className="w-3 h-3" /><span>{cc.client}</span><span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" /><Calendar className="w-3 h-3" /><span>{cc.dateRange}</span></div>
             <p className="text-xs text-gray-600 mb-2">{cc.description}</p>
-            <div className="flex flex-wrap gap-1">{cc.roles.map(role => <Badge key={role} variant="secondary" className="text-[10px] px-1.5 py-0 h-5">{role}</Badge>)}</div>
+            <div className="flex flex-wrap gap-1">{cc.roles.map(role => <Badge key={role} variant="secondary" className="text-xs px-1.5 py-0 h-5">{role}</Badge>)}</div>
           </div>
         ))}
       </div>
@@ -964,7 +964,7 @@ function RequirementsSection({
             >
               <AlertTriangle className="w-4 h-4 inline mr-1.5" />Gaps
               {stats.unmapped > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 text-[10px] bg-red-500 text-white rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 w-4 h-4 text-xs bg-red-500 text-white rounded-full flex items-center justify-center">
                   {stats.unmapped}
                 </span>
               )}
@@ -1052,7 +1052,7 @@ function RequirementsSection({
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
+                            <Badge className={`text-xs px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
                             <span className="font-mono text-xs text-gray-500">{displayNumber}</span>
                             <span className="text-sm font-medium text-gray-900 truncate">{req.title || 'Untitled'}</span>
                           </div>
@@ -1060,21 +1060,21 @@ function RequirementsSection({
                             <p className="text-xs text-gray-600 line-clamp-2 mb-1.5">{req.description}</p>
                           )}
                           {req.source && (
-                            <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{req.source}</span>
+                            <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{req.source}</span>
                           )}
                           <div className="flex items-center gap-1 flex-wrap mt-1.5">
                             {linkedWbs.map(wbs => (
                               <Badge 
                                 key={wbs.id} 
                                 variant="secondary" 
-                                className="text-[10px] px-1.5 py-0 h-5 cursor-pointer hover:bg-red-100" 
+                                className="text-xs px-1.5 py-0 h-5 cursor-pointer hover:bg-red-100" 
                                 onClick={() => onUnlinkWbs(req.id, wbs.id)}
                               >
                                 {wbs.wbsNumber} ×
                               </Badge>
                             ))}
                             <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
-                              <SelectTrigger className="h-5 w-auto px-2 text-[10px] text-blue-600 border-none bg-transparent hover:bg-blue-50">
+                              <SelectTrigger className="h-5 w-auto px-2 text-xs text-blue-600 border-none bg-transparent hover:bg-blue-50">
                                 <span>+ Link WBS</span>
                               </SelectTrigger>
                               <SelectContent position="popper" sideOffset={4} className="z-[100] max-h-[200px] overflow-y-auto">
@@ -1141,7 +1141,7 @@ function RequirementsSection({
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
-                            <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
+                            <Badge className={`text-xs px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
                             <span className="font-mono text-sm font-medium text-gray-900">{req.referenceNumber}</span>
                           </div>
                           <p className="text-sm text-gray-700">{req.title}</p>
@@ -1426,7 +1426,7 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <Badge className={`${gradeConfig.bgColor} ${gradeConfig.textColor} border ${gradeConfig.borderColor} text-[10px] px-1.5 py-0 h-5`}>
+                <Badge className={`${gradeConfig.bgColor} ${gradeConfig.textColor} border ${gradeConfig.borderColor} text-xs px-1.5 py-0 h-5`}>
                   {gradeConfig.label} ({element.qualityScore}%)
                 </Badge>
                 {element.sowReference && <>
@@ -1461,15 +1461,15 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
               <TabsTrigger value="details" className="text-xs">Details</TabsTrigger>
               <TabsTrigger value="labor" className="text-xs">
                 Labor
-                <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 h-4">{element.laborEstimates.length}</Badge>
+                <Badge variant="secondary" className="ml-1 text-xs px-1 py-0 h-4">{element.laborEstimates.length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="risks" className="text-xs">
                 Risks
-                {element.risks.length > 0 && <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 h-4">{element.risks.length}</Badge>}
+                {element.risks.length > 0 && <Badge variant="secondary" className="ml-1 text-xs px-1 py-0 h-4">{element.risks.length}</Badge>}
               </TabsTrigger>
               <TabsTrigger value="dependencies" className="text-xs">
                 Dependencies
-                {element.dependencies.length > 0 && <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 h-4">{element.dependencies.length}</Badge>}
+                {element.dependencies.length > 0 && <Badge variant="secondary" className="ml-1 text-xs px-1 py-0 h-4">{element.dependencies.length}</Badge>}
               </TabsTrigger>
             </TabsList>
             
@@ -1617,7 +1617,7 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
                       </Select>
                     </div>
                     {element.complexityFactor !== 1.0 && (
-                      <Badge variant="outline" className="text-[10px]">{element.complexityFactor}x complexity</Badge>
+                      <Badge variant="outline" className="text-xs">{element.complexityFactor}x complexity</Badge>
                     )}
                   </div>
                 </div>
@@ -1770,8 +1770,8 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-medium ${labor.isOrphaned ? 'text-red-700' : 'text-gray-900'}`}>{labor.roleName}</span>
-                          {labor.isOrphaned && <Badge variant="outline" className="text-[10px] bg-red-50 text-red-700 border-red-200">Not in team</Badge>}
-                          <Badge variant="outline" className={`text-[10px] ${CONFIDENCE_CONFIG[labor.confidence].color}`}>{CONFIDENCE_CONFIG[labor.confidence].label}</Badge>
+                          {labor.isOrphaned && <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">Not in team</Badge>}
+                          <Badge variant="outline" className={`text-xs ${CONFIDENCE_CONFIG[labor.confidence].color}`}>{CONFIDENCE_CONFIG[labor.confidence].label}</Badge>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-gray-900">{getTotalHours(labor.hoursByPeriod).toLocaleString()} hrs</span>
@@ -1832,7 +1832,7 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
                       <div key={risk.id} className={`group border-l-4 ${getRiskColor(riskScore)} border border-gray-200 rounded-lg p-4 bg-white hover:border-gray-300 transition-colors`}>
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <Badge className={`text-[10px] ${statusConfig.color}`}>{statusConfig.label}</Badge>
+                            <Badge className={`text-xs ${statusConfig.color}`}>{statusConfig.label}</Badge>
                             <span className="text-xs text-gray-500">Likelihood: {risk.probability} × Impact: {risk.impact} = {riskScore}</span>
                           </div>
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2300,7 +2300,7 @@ function BulkGenerateDialog({
                   )}
                   
                   {wbs.laborEstimates.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="mt-3 pt-3 border-t border-gray-200">
                       <p className="text-xs font-medium text-gray-500 mb-2">Labor Estimates:</p>
                       <div className="flex flex-wrap gap-2">
                         {wbs.laborEstimates.map(labor => (
@@ -2952,8 +2952,8 @@ const handleAddRoleToTeam = (roleName: string) => {
         <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-4">
           <div className="flex items-center justify-between">
             <TabsList className="bg-gray-100 p-1">
-              <TabsTrigger value="requirements" className="text-xs px-4 data-[state=active]:bg-white"><ClipboardCheck className="w-3.5 h-3.5 mr-1.5" />Requirements{stats.unmappedRequirements > 0 && <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.unmappedRequirements}</Badge>}</TabsTrigger>
-              <TabsTrigger value="wbs" className="text-xs px-4 data-[state=active]:bg-white"><Layers className="w-3.5 h-3.5 mr-1.5" />WBS Elements<Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">{wbsElements.length}</Badge></TabsTrigger>
+              <TabsTrigger value="requirements" className="text-xs px-4 data-[state=active]:bg-white"><ClipboardCheck className="w-3.5 h-3.5 mr-1.5" />Requirements{stats.unmappedRequirements > 0 && <Badge variant="destructive" className="ml-1.5 text-xs px-1 py-0 h-4">{stats.unmappedRequirements}</Badge>}</TabsTrigger>
+              <TabsTrigger value="wbs" className="text-xs px-4 data-[state=active]:bg-white"><Layers className="w-3.5 h-3.5 mr-1.5" />WBS Elements<Badge variant="secondary" className="ml-1.5 text-xs px-1 py-0 h-4">{wbsElements.length}</Badge></TabsTrigger>
               <TabsTrigger value="labor" className="text-xs px-4 data-[state=active]:bg-white"><PieChart className="w-3.5 h-3.5 mr-1.5" />Labor Summary</TabsTrigger>
               <TabsTrigger value="charges" className="text-xs px-4 data-[state=active]:bg-white"><Hash className="w-3.5 h-3.5 mr-1.5" />Charge Codes</TabsTrigger>
             </TabsList>
@@ -2971,7 +2971,7 @@ const handleAddRoleToTeam = (roleName: string) => {
             </div>
             
            {filteredElements.length === 0 ? (
-              <div className="text-center py-12 bg-white border border-gray-100 rounded-lg"><Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-sm text-gray-600">No WBS elements found</p><Button variant="outline" size="sm" className="mt-3" onClick={() => setShowAddElement(true)}><Plus className="w-4 h-4 mr-2" />Add First Element</Button></div>
+              <div className="text-center py-12 bg-white border border-gray-200 rounded-lg"><Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-sm text-gray-600">No WBS elements found</p><Button variant="outline" size="sm" className="mt-3" onClick={() => setShowAddElement(true)}><Plus className="w-4 h-4 mr-2" />Add First Element</Button></div>
             ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">{filteredElements.map(element => <WBSCard key={element.id} element={element} onClick={() => setSelectedElementId(element.id)} onEdit={() => setSelectedElementId(element.id)} onDelete={() => handleDeleteElement(element.id)} />)}</div>
             ) : (
@@ -3044,7 +3044,7 @@ const handleAddRoleToTeam = (roleName: string) => {
                   .map((req, idx) => (
                     <SelectItem key={req.id} value={req.id} className="py-2">
                       <div className="flex items-center gap-2">
-                        <Badge className="text-[10px] px-1 py-0 h-4 bg-red-100 text-red-700 border-red-200">
+                        <Badge className="text-xs px-1 py-0 h-4 bg-red-100 text-red-700 border-red-200">
                           REQ-{String(idx + 1).padStart(3, '0')}
                         </Badge>
                         <span className="truncate max-w-[300px]">{req.title || 'Untitled'}</span>
@@ -3067,11 +3067,11 @@ const handleAddRoleToTeam = (roleName: string) => {
                     return (
                       <SelectItem key={req.id} value={req.id} className="py-2">
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+                          <Badge variant="outline" className="text-xs px-1 py-0 h-4">
                             REQ-{String(unmappedCount + idx + 1).padStart(3, '0')}
                           </Badge>
                           <span className="truncate max-w-[300px] text-gray-600">{req.title || 'Untitled'}</span>
-                          <span className="text-[10px] text-gray-400">({req.linkedWbsIds.length} WBS)</span>
+                          <span className="text-xs text-gray-400">({req.linkedWbsIds.length} WBS)</span>
                         </div>
                       </SelectItem>
                     )
@@ -3419,7 +3419,7 @@ const handleAddRoleToTeam = (roleName: string) => {
                 <Label>Roles Used</Label>
                 <div className="flex flex-wrap gap-1 mb-2">
                   {(chargeCodeForm.roles || []).map(role => (
-                    <Badge key={role} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 cursor-pointer hover:bg-red-100" onClick={() => handleRemoveRoleFromChargeCode(role)}>
+                    <Badge key={role} variant="secondary" className="text-xs px-1.5 py-0 h-5 cursor-pointer hover:bg-red-100" onClick={() => handleRemoveRoleFromChargeCode(role)}>
                       {role} ×
                     </Badge>
                   ))}

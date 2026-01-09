@@ -236,7 +236,7 @@ function SectionCard({ section, onToggle, onClick, isSelected }: SectionCardProp
               {section.badge && (
                 <Badge 
                   variant={section.badgeVariant || 'secondary'} 
-                  className="text-[10px] px-1.5 py-0"
+                  className="text-xs px-1.5 py-0"
                 >
                   {section.badge}
                 </Badge>
@@ -247,8 +247,8 @@ function SectionCard({ section, onToggle, onClick, isSelected }: SectionCardProp
         </div>
         
         {/* Click for details hint */}
-        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
-          <span className="text-[10px] text-gray-400 group-hover:text-blue-500 transition-colors">
+        <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
+          <span className="text-xs text-gray-400 group-hover:text-blue-500 transition-colors">
             Click for details & preview
           </span>
           <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all" />
@@ -446,10 +446,10 @@ function SectionSlideout({
                           <h5 className="font-medium text-gray-900">{element.title}</h5>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px]">{element.estimateMethod}</Badge>
+                          <Badge variant="outline" className="text-xs">{element.estimateMethod}</Badge>
                           <Badge 
                             variant={((element as any).confidence || (element as any).confidenceLevel || "medium") === 'high' ? 'default' : 'secondary'} 
-                            className="text-[10px]"
+                            className="text-xs"
                           >
                             {(element as any).confidence || (element as any).confidenceLevel || "medium"}
                           </Badge>
@@ -474,12 +474,12 @@ function SectionSlideout({
                       {/* Labor Breakdown */}
                       {element.laborBreakdown && element.laborBreakdown.length > 0 && (
                         <div className="bg-gray-50 rounded-lg p-3">
-                          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                             Labor Allocation
                           </p>
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="text-[10px] font-medium text-gray-500 border-b border-gray-200">
+                              <tr className="text-xs font-medium text-gray-500 border-b border-gray-200">
                                 <th className="text-left pb-1">Role</th>
                                 <th className="text-right pb-1">Total</th>
                                 <th className="text-right pb-1">Base</th>
@@ -519,8 +519,8 @@ function SectionSlideout({
 
                       {/* Assumptions */}
                       {element.assumptions && element.assumptions.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                             Assumptions
                           </p>
                           <div className="flex flex-wrap gap-1">
@@ -621,7 +621,7 @@ function SectionSlideout({
                           <div className="flex items-center gap-2">
                             <Badge variant="outline">{role.icLevel}</Badge>
                             {companyRole && (
-                              <Badge variant="secondary" className="text-[10px]">
+                              <Badge variant="secondary" className="text-xs">
                                 Matched
                               </Badge>
                             )}
@@ -636,28 +636,28 @@ function SectionSlideout({
                         {/* Details grid */}
                         <div className="grid grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg">
                           <div>
-                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                               Experience Required
                             </p>
                             <p className="text-sm text-gray-900">{experience}</p>
                           </div>
                           
                           <div>
-                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                               Education
                             </p>
                             <p className="text-sm text-gray-900">{education}</p>
                           </div>
                           
                           <div>
-                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                               BLS Code
                             </p>
                             <p className="text-sm text-gray-900 font-mono">{blsCode}</p>
                           </div>
                           
                           <div>
-                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                               Level
                             </p>
                             <p className="text-sm text-gray-900">{levelInfo?.levelName || role.icLevel}</p>
@@ -666,8 +666,8 @@ function SectionSlideout({
                         
                         {/* Certifications if any */}
                         {levelInfo?.certifications && levelInfo.certifications.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-100">
-                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                               Certifications
                             </p>
                             <div className="flex flex-wrap gap-1">
@@ -1350,10 +1350,10 @@ export function ExportTab() {
                             <h5 className="font-medium text-gray-900">{element.title}</h5>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-[10px]">{element.estimateMethod}</Badge>
+                            <Badge variant="outline" className="text-xs">{element.estimateMethod}</Badge>
                             <Badge 
                               variant={((element as any).confidence || (element as any).confidenceLevel || "medium") === 'high' ? 'default' : 'secondary'} 
-                              className="text-[10px]"
+                              className="text-xs"
                             >
                               {(element as any).confidence || (element as any).confidenceLevel || "medium"}
                             </Badge>
@@ -1378,14 +1378,14 @@ export function ExportTab() {
                         {/* Labor Breakdown with hours by period */}
                         {element.laborBreakdown && element.laborBreakdown.length > 0 && (
                           <div className="bg-gray-50 rounded-lg p-3">
-                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                               Labor Allocation
                             </p>
                             
                             {/* Table */}
                             <table className="w-full text-sm">
                               <thead>
-                                <tr className="text-[10px] font-medium text-gray-500 border-b border-gray-200">
+                                <tr className="text-xs font-medium text-gray-500 border-b border-gray-200">
                                   <th className="text-left pb-1">Role</th>
                                   <th className="text-right pb-1">Total</th>
                                   <th className="text-right pb-1">Base</th>
@@ -1425,8 +1425,8 @@ export function ExportTab() {
 
                         {/* Assumptions */}
                         {element.assumptions && element.assumptions.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-100">
-                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                               Assumptions
                             </p>
                             <div className="flex flex-wrap gap-1">

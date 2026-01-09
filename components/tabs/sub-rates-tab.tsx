@@ -181,7 +181,7 @@ function OfferCard({ offer, onClick, onEdit, onDelete }: OfferCardProps) {
 
   return (
     <div 
-      className="group bg-white border border-gray-100 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
+      className="group bg-white border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -201,7 +201,7 @@ function OfferCard({ offer, onClick, onEdit, onDelete }: OfferCardProps) {
       )}
 
       {/* Card Header */}
-      <div className="px-4 py-3 border-b border-gray-100">
+      <div className="px-4 py-3 border-b border-gray-200">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -242,7 +242,7 @@ function OfferCard({ offer, onClick, onEdit, onDelete }: OfferCardProps) {
         {/* Verdict badge - only show if pending (otherwise status banner is visible) */}
         {offer.outcome === 'pending' && (
           <div className="flex items-center gap-2 mb-3">
-            <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${verdict.color}`}>
+            <Badge className={`text-xs px-1.5 py-0 h-5 border ${verdict.color}`}>
               {verdict.text}
             </Badge>
           </div>
@@ -272,7 +272,7 @@ function OfferCard({ offer, onClick, onEdit, onDelete }: OfferCardProps) {
       </div>
 
       {/* Card Footer - Activity & Issues */}
-      <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
         <div className="flex items-center gap-3">
           {roundCount > 0 && (
             <span className="flex items-center gap-1">
@@ -443,13 +443,13 @@ Best regards`
                 <h3 id="slideout-title" className="text-lg font-semibold text-gray-900">{offer.primeName}</h3>
                 {/* Tracking status badge in header */}
                 {offer.outcome !== 'pending' && (
-                  <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${OUTCOME_CONFIG[offer.outcome].color}`}>
+                  <Badge className={`text-xs px-1.5 py-0 h-5 border ${OUTCOME_CONFIG[offer.outcome].color}`}>
                     {OUTCOME_CONFIG[offer.outcome].emoji} {OUTCOME_CONFIG[offer.outcome].label}
                   </Badge>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${verdict.color}`}>
+                <Badge className={`text-xs px-1.5 py-0 h-5 border ${verdict.color}`}>
                   {verdict.text}
                 </Badge>
                 <span className="text-sm text-gray-600">{offer.roleTitle} • {offer.level}</span>
@@ -477,9 +477,9 @@ Best regards`
               <TabsTrigger value="tracking" className="text-xs">
                 Tracking
                 {hasUnsavedChanges ? (
-                  <Badge variant="destructive" className="ml-1 text-[10px] px-1 py-0 h-4">•</Badge>
+                  <Badge variant="destructive" className="ml-1 text-xs px-1 py-0 h-4">•</Badge>
                 ) : offer.outcome !== 'pending' ? (
-                  <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 h-4">
+                  <Badge variant="secondary" className="ml-1 text-xs px-1 py-0 h-4">
                     {OUTCOME_CONFIG[offer.outcome].emoji}
                   </Badge>
                 ) : null}
@@ -625,7 +625,7 @@ Best regards`
                     {offer.yearBreakdowns.map((yb, idx) => (
                       <tr 
                         key={yb.year} 
-                        className={`border-b border-gray-100 ${!yb.isProfitable ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                        className={`border-b border-gray-200 ${!yb.isProfitable ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                       >
                         <td className="px-4 py-3 font-medium text-gray-900">
                           Year {yb.year}
@@ -1413,18 +1413,18 @@ export function SubRatesTab() {
               <TabsTrigger value="all" className="text-xs px-4 data-[state=active]:bg-white">
                 <Building2 className="w-3.5 h-3.5 mr-1.5" />
                 All Offers
-                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.total}</Badge>
+                <Badge variant="secondary" className="ml-1.5 text-xs px-1 py-0 h-4">{stats.total}</Badge>
               </TabsTrigger>
               <TabsTrigger value="profitable" className="text-xs px-4 data-[state=active]:bg-white">
                 <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
                 Profitable
-                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4 bg-green-100 text-green-700">{stats.profitable}</Badge>
+                <Badge variant="secondary" className="ml-1.5 text-xs px-1 py-0 h-4 bg-green-100 text-green-700">{stats.profitable}</Badge>
               </TabsTrigger>
               <TabsTrigger value="needs-counter" className="text-xs px-4 data-[state=active]:bg-white">
                 <AlertTriangle className="w-3.5 h-3.5 mr-1.5" />
                 Need Counter
                 {stats.needsCounter > 0 && (
-                  <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.needsCounter}</Badge>
+                  <Badge variant="destructive" className="ml-1.5 text-xs px-1 py-0 h-4">{stats.needsCounter}</Badge>
                 )}
               </TabsTrigger>
             </TabsList>
@@ -1453,7 +1453,7 @@ export function SubRatesTab() {
           {/* Content */}
           <TabsContent value={activeTab} className="mt-0">
             {filteredOffers.length === 0 ? (
-              <div className="text-center py-16 bg-white border border-gray-100 rounded-lg">
+              <div className="text-center py-16 bg-white border border-gray-200 rounded-lg">
                 <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   {stats.total === 0 ? 'No offers analyzed yet' : 'No matching offers'}

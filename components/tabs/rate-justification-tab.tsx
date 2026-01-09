@@ -658,14 +658,14 @@ export function RateJustificationTab() {
               <TabsTrigger value="bls" className="text-xs px-4 data-[state=active]:bg-white">
                 <TrendingUp className="w-3.5 h-3.5 mr-1.5" />
                 BLS Market Data
-                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">
+                <Badge variant="secondary" className="ml-1.5 text-xs px-1 py-0 h-4">
                   {roles.length}
                 </Badge>
               </TabsTrigger>
               <TabsTrigger value="gsa" className="text-xs px-4 data-[state=active]:bg-white">
                 <Building2 className="w-3.5 h-3.5 mr-1.5" />
                 GSA Competitors
-                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">
+                <Badge variant="secondary" className="ml-1.5 text-xs px-1 py-0 h-4">
                   {relevantGSACompetitors.length}
                 </Badge>
               </TabsTrigger>
@@ -761,22 +761,22 @@ export function RateJustificationTab() {
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <h4 className="font-medium text-sm text-gray-900">{role.title}</h4>
                             {isSub ? (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-orange-50 text-orange-700 border-orange-200">
+                              <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-orange-50 text-orange-700 border-orange-200">
                                 Sub
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">{role.level}</Badge>
+                              <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">{role.level}</Badge>
                             )}
                             {isSub && role.companyName && (
                               <span className="text-xs text-gray-500">{role.companyName}</span>
                             )}
                             {needsJustification && (
                               hasJustification ? (
-                                <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                                <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
                                   <CheckCircle2 className="w-3 h-3" aria-hidden="true" /> Documented
                                 </span>
                               ) : (
-                                <span className="flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                                <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
                                   <AlertTriangle className="w-3 h-3" aria-hidden="true" /> Documentation needed
                                 </span>
                               )
@@ -797,7 +797,7 @@ export function RateJustificationTab() {
                               <p className={`text-xs font-medium ${percentDiff >= 0 ? 'text-orange-600' : 'text-green-600'}`}>
                                 {percentDiff >= 0 ? '+' : ''}{percentDiff.toFixed(0)}% vs ${blsLoadedHourly.toFixed(2)}/hr
                               </p>
-                              <p className="text-[10px] text-gray-400">estimated market loaded rate</p>
+                              <p className="text-xs text-gray-400">estimated market loaded rate</p>
                             </>
                           ) : (
                             <>
@@ -829,7 +829,7 @@ export function RateJustificationTab() {
                               />
                             </div>
                           </div>
-                          <Badge className={`${status.color} border text-[10px] px-2 py-0.5`}>{status.label}</Badge>
+                          <Badge className={`${status.color} border text-xs px-2 py-0.5`}>{status.label}</Badge>
                           <ChevronRight className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
                         </div>
                       </div>
@@ -936,7 +936,7 @@ export function RateJustificationTab() {
                         <div className="flex items-center gap-3">
                           <Building2 className="w-4 h-4 text-purple-600" aria-hidden="true" />
                           <span className="font-medium text-sm text-gray-900">{category}</span>
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">{competitors.length} vendors</Badge>
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">{competitors.length} vendors</Badge>
                         </div>
                         <div className="flex items-center gap-4">
                           {ourRole && (
@@ -980,12 +980,12 @@ export function RateJustificationTab() {
                                 <div className="flex items-center gap-6">
                                   {ourRole && (
                                     <div className="text-right">
-                                      <p className="text-[10px] text-gray-500 uppercase">Your Rate</p>
+                                      <p className="text-xs text-gray-500 uppercase">Your Rate</p>
                                       <p className="text-sm font-semibold text-blue-600">${ourRole.hourlyRate.toFixed(2)}/hr</p>
                                     </div>
                                   )}
                                   <div className="text-right">
-                                    <p className="text-[10px] text-gray-500 uppercase">Their Rate</p>
+                                    <p className="text-xs text-gray-500 uppercase">Their Rate</p>
                                     <p className="text-sm font-bold text-gray-900">${competitor.rate.toFixed(2)}/hr</p>
                                   </div>
                                   {comparison && (
