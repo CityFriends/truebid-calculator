@@ -1455,17 +1455,94 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // ==================== COMPANY PROFILE (SaaS) ====================
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({
-    id: 'fftc-001',
-    name: 'Friends From The City',
-    legalName: 'Friends From The City, LLC',
-    samUei: 'RA62AG44CFZ8',
+  const [companyProfile, setCompanyProfileState] = useState<CompanyProfile>({
+    id: '',
+    name: '',
+    legalName: '',
+    samUei: '',
     cageCode: '',
     businessSize: 'small',
-    naicsCodes: ['541511', '541512', '541519', '541611'],
-    gsaContractNumber: '47QTCA23D0076',
-    gsaMasSchedule: true,
+    naicsCodes: [],
+    gsaContractNumber: '',
+    gsaMasSchedule: false,
   });
+  const [companyProfileLoaded, setCompanyProfileLoaded] = useState(false);
+
+  // Load company profile from API on mount
+  useEffect(() => {
+    async function loadCompanyProfile() {
+      if (typeof window === 'undefined') return;
+
+      try {
+        const response = await companiesApi.get() as { company: Record<string, unknown> | null };
+        if (response.company) {
+          const c = response.company;
+          setCompanyProfileState({
+            id: (c.id as string) || '',
+            name: (c.name as string) || '',
+            legalName: (c.legal_name as string) || '',
+            samUei: (c.sam_uei as string) || '',
+            cageCode: (c.cage_code as string) || '',
+            businessSize: ((c.address as Record<string, unknown>)?.businessSize as 'small' | 'other-than-small') || 'small',
+            naicsCodes: (c.naics_codes as string[]) || [],
+            gsaContractNumber: '',
+            gsaMasSchedule: false,
+            streetAddress: ((c.address as Record<string, unknown>)?.street as string) || '',
+            city: ((c.address as Record<string, unknown>)?.city as string) || '',
+            state: ((c.address as Record<string, unknown>)?.state as string) || '',
+            zipCode: ((c.address as Record<string, unknown>)?.zip as string) || '',
+            dunsNumber: (c.duns as string) || '',
+            ein: (c.ein as string) || '',
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load company profile from API:', e);
+      }
+      setCompanyProfileLoaded(true);
+    }
+
+    loadCompanyProfile();
+  }, []);
+
+  // Wrapper to save company profile to API when it changes
+  const setCompanyProfile = async (profile: CompanyProfile) => {
+    setCompanyProfileState(profile);
+
+    // Don't save until initial load is complete
+    if (!companyProfileLoaded) return;
+
+    try {
+      const apiData = {
+        name: profile.name,
+        legal_name: profile.legalName,
+        sam_uei: profile.samUei,
+        cage_code: profile.cageCode,
+        duns: profile.dunsNumber,
+        ein: profile.ein,
+        naics_codes: profile.naicsCodes,
+        address: {
+          street: profile.streetAddress,
+          city: profile.city,
+          state: profile.state,
+          zip: profile.zipCode,
+          businessSize: profile.businessSize,
+        },
+      };
+
+      if (profile.id) {
+        // Update existing company
+        await companiesApi.update(apiData);
+      } else {
+        // Create new company
+        const response = await companiesApi.create(apiData) as { company: { id: string } };
+        if (response.company?.id) {
+          setCompanyProfileState(prev => ({ ...prev, id: response.company.id }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to save company profile to API:', e);
+    }
+  };
 
   // ==================== INDIRECT RATES (From Accountant) ====================
   const [indirectRates, setIndirectRates] = useState<IndirectRates>({
