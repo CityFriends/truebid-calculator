@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { rolesApi, settingsApi, companiesApi } from '@/lib/api';
 
 // ==================== LOCALSTORAGE KEYS ====================
 
@@ -1522,22 +1523,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveStatusTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const isInitialMount = React.useRef(true);
 
-  // Load from localStorage after hydration (runs once on mount)
+  // Load company roles from API (with localStorage fallback)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    async function loadCompanyRoles() {
+      if (typeof window === 'undefined') return;
+
       try {
-        const stored = localStorage.getItem(STORAGE_KEYS.COMPANY_ROLES);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setCompanyRoles(parsed);
+        // Try API first
+        const response = await rolesApi.list() as { roles: CompanyRole[] };
+        if (response.roles && response.roles.length > 0) {
+          setCompanyRoles(response.roles);
+          // Cache to localStorage
+          localStorage.setItem(STORAGE_KEYS.COMPANY_ROLES, JSON.stringify(response.roles));
+        } else {
+          // No roles in API, try localStorage
+          const stored = localStorage.getItem(STORAGE_KEYS.COMPANY_ROLES);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCompanyRoles(parsed);
+            }
           }
         }
       } catch (e) {
-        console.warn('Failed to load company roles from localStorage:', e);
+        // API failed, fallback to localStorage
+        console.warn('Failed to load company roles from API, using localStorage:', e);
+        try {
+          const stored = localStorage.getItem(STORAGE_KEYS.COMPANY_ROLES);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCompanyRoles(parsed);
+            }
+          }
+        } catch (localErr) {
+          console.warn('Failed to load company roles from localStorage:', localErr);
+        }
       }
       setIsHydrated(true);
     }
+
+    loadCompanyRoles();
   }, []);
 
   // Persist companyRoles to localStorage whenever it changes (skip initial mount)
