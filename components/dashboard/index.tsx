@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/contexts/app-context'
+import { proposalsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -998,46 +999,57 @@ export function Dashboard() {
   // Card display settings
   const [cardSettings, setCardSettings] = useState<CardDisplaySettings>(DEFAULT_CARD_SETTINGS)
 
-  // Load proposals from localStorage
+  // Load proposals from API
   useEffect(() => {
-    const stored = localStorage.getItem(PROPOSALS_STORAGE_KEY)
-    if (stored) {
+    async function loadProposals() {
       try {
-        setProposals(JSON.parse(stored))
-      } catch (e) {
-        console.error('Failed to parse stored proposals:', e)
-        setProposals(MOCK_PROPOSALS)
+        const response = await proposalsApi.list() as { proposals: Proposal[] }
+        setProposals(response.proposals || [])
+      } catch (error) {
+        console.error('Failed to load proposals from API:', error)
+        // Fallback to localStorage cache
+        const cached = localStorage.getItem(PROPOSALS_STORAGE_KEY)
+        if (cached) {
+          try {
+            setProposals(JSON.parse(cached))
+          } catch (e) {
+            console.error('Failed to parse cached proposals:', e)
+            setProposals([])
+          }
+        } else {
+          setProposals([])
+        }
       }
-    } else {
-      setProposals([])
-    }
-    
-    // Load recently viewed
-    const recentStored = localStorage.getItem(RECENTLY_VIEWED_KEY)
-    if (recentStored) {
-      try {
-        setRecentlyViewed(JSON.parse(recentStored))
-      } catch (e) {
-        console.error('Failed to parse recently viewed:', e)
+
+      // Load recently viewed (keep in localStorage - UI preference)
+      const recentStored = localStorage.getItem(RECENTLY_VIEWED_KEY)
+      if (recentStored) {
+        try {
+          setRecentlyViewed(JSON.parse(recentStored))
+        } catch (e) {
+          console.error('Failed to parse recently viewed:', e)
+        }
       }
+
+      // Load card display settings (keep in localStorage - UI preference)
+      const cardSettingsStored = localStorage.getItem(CARD_SETTINGS_KEY)
+      if (cardSettingsStored) {
+        try {
+          setCardSettings({ ...DEFAULT_CARD_SETTINGS, ...JSON.parse(cardSettingsStored) })
+        } catch (e) {
+          console.error('Failed to parse card settings:', e)
+        }
+      }
+
+      setIsLoaded(true)
     }
 
-    // Load card display settings
-    const cardSettingsStored = localStorage.getItem(CARD_SETTINGS_KEY)
-    if (cardSettingsStored) {
-      try {
-        setCardSettings({ ...DEFAULT_CARD_SETTINGS, ...JSON.parse(cardSettingsStored) })
-      } catch (e) {
-        console.error('Failed to parse card settings:', e)
-      }
-    }
-    
-    setIsLoaded(true)
+    loadProposals()
   }, [])
 
-  // Save proposals when they change
+  // Cache proposals to localStorage for fallback
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && proposals.length > 0) {
       localStorage.setItem(PROPOSALS_STORAGE_KEY, JSON.stringify(proposals))
     }
   }, [proposals, isLoaded])
@@ -1154,35 +1166,49 @@ export function Dashboard() {
   }, [proposals])
 
   // Handlers
-  const handleImportRFP = () => {
+  const handleImportRFP = async () => {
     setActiveUtilityTool(null)
-    const newId = `prop-${Date.now()}`
-    
-    // Create and save the proposal
-    const newProposal = {
-      id: newId,
-      title: 'New Proposal',
-      solicitation: '',
-      client: '',
-      status: 'draft',
-      totalValue: 0,
-      dueDate: null,
-      updatedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      teamSize: 0,
-      progress: 0,
-      starred: false,
-      archived: false,
-      contractType: 'tm',
-      periodOfPerformance: '',
+
+    try {
+      // Create proposal via API
+      const response = await proposalsApi.create({
+        title: 'New Proposal',
+        status: 'draft',
+        total_value: 0,
+        team_size: 0,
+        progress: 0,
+        starred: false,
+        archived: false,
+        contract_type: 'tm',
+      }) as { proposal: Proposal }
+
+      const newProposal = response.proposal
+      setProposals(prev => [newProposal, ...prev])
+      router.push(`/${newProposal.id}?tab=upload`)
+    } catch (error) {
+      console.error('Failed to create proposal:', error)
+      // Fallback to local creation
+      const newId = `prop-${Date.now()}`
+      const newProposal: Proposal = {
+        id: newId,
+        title: 'New Proposal',
+        solicitation: '',
+        client: '',
+        status: 'draft',
+        totalValue: 0,
+        dueDate: null,
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        teamSize: 0,
+        progress: 0,
+        starred: false,
+        archived: false,
+        contractType: 'tm',
+        periodOfPerformance: '',
+      }
+      setProposals(prev => [newProposal, ...prev])
+      router.push(`/${newId}?tab=upload`)
     }
-    
-    const existing = localStorage.getItem(PROPOSALS_STORAGE_KEY)
-    const existingProposals = existing ? JSON.parse(existing) : []
-    existingProposals.unshift(newProposal)
-    localStorage.setItem(PROPOSALS_STORAGE_KEY, JSON.stringify(existingProposals))
-    
-    router.push(`/${newId}?tab=upload`)
   }
 
   const handleOpenProposal = (proposalId: string) => {
@@ -1195,40 +1221,99 @@ export function Dashboard() {
     router.push(`/${proposalId}`)
   }
 
-  const handleToggleArchive = (proposalId: string) => {
+  const handleToggleArchive = async (proposalId: string) => {
+    const proposal = proposals.find(p => p.id === proposalId)
+    if (!proposal) return
+
+    const newArchived = !proposal.archived
+    // Optimistic update
     setProposals(prev =>
-      prev.map(p => p.id === proposalId ? { ...p, archived: !p.archived } : p)
+      prev.map(p => p.id === proposalId ? { ...p, archived: newArchived } : p)
     )
+
+    try {
+      await proposalsApi.update(proposalId, { archived: newArchived })
+    } catch (error) {
+      console.error('Failed to update proposal archive status:', error)
+      // Revert on error
+      setProposals(prev =>
+        prev.map(p => p.id === proposalId ? { ...p, archived: !newArchived } : p)
+      )
+    }
   }
 
-  const handleDuplicate = (proposalId: string) => {
+  const handleDuplicate = async (proposalId: string) => {
     const original = proposals.find(p => p.id === proposalId)
     if (!original) return
-    
-    const duplicate: Proposal = {
-      ...original,
-      id: `prop-${Date.now()}`,
-      title: `${original.title} (Copy)`,
-      status: 'draft',
-      starred: false,
-      archived: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      progress: 0,
+
+    try {
+      // Create duplicate via API
+      const response = await proposalsApi.create({
+        title: `${original.title} (Copy)`,
+        solicitation_number: original.solicitation,
+        client: original.client,
+        status: 'draft',
+        total_value: original.totalValue,
+        due_date: original.dueDate,
+        team_size: original.teamSize,
+        progress: 0,
+        starred: false,
+        archived: false,
+        contract_type: original.contractType,
+        period_of_performance: original.periodOfPerformance,
+      }) as { proposal: Proposal }
+
+      setProposals(prev => [response.proposal, ...prev])
+    } catch (error) {
+      console.error('Failed to duplicate proposal:', error)
+      // Fallback to local duplication
+      const duplicate: Proposal = {
+        ...original,
+        id: `prop-${Date.now()}`,
+        title: `${original.title} (Copy)`,
+        status: 'draft',
+        starred: false,
+        archived: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        progress: 0,
+      }
+      setProposals(prev => [duplicate, ...prev])
     }
-    setProposals(prev => [duplicate, ...prev])
   }
 
-  const handleDelete = (proposalId: string) => {
+  const handleDelete = async (proposalId: string) => {
     if (confirm('Are you sure you want to delete this proposal?')) {
-      setProposals(prev => prev.filter(p => p.id !== proposalId))
+      try {
+        await proposalsApi.delete(proposalId)
+        setProposals(prev => prev.filter(p => p.id !== proposalId))
+      } catch (error) {
+        console.error('Failed to delete proposal:', error)
+        // Still remove from UI even if API fails
+        setProposals(prev => prev.filter(p => p.id !== proposalId))
+      }
     }
   }
 
-  const handleStatusChange = (proposalId: string, newStatus: ProposalStatus) => {
+  const handleStatusChange = async (proposalId: string, newStatus: ProposalStatus) => {
+    const proposal = proposals.find(p => p.id === proposalId)
+    if (!proposal) return
+
+    const previousStatus = proposal.status
+    // Optimistic update
     setProposals(prev =>
       prev.map(p => p.id === proposalId ? { ...p, status: newStatus, updatedAt: new Date().toISOString() } : p)
     )
+
+    try {
+      await proposalsApi.update(proposalId, { status: newStatus })
+    } catch (error) {
+      console.error('Failed to update proposal status:', error)
+      // Revert on error
+      setProposals(prev =>
+        prev.map(p => p.id === proposalId ? { ...p, status: previousStatus } : p)
+      )
+    }
   }
 
   const handleStatClick = (stat: 'active' | 'pipeline' | 'submitted' | 'winRate') => {

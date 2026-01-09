@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
+import { useParams } from 'next/navigation'
+import { wbsApi } from '@/lib/api'
 import {
   Search, Plus, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Info, HelpCircle,
   Clock, Calendar, AlertTriangle, Link2, Pencil, Trash2, X, Check,
@@ -2339,11 +2341,11 @@ export function EstimateTab() {
   // ==========================================================================
   // CONTEXT - Use shared state for WBS elements (flows to Roles & Pricing tab)
   // ==========================================================================
-   const { 
-    selectedRoles: contextRoles, 
-    addRole, 
-    solicitation, 
-    uiBillableHours, 
+   const {
+    selectedRoles: contextRoles,
+    addRole,
+    solicitation,
+    uiBillableHours,
     setActiveMainTab,
     // Shared WBS elements state - this is the key change!
     estimateWbsElements,
@@ -2353,7 +2355,11 @@ export function EstimateTab() {
     // Extracted requirements from AI analysis
     extractedRequirements,
   } = useAppContext()
-  
+
+  // Get proposal ID from URL for API calls
+  const params = useParams()
+  const proposalId = params?.id as string | undefined
+
   // Use context state for WBS elements (shared with Roles & Pricing tab)
   // Type assertion needed because context uses simpler type, but EnhancedWBSElement is compatible
   const wbsElements = estimateWbsElements as unknown as EnhancedWBSElement[]
@@ -2634,24 +2640,48 @@ export function EstimateTab() {
     }
   }
 
- const handleAcceptGeneratedWbs = () => {
+ const handleAcceptGeneratedWbs = async () => {
   // Create elements with fresh IDs and track the mapping
   const elementMapping: { reqId: string; wbsId: string }[] = []
-  
+
   const elementsToAdd = generatedWbs.map(el => {
     const { _linkedRequirementId, ...cleanElement } = el as any
     const newId = generateId()
-    
+
     if (_linkedRequirementId) {
       elementMapping.push({ reqId: _linkedRequirementId, wbsId: newId })
     }
-    
+
     return { ...cleanElement, id: newId } as EnhancedWBSElement
   })
-  
+
   // Add WBS elements to state
   setWbsElements([...wbsElements, ...elementsToAdd])
-  
+
+  // Save to API if we have a proposal ID
+  if (proposalId) {
+    try {
+      const wbsToSave = elementsToAdd.map(el => ({
+        wbs_number: el.wbsNumber,
+        title: el.title,
+        description: el.what, // "what" is the description
+        why: el.why,
+        what: el.what,
+        assumptions: el.assumptions,
+        story_points: el.qualityScore, // Use quality score as story points proxy
+        labor_hours: el.laborEstimates?.reduce((sum, l) =>
+          sum + (l.hoursByPeriod?.base || 0) + (l.hoursByPeriod?.option1 || 0) + (l.hoursByPeriod?.option2 || 0), 0
+        ) || 0,
+        roles: el.laborEstimates?.map(l => ({ roleId: l.roleId, roleName: l.roleName, hours: l.hoursByPeriod })),
+      }))
+      await wbsApi.create(proposalId, wbsToSave)
+      console.log('[Estimate] Saved WBS elements to API')
+    } catch (error) {
+      console.warn('[Estimate] Failed to save WBS elements to API:', error)
+      // Continue anyway - localStorage backup via useProposalSync will handle this
+    }
+  }
+
   // Auto-link requirements - SINGLE state update, not multiple
   if (elementMapping.length > 0) {
     setRequirements(prev => {
@@ -2660,9 +2690,9 @@ export function EstimateTab() {
         const wbsIdsToLink = elementMapping
           .filter(m => m.reqId === r.id)
           .map(m => m.wbsId)
-        
+
         if (wbsIdsToLink.length === 0) return r
-        
+
         // Add new WBS IDs that aren't already linked
         const newLinkedIds = [...r.linkedWbsIds]
         wbsIdsToLink.forEach(wbsId => {
@@ -2670,12 +2700,12 @@ export function EstimateTab() {
             newLinkedIds.push(wbsId)
           }
         })
-        
+
         return { ...r, linkedWbsIds: newLinkedIds }
       })
     })
   }
-  
+
   // Clear selection and close dialog
   setSelectedRequirements(new Set())
   setShowBulkGenerateDialog(false)

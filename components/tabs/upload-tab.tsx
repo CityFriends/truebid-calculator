@@ -2,8 +2,10 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useAppContext } from '@/contexts/app-context'
+import { requirementsApi } from '@/lib/api'
 import { 
   Upload, 
   FileText, 
@@ -125,15 +127,19 @@ const mapSetAside = (setAside: string): string => {
 
 // ==================== COMPONENT ====================
 export function UploadTab({ onContinue }: UploadTabProps) {
-  const { 
-    updateSolicitation, 
+  const {
+    updateSolicitation,
     setRecommendedRoles,
     solicitation,
     openSolicitationEditor,
     resetSolicitation,
     setExtractedRequirements,
   } = useAppContext()
-  
+
+  // Get proposal ID from URL for API calls
+  const params = useParams()
+  const proposalId = params?.id
+
   const [isDragging, setIsDragging] = useState(false)
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const [state, setState] = useState<'idle' | 'analyzing' | 'complete' | 'error'>('idle')
@@ -287,6 +293,17 @@ export function UploadTab({ onContinue }: UploadTabProps) {
       // Store extracted requirements for Estimate tab
       if (setExtractedRequirements && requirements.length > 0) {
         setExtractedRequirements(requirements)
+
+        // Also save to API if we have a proposal ID
+        if (proposalId) {
+          try {
+            await requirementsApi.create(proposalId as string, requirements)
+            console.log('[Upload] Saved requirements to API')
+          } catch (error) {
+            console.warn('[Upload] Failed to save requirements to API:', error)
+            // Continue anyway - localStorage backup will handle this
+          }
+        }
       }
 
       // Map suggested roles to recommended roles format

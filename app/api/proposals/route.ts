@@ -1,6 +1,30 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
+// Transform snake_case DB response to camelCase for frontend
+function transformProposal(p: Record<string, unknown>) {
+  return {
+    id: p.id,
+    title: p.title || 'Untitled Proposal',
+    solicitation: p.solicitation_number || '',
+    client: p.agency || '',
+    status: p.status || 'draft',
+    totalValue: p.total_value || 0,
+    dueDate: p.due_date || null,
+    updatedAt: p.updated_at || new Date().toISOString(),
+    createdAt: p.created_at || new Date().toISOString(),
+    teamSize: p.team_size || 0,
+    progress: p.progress || 0,
+    starred: p.starred || false,
+    archived: p.archived || false,
+    contractType: p.contract_type || 'tm',
+    periodOfPerformance: p.period_of_performance || '',
+    // Also include nested data if present
+    requirements: p.requirements,
+    wbs_elements: p.wbs_elements,
+  }
+}
+
 // GET - Fetch all proposals for user's company
 export async function GET() {
   const supabase = await createClient()
@@ -31,7 +55,10 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ proposals: data || [] })
+  // Transform to camelCase for frontend
+  const proposals = (data || []).map(transformProposal)
+
+  return NextResponse.json({ proposals })
 }
 
 // POST - Create a new proposal
@@ -61,12 +88,17 @@ export async function POST(request: Request) {
     .insert({
       company_id: company.id,
       title: body.title || 'Untitled Proposal',
-      agency: body.agency,
-      solicitation_number: body.solicitation_number,
-      contract_type: body.contract_type,
+      agency: body.agency || body.client,
+      solicitation_number: body.solicitation_number || body.solicitation,
+      contract_type: body.contract_type || body.contractType || 'tm',
       status: body.status || 'draft',
-      due_date: body.due_date,
-      value: body.value,
+      due_date: body.due_date || body.dueDate,
+      total_value: body.total_value || body.totalValue || 0,
+      team_size: body.team_size || body.teamSize || 0,
+      progress: body.progress || 0,
+      starred: body.starred || false,
+      archived: body.archived || false,
+      period_of_performance: body.period_of_performance || body.periodOfPerformance || '',
       description: body.description,
     })
     .select()
@@ -76,5 +108,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ proposal: data }, { status: 201 })
+  // Return transformed proposal
+  return NextResponse.json({ proposal: transformProposal(data) }, { status: 201 })
 }
