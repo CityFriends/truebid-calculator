@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useAppContext, UtilityToolType } from '@/contexts/app-context'
+import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -37,29 +38,41 @@ export function AppHeader() {
   const pathname = usePathname()
   const router = useRouter()
   const { companyProfile, setActiveUtilityTool } = useAppContext()
-  
+  const { user } = useAuth()
+
   const [theme, setTheme] = useState<Theme>('system')
   const [userProfile, setUserProfile] = useState({
     name: 'User',
     email: 'user@company.com',
     avatarUrl: '',
   })
-  
+
   const companyName = companyProfile?.name || 'TrueBid'
   const isHome = pathname === '/'
 
-  // Load user profile from localStorage
+  // Load user profile - prefer Supabase user, fall back to localStorage
   useEffect(() => {
-    const stored = localStorage.getItem('truebid-company-profile')
-    if (stored) {
-      const data = JSON.parse(stored)
+    if (user) {
+      // Use authenticated user's email
+      const emailName = user.email?.split('@')[0] || 'User'
       setUserProfile({
-        name: data.userName || 'User',
-        email: data.userEmail || 'user@company.com',
-        avatarUrl: data.avatarUrl || '',
+        name: user.user_metadata?.full_name || emailName,
+        email: user.email || 'user@company.com',
+        avatarUrl: user.user_metadata?.avatar_url || '',
       })
+    } else {
+      // Fall back to localStorage
+      const stored = localStorage.getItem('truebid-company-profile')
+      if (stored) {
+        const data = JSON.parse(stored)
+        setUserProfile({
+          name: data.userName || 'User',
+          email: data.userEmail || 'user@company.com',
+          avatarUrl: data.avatarUrl || '',
+        })
+      }
     }
-  }, [])
+  }, [user])
 
   // Load theme preference
   useEffect(() => {
