@@ -20,6 +20,7 @@ import {
   AvatarImage,
 } from '@/components/ui/avatar'
 import { toast } from 'sonner'
+import { userApi } from '@/lib/api'
 
 interface UserProfile {
   fullName: string
@@ -35,11 +36,11 @@ function ProfilePage() {
     avatarUrl: null,
   })
   const [isLoading, setIsLoading] = useState(true)
-  
+
   // Editing states
   const [editingName, setEditingName] = useState(false)
   const [nameBuffer, setNameBuffer] = useState('')
-  
+
   // Password dialog
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [passwordForm, setPasswordForm] = useState({
@@ -48,51 +49,43 @@ function ProfilePage() {
     confirmPassword: '',
   })
   const [passwordError, setPasswordError] = useState('')
-  
-  // Load profile from localStorage
+
+  // Load profile from API
   useEffect(() => {
-    const companyProfile = localStorage.getItem('truebid-company-profile')
-    if (companyProfile) {
+    async function loadProfile() {
       try {
-        const parsed = JSON.parse(companyProfile)
-        setProfile({
-          fullName: parsed.userName || 'Demo User',
-          email: parsed.userEmail || 'demo@truebid.com',
-          avatarUrl: parsed.avatarUrl || null,
-        })
-      } catch {
-        // Use defaults
-        setProfile({
-          fullName: 'Demo User',
-          email: 'demo@truebid.com',
-          avatarUrl: null,
-        })
+        const response = await userApi.getProfile() as { user: { fullName: string; email: string; avatarUrl: string | null } }
+        if (response.user) {
+          setProfile({
+            fullName: response.user.fullName || '',
+            email: response.user.email || '',
+            avatarUrl: response.user.avatarUrl,
+          })
+        }
+      } catch (e) {
+        console.warn('Failed to load profile from API:', e)
+        // Fallback to empty profile - user will see they need to set up
       }
-    } else {
-      setProfile({
-        fullName: 'Demo User',
-        email: 'demo@truebid.com',
-        avatarUrl: null,
-      })
+      setIsLoading(false)
     }
-    setIsLoading(false)
+    loadProfile()
   }, [])
   
-  // Save profile to localStorage
-  const saveProfile = (updates: Partial<UserProfile>) => {
+  // Save profile to API
+  const saveProfile = async (updates: Partial<UserProfile>) => {
     const newProfile = { ...profile, ...updates }
     setProfile(newProfile)
-    
-    const companyProfile = localStorage.getItem('truebid-company-profile')
-    const existing = companyProfile ? JSON.parse(companyProfile) : {}
-    localStorage.setItem('truebid-company-profile', JSON.stringify({
-      ...existing,
-      userName: newProfile.fullName,
-      userEmail: newProfile.email,
-      avatarUrl: newProfile.avatarUrl,
-    }))
-    
-    toast.success('Profile saved')
+
+    try {
+      await userApi.updateProfile({
+        fullName: newProfile.fullName,
+        avatarUrl: newProfile.avatarUrl || undefined,
+      })
+      toast.success('Profile saved')
+    } catch (e) {
+      console.warn('Failed to save profile to API:', e)
+      toast.error('Failed to save profile')
+    }
   }
   
   const handleStartEditName = () => {
