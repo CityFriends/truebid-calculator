@@ -16,7 +16,7 @@ export async function GET(
 
   const { id } = await params
 
-  const { data, error } = await supabase
+  const { data: requirements, error } = await supabase
     .from('requirements')
     .select('*')
     .eq('proposal_id', id)
@@ -26,10 +26,30 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ requirements: data || [] })
+  return NextResponse.json({ requirements })
 }
 
-// POST - Create requirements (bulk insert from RFP extraction)
+// Helper function to extract title from requirement text
+function extractTitle(text: string): string {
+  // Take first 100 chars or up to first period/newline
+  const firstLine = text.split(/[.\n]/)[0].trim()
+  return firstLine.length > 100 ? firstLine.substring(0, 97) + '...' : firstLine
+}
+
+// Helper function to map extraction type to priority
+function mapTypeToPriority(type: string): string {
+  const typeMap: Record<string, string> = {
+    'shall': 'high',
+    'must': 'high',
+    'required': 'high',
+    'should': 'medium',
+    'may': 'low',
+    'optional': 'low',
+  }
+  return typeMap[type?.toLowerCase()] || 'medium'
+}
+
+// POST - Create requirements (supports bulk insert)
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -48,16 +68,6 @@ export async function POST(
   // Handle both single and bulk inserts
   const requirements = Array.isArray(body) ? body : [body]
 
-<<<<<<< HEAD
-  const insertData = requirements.map(req => ({
-    proposal_id: id,
-    reference_number: req.reference_number,
-    title: req.title,
-    description: req.description,
-    section: req.section,
-    priority: req.priority,
-    is_mapped: req.is_mapped || false,
-=======
   // Map from extraction format to DB format
   // Extraction format: { id, text, type, sourceSection, title?, pageNumber? }
   // DB format: { reference_number, title, description, section, priority, is_mapped, req_type }
@@ -65,14 +75,12 @@ export async function POST(
     proposal_id: id,
     // Support both formats
     reference_number: req.reference_number || req.id || '',
-    title: req.title || extractTitle(req.text) || 'Requirement',
+    title: req.title || extractTitle(req.text || req.description || ''),
     description: req.description || req.text || '',
     section: req.section || req.sourceSection || '',
     priority: req.priority || mapTypeToPriority(req.type),
-    req_type: req.type || 'other',
     is_mapped: req.is_mapped || false,
-    page_number: req.pageNumber || req.page_number || null,
->>>>>>> 26cbda194f9c5d7443068014d9c4c180506d854f
+    req_type: req.req_type || req.type || 'shall',
   }))
 
   const { data, error } = await supabase
@@ -84,43 +92,11 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-<<<<<<< HEAD
-  return NextResponse.json({ requirements: data }, { status: 201 })
-=======
-  // Transform response to frontend format
-  const transformedRequirements = (data || []).map(r => ({
-    id: r.id,
-    text: r.description,
-    title: r.title,
-    type: r.req_type || 'other',
-    sourceSection: r.section,
-    pageNumber: r.page_number,
-  }))
-
-  return NextResponse.json({ requirements: transformedRequirements }, { status: 201 })
+  return NextResponse.json({ requirements: data })
 }
 
-// Helper: Extract a short title from requirement text
-function extractTitle(text: string | undefined): string {
-  if (!text) return 'Requirement'
-  // Take first 50 chars or up to first period
-  const firstSentence = text.split('.')[0]
-  if (firstSentence.length <= 60) return firstSentence
-  return text.substring(0, 50) + '...'
-}
-
-// Helper: Map requirement type to priority
-function mapTypeToPriority(type: string | undefined): string {
-  const highPriority = ['compliance', 'staffing', 'delivery']
-  const mediumPriority = ['reporting', 'governance']
-  if (highPriority.includes(type || '')) return 'high'
-  if (mediumPriority.includes(type || '')) return 'medium'
-  return 'low'
->>>>>>> 26cbda194f9c5d7443068014d9c4c180506d854f
-}
-
-// PUT - Update requirement
-export async function PUT(
+// DELETE - Delete all requirements for a proposal
+export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -132,55 +108,12 @@ export async function PUT(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await request.json()
-
-  if (!body.id) {
-    return NextResponse.json({ error: 'Requirement ID required' }, { status: 400 })
-  }
-
-  const { data, error } = await supabase
-    .from('requirements')
-    .update({
-      reference_number: body.reference_number,
-      title: body.title,
-      description: body.description,
-      section: body.section,
-      priority: body.priority,
-      is_mapped: body.is_mapped,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', body.id)
-    .select()
-    .single()
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ requirement: data })
-}
-
-// DELETE - Delete requirement
-export async function DELETE(request: Request) {
-  const supabase = await createClient()
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const { searchParams } = new URL(request.url)
-  const reqId = searchParams.get('reqId')
-
-  if (!reqId) {
-    return NextResponse.json({ error: 'Requirement ID required' }, { status: 400 })
-  }
+  const { id } = await params
 
   const { error } = await supabase
     .from('requirements')
     .delete()
-    .eq('id', reqId)
+    .eq('proposal_id', id)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
