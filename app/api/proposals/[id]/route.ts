@@ -1,8 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-<<<<<<< HEAD
-=======
 // Transform snake_case DB response to camelCase for frontend
 function transformProposal(p: Record<string, unknown>) {
   return {
@@ -21,13 +19,11 @@ function transformProposal(p: Record<string, unknown>) {
     archived: p.archived || false,
     contractType: p.contract_type || 'tm',
     periodOfPerformance: p.period_of_performance || '',
-    // Include nested data
     requirements: p.requirements,
     wbsElements: p.wbs_elements,
   }
 }
 
->>>>>>> 26cbda194f9c5d7443068014d9c4c180506d854f
 // GET - Fetch single proposal with requirements and WBS
 export async function GET(
   request: Request,
@@ -43,7 +39,6 @@ export async function GET(
 
   const { id } = await params
 
-  // Fetch proposal with related data
   const { data: proposal, error } = await supabase
     .from('proposals')
     .select(`
@@ -58,11 +53,7 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-<<<<<<< HEAD
-  return NextResponse.json({ proposal })
-=======
   return NextResponse.json({ proposal: transformProposal(proposal) })
->>>>>>> 26cbda194f9c5d7443068014d9c4c180506d854f
 }
 
 // PUT - Update proposal
@@ -81,21 +72,6 @@ export async function PUT(
   const { id } = await params
   const body = await request.json()
 
-<<<<<<< HEAD
-  const { data, error } = await supabase
-    .from('proposals')
-    .update({
-      title: body.title,
-      agency: body.agency,
-      solicitation_number: body.solicitation_number,
-      contract_type: body.contract_type,
-      status: body.status,
-      due_date: body.due_date,
-      value: body.value,
-      description: body.description,
-      updated_at: new Date().toISOString(),
-    })
-=======
   // Build update object only with fields that were provided
   const updateData: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -126,7 +102,6 @@ export async function PUT(
   const { data, error } = await supabase
     .from('proposals')
     .update(updateData)
->>>>>>> 26cbda194f9c5d7443068014d9c4c180506d854f
     .eq('id', id)
     .select()
     .single()
@@ -135,11 +110,7 @@ export async function PUT(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-<<<<<<< HEAD
-  return NextResponse.json({ proposal: data })
-=======
   return NextResponse.json({ proposal: transformProposal(data) })
->>>>>>> 26cbda194f9c5d7443068014d9c4c180506d854f
 }
 
 // DELETE - Delete proposal (cascades to requirements/wbs)
