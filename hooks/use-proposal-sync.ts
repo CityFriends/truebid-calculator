@@ -1,28 +1,10 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { useAppContext } from '@/contexts/app-context'
+import { proposalsApi } from '@/lib/api'
 
-const PROPOSALS_STORAGE_KEY = 'truebid-proposals'
 const PROPOSAL_DATA_PREFIX = 'truebid-proposal-data-'
-
-interface DashboardProposal {
-  id: string
-  title: string
-  solicitation: string
-  client: string
-  status: 'draft' | 'in-review' | 'submitted' | 'won' | 'lost' | 'no-bid'
-  totalValue: number
-  dueDate: string | null
-  updatedAt: string
-  createdAt: string
-  teamSize: number
-  progress: number
-  starred: boolean
-  archived: boolean
-  contractType: 'tm' | 'ffp' | 'hybrid'
-  periodOfPerformance: string
-}
 
 /**
  * Hook to sync AppContext data with dashboard localStorage
@@ -34,6 +16,29 @@ interface DashboardProposal {
  * 
  * Usage: Call this hook in the proposal workspace layout/page
  */
+// Map dashboard contract type to context format
+function mapContractType(type: string): 'FFP' | 'T&M' | 'GSA' | 'CPFF' | 'CPAF' | 'IDIQ' | 'BPA' | 'hybrid' | '' {
+  const mapping: Record<string, 'FFP' | 'T&M' | 'GSA' | 'CPFF' | 'CPAF' | 'IDIQ' | 'BPA' | 'hybrid' | ''> = {
+    'ffp': 'FFP',
+    'tm': 'T&M',
+    'gsa': 'GSA',
+    'cpff': 'CPFF',
+    'cpaf': 'CPAF',
+    'idiq': 'IDIQ',
+    'bpa': 'BPA',
+    'hybrid': 'hybrid',
+  }
+  return mapping[type.toLowerCase()] || 'T&M'
+}
+
+// Map context contract type to dashboard format
+function mapContractTypeToDashboard(type: string): 'tm' | 'ffp' | 'hybrid' {
+  if (type === 'FFP' || type === 'CPFF' || type === 'CPAF') return 'ffp'
+  if (type === 'T&M' || type === 'GSA') return 'tm'
+  if (type === 'hybrid' || type === 'IDIQ' || type === 'BPA') return 'hybrid'
+  return 'tm'
+}
+
 export function useProposalSync(proposalId: string) {
   const {
     solicitation,
@@ -45,6 +50,7 @@ export function useProposalSync(proposalId: string) {
     odcs,
     perDiem,
     setSolicitation,
+    updateSolicitation,
     setSelectedRoles,
     setSubcontractors,
     setTeamingPartners,
@@ -57,57 +63,123 @@ export function useProposalSync(proposalId: string) {
 
   const isInitialLoad = useRef(true)
   const lastSavedRef = useRef<string>('')
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Load proposal data on mount
+  // Load proposal data on mount - try API first, fallback to localStorage
   useEffect(() => {
     if (!proposalId) return
 
-    // Load full proposal data from per-proposal storage
-    const proposalDataKey = `${PROPOSAL_DATA_PREFIX}${proposalId}`
-    const storedData = localStorage.getItem(proposalDataKey)
-
-    if (storedData) {
+    async function loadProposalData() {
       try {
-        const data = JSON.parse(storedData)
-        
-        // Restore all AppContext state
-        if (data.solicitation) setSolicitation(data.solicitation)
-        if (data.selectedRoles) setSelectedRoles(data.selectedRoles)
-        if (data.subcontractors) setSubcontractors(data.subcontractors)
-        if (data.teamingPartners) setTeamingPartners(data.teamingPartners)
-        if (data.estimateWbsElements) setEstimateWbsElements(data.estimateWbsElements)
-        if (data.rateJustifications) setRateJustifications(data.rateJustifications)
-        if (data.odcs) setODCs(data.odcs)
-        if (data.perDiem) setPerDiem(data.perDiem)
-        
-        console.log('[ProposalSync] Loaded proposal data:', proposalId)
-      } catch (e) {
-        console.error('[ProposalSync] Failed to parse proposal data:', e)
+        // Try loading from API first
+        const response = await proposalsApi.get(proposalId) as {
+          proposal: {
+            title?: string
+            solicitation?: string
+            client?: string
+            contractType?: string
+            dueDate?: string
+            periodOfPerformance?: string
+            requirements?: unknown[]
+            wbsElements?: unknown[]
+          } | null
+        }
+
+        if (response.proposal) {
+          const proposal = response.proposal
+
+          // Update solicitation from API data
+          updateSolicitation({
+            title: proposal.title || '',
+            solicitationNumber: proposal.solicitation || '',
+            clientAgency: proposal.client || '',
+            contractType: mapContractType(proposal.contractType || 'tm'),
+            proposalDueDate: proposal.dueDate || '',
+          })
+
+          // Load requirements and WBS elements if present
+          // (These will be added in later tasks)
+
+          console.log('[ProposalSync] Loaded proposal from API:', proposalId)
+
+          // Also check localStorage for extended data not in API yet
+          const proposalDataKey = `${PROPOSAL_DATA_PREFIX}${proposalId}`
+          const storedData = localStorage.getItem(proposalDataKey)
+          if (storedData) {
+            try {
+              const data = JSON.parse(storedData)
+              // Load data that's not yet in the API
+              if (data.selectedRoles) setSelectedRoles(data.selectedRoles)
+              if (data.subcontractors) setSubcontractors(data.subcontractors)
+              if (data.teamingPartners) setTeamingPartners(data.teamingPartners)
+              if (data.estimateWbsElements) setEstimateWbsElements(data.estimateWbsElements)
+              if (data.rateJustifications) setRateJustifications(data.rateJustifications)
+              if (data.odcs) setODCs(data.odcs)
+              if (data.perDiem) setPerDiem(data.perDiem)
+              console.log('[ProposalSync] Loaded extended data from localStorage')
+            } catch (e) {
+              console.error('[ProposalSync] Failed to parse localStorage data:', e)
+            }
+          }
+        } else {
+          throw new Error('No proposal found in API')
+        }
+      } catch (error) {
+        console.warn('[ProposalSync] Failed to load from API, trying localStorage:', error)
+
+        // Fallback to localStorage
+        const proposalDataKey = `${PROPOSAL_DATA_PREFIX}${proposalId}`
+        const storedData = localStorage.getItem(proposalDataKey)
+
+        if (storedData) {
+          try {
+            const data = JSON.parse(storedData)
+
+            // Restore all AppContext state
+            if (data.solicitation) setSolicitation(data.solicitation)
+            if (data.selectedRoles) setSelectedRoles(data.selectedRoles)
+            if (data.subcontractors) setSubcontractors(data.subcontractors)
+            if (data.teamingPartners) setTeamingPartners(data.teamingPartners)
+            if (data.estimateWbsElements) setEstimateWbsElements(data.estimateWbsElements)
+            if (data.rateJustifications) setRateJustifications(data.rateJustifications)
+            if (data.odcs) setODCs(data.odcs)
+            if (data.perDiem) setPerDiem(data.perDiem)
+
+            console.log('[ProposalSync] Loaded proposal from localStorage:', proposalId)
+          } catch (e) {
+            console.error('[ProposalSync] Failed to parse proposal data:', e)
+          }
+        } else {
+          // New proposal - reset to defaults
+          resetSolicitation()
+          setSelectedRoles([])
+          setSubcontractors([])
+          setEstimateWbsElements([])
+          setRateJustifications({})
+          setODCs([])
+          setPerDiem([])
+          console.log('[ProposalSync] New proposal, reset to defaults:', proposalId)
+        }
       }
-    } else {
-      // New proposal - reset to defaults
-      resetSolicitation()
-      setSelectedRoles([])
-      setSubcontractors([])
-      setEstimateWbsElements([])
-      setRateJustifications({})
-      setODCs([])
-      setPerDiem([])
-      console.log('[ProposalSync] New proposal, reset to defaults:', proposalId)
+
+      // Mark initial load complete after a tick
+      setTimeout(() => {
+        isInitialLoad.current = false
+      }, 100)
     }
 
-    // Mark initial load complete after a tick
-    setTimeout(() => {
-      isInitialLoad.current = false
-    }, 100)
+    loadProposalData()
 
     // Cleanup on unmount - don't reset, data is saved
     return () => {
       isInitialLoad.current = true
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
     }
   }, [proposalId])
 
-  // Save proposal data when AppContext changes
+  // Save proposal data when AppContext changes (debounced)
   useEffect(() => {
     // Skip during initial load to avoid overwriting with defaults
     if (isInitialLoad.current || !proposalId) return
@@ -129,25 +201,36 @@ export function useProposalSync(proposalId: string) {
     if (dataHash === lastSavedRef.current) return
     lastSavedRef.current = dataHash
 
-    // Save full proposal data
+    // Save full proposal data to localStorage (for extended data not in API)
     const proposalDataKey = `${PROPOSAL_DATA_PREFIX}${proposalId}`
     localStorage.setItem(proposalDataKey, JSON.stringify(proposalData))
 
-    // Also update the dashboard's proposal list with summary data
-    updateDashboardProposal(proposalId, {
-      title: solicitation.title || 'Untitled Proposal',
-      solicitation: solicitation.solicitationNumber || '',
-      client: solicitation.clientAgency || '',
-      totalValue: calculateTotalValue(selectedRoles, subcontractors),
-      dueDate: solicitation.proposalDueDate || null,
-      teamSize: selectedRoles.length + subcontractors.length,
-      contractType: mapContractType(solicitation.contractType),
-      periodOfPerformance: formatPeriodOfPerformance(solicitation.periodOfPerformance),
-      progress: calculateProgress(solicitation, selectedRoles, estimateWbsElements),
-      updatedAt: new Date().toISOString(),
-    })
+    // Debounce API updates to avoid too many requests
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
 
-    console.log('[ProposalSync] Saved proposal data:', proposalId)
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        // Update proposal metadata in API
+        await proposalsApi.update(proposalId, {
+          title: solicitation.title || 'Untitled Proposal',
+          solicitation: solicitation.solicitationNumber || '',
+          client: solicitation.clientAgency || '',
+          totalValue: calculateTotalValue(selectedRoles, subcontractors),
+          dueDate: solicitation.proposalDueDate || null,
+          teamSize: selectedRoles.length + subcontractors.length,
+          contractType: mapContractTypeToDashboard(solicitation.contractType),
+          periodOfPerformance: formatPeriodOfPerformance(solicitation.periodOfPerformance),
+          progress: calculateProgress(solicitation, selectedRoles, estimateWbsElements),
+        })
+        console.log('[ProposalSync] Synced proposal to API:', proposalId)
+      } catch (error) {
+        console.warn('[ProposalSync] Failed to sync to API:', error)
+      }
+    }, 1000) // Debounce by 1 second
+
+    console.log('[ProposalSync] Saved proposal data locally:', proposalId)
   }, [
     proposalId,
     solicitation,
@@ -159,24 +242,6 @@ export function useProposalSync(proposalId: string) {
     odcs,
     perDiem,
   ])
-}
-
-// Helper: Update dashboard proposal list
-function updateDashboardProposal(id: string, updates: Partial<DashboardProposal>) {
-  const stored = localStorage.getItem(PROPOSALS_STORAGE_KEY)
-  if (!stored) return
-
-  try {
-    const proposals: DashboardProposal[] = JSON.parse(stored)
-    const index = proposals.findIndex(p => p.id === id)
-    
-    if (index !== -1) {
-      proposals[index] = { ...proposals[index], ...updates }
-      localStorage.setItem(PROPOSALS_STORAGE_KEY, JSON.stringify(proposals))
-    }
-  } catch (e) {
-    console.error('[ProposalSync] Failed to update dashboard proposal:', e)
-  }
 }
 
 // Helper: Calculate total contract value from roles and subs
@@ -201,14 +266,6 @@ function calculateTotalValue(
   })
 
   return total
-}
-
-// Helper: Map solicitation contract type to dashboard type
-function mapContractType(type: string): 'tm' | 'ffp' | 'hybrid' {
-  if (type === 'FFP' || type === 'CPFF' || type === 'CPAF') return 'ffp'
-  if (type === 'T&M' || type === 'GSA') return 'tm'
-  if (type === 'hybrid' || type === 'IDIQ' || type === 'BPA') return 'hybrid'
-  return 'tm'
 }
 
 // Helper: Format period of performance for display
