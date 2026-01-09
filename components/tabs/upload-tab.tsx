@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useAppContext } from '@/contexts/app-context'
-import { requirementsApi } from '@/lib/api'
+import { requirementsApi, proposalsApi } from '@/lib/api'
 import { 
   Upload, 
   FileText, 
@@ -303,6 +303,23 @@ export function UploadTab({ onContinue }: UploadTabProps) {
             console.warn('[Upload] Failed to save requirements to API:', error)
             // Continue anyway - localStorage backup will handle this
           }
+        }
+      }
+
+      // Update proposal in Supabase with extracted metadata
+      if (proposalId) {
+        try {
+          await proposalsApi.update(proposalId as string, {
+            title: metadata.title,
+            agency: metadata.clientAgency !== 'N/A' ? metadata.clientAgency : null,
+            solicitation: metadata.solicitationNumber !== 'N/A' ? metadata.solicitationNumber : null,
+            contractType: mapContractType(metadata.contractType).toLowerCase(),
+            dueDate: metadata.responseDeadline !== 'N/A' ? metadata.responseDeadline : null,
+            periodOfPerformance: `1 Base + ${metadata.periodOfPerformance.options} Options`,
+          })
+          console.log('[Upload] Updated proposal with extracted metadata')
+        } catch (error) {
+          console.warn('[Upload] Failed to update proposal:', error)
         }
       }
 
