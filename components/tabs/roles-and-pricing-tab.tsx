@@ -1428,7 +1428,7 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Column 1: Roles From Estimate */}
-          <div className="border border-gray-200 rounded-lg bg-white flex flex-col max-h-[calc(100vh-220px)]">
+          <div className="border border-gray-200 rounded-lg bg-white flex flex-col max-h-[calc(100vh-220px)] shadow-sm hover:shadow-md transition-shadow">
             <div className="flex-shrink-0 p-4 border-b border-gray-200">
               <div>
                 <div className="flex items-center justify-between">
@@ -1560,7 +1560,7 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
           </div>
 
           {/* Column 2: Team Summary */}
-          <div className="border border-gray-200 rounded-lg bg-white flex flex-col max-h-[calc(100vh-220px)]">
+          <div className="border border-gray-200 rounded-lg bg-white flex flex-col max-h-[calc(100vh-220px)] shadow-sm hover:shadow-md transition-shadow">
             <div className="flex-shrink-0 p-4 border-b border-gray-200">
               <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -1880,7 +1880,7 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
            </div>
 
          {/* Column 3: Contract Value */}
-          <div className="border border-gray-200 rounded-lg bg-white flex flex-col max-h-[calc(100vh-220px)]">
+          <div className="border border-gray-200 rounded-lg bg-white flex flex-col max-h-[calc(100vh-220px)] shadow-sm hover:shadow-md transition-shadow">
             <div className="flex-shrink-0 p-4 border-b border-gray-200">
               <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -2135,7 +2135,7 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
               <div className="pt-3 border-t border-gray-200">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-600">Total Contract:</span>
-                  <span className="text-2xl font-semibold text-green-600">{formatCurrency(calculations.totalContract)}</span>
+                  <span className={`text-2xl font-semibold ${calculations.totalContract > 0 ? 'text-green-600' : 'text-gray-500'}`}>{formatCurrency(calculations.totalContract)}</span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">Labor + Subs + ODCs + Travel (with escalation)</p>
               </div>
