@@ -1545,7 +1545,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // ==================== INDIRECT RATES (From Accountant) ====================
-  const [indirectRates, setIndirectRates] = useState<IndirectRates>({
+  const [indirectRates, setIndirectRatesState] = useState<IndirectRates>({
     fringe: 0.211562,
     overhead: 0.342588,
     ga: 0.19831,
@@ -1555,6 +1555,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
     source: 'FFTC Rate Model 202511',
     lastUpdated: '2025-11-25',
   });
+  const [indirectRatesLoaded, setIndirectRatesLoaded] = useState(false);
+
+  // Load indirect rates from API on mount
+  useEffect(() => {
+    async function loadIndirectRates() {
+      if (typeof window === 'undefined') return;
+
+      try {
+        const response = await settingsApi.get() as { settings: Record<string, unknown> | null };
+        if (response.settings) {
+          const s = response.settings;
+          setIndirectRatesState(prev => ({
+            ...prev,
+            fringe: (s.fringe_rate as number) ?? prev.fringe,
+            overhead: (s.overhead_rate as number) ?? prev.overhead,
+            ga: (s.ga_rate as number) ?? prev.ga,
+          }));
+        }
+      } catch (e) {
+        console.warn('Failed to load indirect rates from API:', e);
+      }
+      setIndirectRatesLoaded(true);
+    }
+
+    loadIndirectRates();
+  }, []);
+
+  // Wrapper to save indirect rates to API when they change
+  const setIndirectRates = async (rates: IndirectRates) => {
+    setIndirectRatesState(rates);
+
+    // Don't save until initial load is complete
+    if (!indirectRatesLoaded) return;
+
+    try {
+      await settingsApi.save({
+        fringe_rate: rates.fringe,
+        overhead_rate: rates.overhead,
+        ga_rate: rates.ga,
+      });
+    } catch (e) {
+      console.warn('Failed to save indirect rates to API:', e);
+    }
+  };
 
   // ==================== PROFIT TARGETS ====================
   const [profitTargets, setProfitTargets] = useState<ProfitTargets>({

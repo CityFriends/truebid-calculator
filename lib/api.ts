@@ -2,6 +2,19 @@
 
 const API_BASE = '/api'
 
+// User Profile
+export const userApi = {
+  getProfile: () =>
+    fetch(`${API_BASE}/user/profile`).then(handleResponse),
+
+  updateProfile: (data: { fullName?: string; avatarUrl?: string }) =>
+    fetch(`${API_BASE}/user/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(handleResponse),
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = await response.json()
