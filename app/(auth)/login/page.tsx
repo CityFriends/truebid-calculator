@@ -7,6 +7,7 @@ import { AuthLayout } from '@/components/auth/auth-layout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 // OAuth provider icons
 function GoogleIcon({ className }: { className?: string }) {
@@ -61,25 +62,31 @@ export default function LoginPage() {
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    
+
     if (!password) {
       setError('Please enter your password')
       return
     }
-    
+
     setIsLoading(true)
-    
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      if (email === 'demo@truebid.com' && password === 'demo123') {
-        router.push('/dashboard')
-      } else {
-        setError('Invalid email or password. Try demo@truebid.com / demo123')
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        setError(error.message)
+        setIsLoading(false)
+        return
       }
+
+      // Successful login - redirect happens via middleware
+      router.push('/dashboard')
     } catch (err) {
       setError('An unexpected error occurred. Please try again.')
-    } finally {
       setIsLoading(false)
     }
   }
