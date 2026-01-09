@@ -13,6 +13,20 @@ export const userApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then(handleResponse),
+
+  uploadAvatar: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return fetch(`${API_BASE}/user/avatar`, {
+      method: 'POST',
+      body: formData,
+    }).then(handleResponse)
+  },
+
+  deleteAvatar: () =>
+    fetch(`${API_BASE}/user/avatar`, {
+      method: 'DELETE',
+    }).then(handleResponse),
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
