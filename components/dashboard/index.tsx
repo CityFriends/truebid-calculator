@@ -1183,7 +1183,6 @@ export function Dashboard() {
       }) as { proposal: Proposal }
 
       const newProposal = response.proposal
-      setProposals(prev => [newProposal, ...prev])
       router.push(`/${newProposal.id}?tab=upload`)
     } catch (error) {
       console.error('Failed to create proposal:', error)
@@ -1206,7 +1205,6 @@ export function Dashboard() {
         contractType: 'tm',
         periodOfPerformance: '',
       }
-      setProposals(prev => [newProposal, ...prev])
       router.push(`/${newId}?tab=upload`)
     }
   }
@@ -1218,7 +1216,7 @@ export function Dashboard() {
       const filtered = prev.filter(id => id !== proposalId)
       return [proposalId, ...filtered].slice(0, 10)
     })
-    router.push(`/${proposalId}`)
+    router.push(`/${proposalId}?tab=estimate`)
   }
 
   const handleToggleArchive = async (proposalId: string) => {
