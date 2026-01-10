@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/avatar'
 import { toast } from 'sonner'
 import { userApi } from '@/lib/api'
+import { useAuth } from '@/contexts/auth-context'
 
 interface UserProfile {
   fullName: string
@@ -30,6 +31,7 @@ interface UserProfile {
 
 function ProfilePage() {
   const router = useRouter()
+  const { refreshUser } = useAuth()
   const [profile, setProfile] = useState<UserProfile>({
     fullName: '',
     email: '',
@@ -110,6 +112,8 @@ function ProfilePage() {
     try {
       const response = await userApi.uploadAvatar(file) as { avatarUrl: string }
       setProfile(prev => ({ ...prev, avatarUrl: response.avatarUrl }))
+      // Refresh auth context so header shows new avatar
+      await refreshUser()
       toast.success('Avatar updated')
     } catch (err) {
       console.error('Avatar upload error:', err)

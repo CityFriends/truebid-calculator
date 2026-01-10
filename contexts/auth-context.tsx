@@ -7,11 +7,13 @@ import type { User, SupabaseClient } from '@supabase/supabase-js'
 interface AuthContextType {
   user: User | null
   loading: boolean
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  refreshUser: async () => {},
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -40,8 +42,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Function to manually refresh user data (e.g., after updating user metadata)
+  const refreshUser = async () => {
+    if (!supabaseRef.current) return
+    const { data: { user: refreshedUser } } = await supabaseRef.current.auth.getUser()
+    if (refreshedUser) {
+      setUser(refreshedUser)
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

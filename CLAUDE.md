@@ -24,3 +24,33 @@
 - Refactor working code
 - Make "improvements" I didn't ask for
 - Create multiple commits for one fix
+
+## Git Workflow
+
+- Work on `develop` branch only unless explicitly told otherwise
+- Do NOT create new branches without explicit permission
+- Commit after each logical fix with clear messages (e.g., "fix: dashboard proposal title display")
+- Test changes before committing
+
+## Database Schema
+
+The Supabase `proposals` table has these columns:
+- id, company_id, title, solicitation_number
+- client, agency, client_agency (use client + agency, not client_agency)
+- status, contract_type, due_date
+- estimated_value, total_value, period_of_performance (jsonb)
+- team_size, progress, starred, archived
+- created_at, updated_at
+
+## API Routes
+
+- All routes use service role key via `lib/supabase/server.ts`
+- Auth check: `supabase.auth.getUser()` at start of each route
+- Return 401 if no session
+- Log errors with full details before returning 500
+
+## Code Style
+
+- snake_case for database columns
+- camelCase for TypeScript/React
+- Transform between them in API routes
