@@ -206,7 +206,7 @@ You must respond with ONLY valid JSON matching this exact structure - no markdow
       "linkedRequirementId": "the requirement ID from input",
       "wbsNumber": "sequential number like 1.4, 1.5",
       "title": "Action-oriented title",
-      "sowReference": "from the requirement source",
+      "sowReference": "Use the Source field value from the requirement (e.g., 'SOO 3.2.1' or section name like 'TASK ORDER TYPE'). Do NOT use the requirement ID here.",
       "why": "2-3 sentences explaining business purpose",
       "what": "2-3 sentences describing specific deliverables",
       "notIncluded": "What is explicitly NOT part of this work",
