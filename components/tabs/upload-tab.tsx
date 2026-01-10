@@ -152,14 +152,27 @@ export function UploadTab({ onContinue }: UploadTabProps) {
 
   // ==================== RESTORE STATE FROM CONTEXT ON MOUNT ====================
   useEffect(() => {
-  // If solicitation has data (was previously analyzed), restore the complete state
-  // Also verify the solicitation has actual extracted content (not just leftover localStorage)
-  if (solicitation.analyzedFromDocument && solicitation.solicitationNumber) {
-    setUploadedFileName(solicitation.analyzedFromDocument)
-    setState('complete')
-    setShowDetails(true)
-  }
-}, []) // Only run on mount
+    // Load requirements from API if we have a proposalId
+    async function loadRequirements() {
+      if (!proposalId) return
+      try {
+        const response = await requirementsApi.get(proposalId as string)
+        if (response.requirements && response.requirements.length > 0) {
+          setExtractedRequirements(response.requirements)
+        }
+      } catch (error) {
+        console.warn('[UploadTab] Failed to load requirements:', error)
+      }
+    }
+    loadRequirements()
+
+    // If solicitation has data (was previously analyzed), restore the complete state
+    if (solicitation.analyzedFromDocument && solicitation.solicitationNumber) {
+      setUploadedFileName(solicitation.analyzedFromDocument)
+      setState('complete')
+      setShowDetails(true)
+    }
+  }, [proposalId])
 
   // Drag handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
