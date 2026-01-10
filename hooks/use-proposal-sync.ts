@@ -88,26 +88,16 @@ export function useProposalSync(proposalId: string) {
         if (response.proposal) {
           const proposal = response.proposal
 
-          // Update solicitation from API data
-          updateSolicitation({
-            title: proposal.title || '',
-            solicitationNumber: proposal.solicitation || '',
-            clientAgency: proposal.client || '',
-            contractType: mapContractType(proposal.contractType || 'tm'),
-            proposalDueDate: proposal.dueDate || '',
-          })
-
-          // Load requirements and WBS elements if present
-          // (These will be added in later tasks)
-
-          console.log('[ProposalSync] Loaded proposal from API:', proposalId)
-
           // Also check localStorage for extended data not in API yet
           const proposalDataKey = `${PROPOSAL_DATA_PREFIX}${proposalId}`
           const storedData = localStorage.getItem(proposalDataKey)
+          let localSolicitation: Record<string, unknown> = {}
+
           if (storedData) {
             try {
               const data = JSON.parse(storedData)
+              // Preserve solicitation from localStorage (includes analyzedFromDocument, etc.)
+              if (data.solicitation) localSolicitation = data.solicitation
               // Load data that's not yet in the API
               if (data.selectedRoles) setSelectedRoles(data.selectedRoles)
               if (data.subcontractors) setSubcontractors(data.subcontractors)
@@ -121,6 +111,19 @@ export function useProposalSync(proposalId: string) {
               console.error('[ProposalSync] Failed to parse localStorage data:', e)
             }
           }
+
+          // Update solicitation - merge API data with localStorage data
+          // This preserves fields like analyzedFromDocument, setAside, placeOfPerformance
+          updateSolicitation({
+            ...localSolicitation,
+            title: proposal.title || localSolicitation.title || '',
+            solicitationNumber: proposal.solicitation || localSolicitation.solicitationNumber || '',
+            clientAgency: proposal.client || localSolicitation.clientAgency || '',
+            contractType: mapContractType(proposal.contractType || 'tm'),
+            proposalDueDate: proposal.dueDate || localSolicitation.proposalDueDate || '',
+          })
+
+          console.log('[ProposalSync] Loaded proposal from API:', proposalId)
         } else {
           throw new Error('No proposal found in API')
         }
