@@ -2406,13 +2406,13 @@ export function EstimateTab() {
     }
     return extractedRequirements.map((req) => ({
       id: req.id,
-      referenceNumber: req.pageNumber ? `p.${req.pageNumber}` : req.id,
+      referenceNumber: req.reference_number || (req.pageNumber ? `p.${req.pageNumber}` : req.id),
       title: req.title,
       description: req.description || req.text,
       type: 'shall' as RequirementType,
       category: categoryMap[req.type] || 'other',
       priority: 'medium' as const,
-      source: req.sourceSection,
+      source: req.source || req.sourceSection,
       linkedWbsIds: [],
       notes: '',
       isAIExtracted: true,
@@ -2433,13 +2433,13 @@ export function EstimateTab() {
         }
     return {
   id: req.id,
-  referenceNumber: req.pageNumber ? `p.${req.pageNumber}` : req.id,  // "p.7" or "REQ-001"
-  title: req.title,  // AI keyword title: "Labor Category Pricing"
+  referenceNumber: req.reference_number || (req.pageNumber ? `p.${req.pageNumber}` : req.id),
+  title: req.title,
   description: req.description || req.text,
   type: 'shall' as RequirementType,
   category: categoryMap[req.type] || 'other',
   priority: 'medium' as const,
-  source: req.sourceSection,  // Section header: "TASK ORDER TYPE"
+  source: req.source || req.sourceSection,
   linkedWbsIds: [],
   notes: '',
   isAIExtracted: true,
