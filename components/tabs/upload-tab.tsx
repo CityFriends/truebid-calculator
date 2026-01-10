@@ -152,9 +152,9 @@ export function UploadTab({ onContinue }: UploadTabProps) {
 
   // ==================== RESTORE STATE FROM CONTEXT ON MOUNT ====================
   useEffect(() => {
-    // Load requirements from API if we have a proposalId
     async function loadRequirements() {
       if (!proposalId) return
+      console.log('[Upload] Loading requirements for', proposalId)
       try {
         const response = await requirementsApi.get(proposalId as string)
         if (response.requirements && response.requirements.length > 0) {

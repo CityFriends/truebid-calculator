@@ -48,18 +48,14 @@ export async function POST(
   // Handle both single and bulk inserts
   const elements = Array.isArray(body) ? body : [body]
 
+  // DB schema: id, proposal_id, wbs_number, title, description, hours, labor_cost
   const insertData = elements.map(el => ({
     proposal_id: id,
-    wbs_number: el.wbs_number,
-    title: el.title,
-    description: el.description,
-    why: el.why,
-    what: el.what,
-    assumptions: el.assumptions,
-    story_points: el.story_points,
-    labor_hours: el.labor_hours,
-    roles: el.roles,
-    linked_requirements: el.linked_requirements,
+    wbs_number: el.wbs_number || el.wbsNumber || '',
+    title: el.title || '',
+    description: el.description || el.what || '',
+    hours: el.hours || el.labor_hours || 0,
+    labor_cost: el.labor_cost || el.laborCost || 0,
   }))
 
   const { data, error } = await supabase
@@ -68,6 +64,7 @@ export async function POST(
     .select()
 
   if (error) {
+    console.log('[POST wbs] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
@@ -96,16 +93,11 @@ export async function PUT(
   const { data, error } = await supabase
     .from('wbs_elements')
     .update({
-      wbs_number: body.wbs_number,
+      wbs_number: body.wbs_number || body.wbsNumber,
       title: body.title,
-      description: body.description,
-      why: body.why,
-      what: body.what,
-      assumptions: body.assumptions,
-      story_points: body.story_points,
-      labor_hours: body.labor_hours,
-      roles: body.roles,
-      linked_requirements: body.linked_requirements,
+      description: body.description || body.what,
+      hours: body.hours || body.labor_hours,
+      labor_cost: body.labor_cost || body.laborCost,
       updated_at: new Date().toISOString(),
     })
     .eq('id', body.id)
@@ -113,6 +105,7 @@ export async function PUT(
     .single()
 
   if (error) {
+    console.log('[PUT wbs] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
