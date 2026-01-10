@@ -2592,7 +2592,7 @@ export function EstimateTab() {
           id: generateId(),
           wbsNumber: el.wbsNumber,
           title: el.title,
-          sowReference: linkedReq?.source || linkedReq?.referenceNumber || el.sowReference || '',
+          sowReference: linkedReq?.source || linkedReq?.reference_number || linkedReq?.referenceNumber || el.sowReference || '',
           clin: '',
           periodOfPerformance: { startDate: '', endDate: '' },
           why: el.why || '',
@@ -2794,7 +2794,7 @@ const handleRequirementSelect = (reqId: string) => {
       ...prev, 
       linkedRequirementId: reqId,
       title: req.title || prev.title,
-      sowReference: req.source || prev.sowReference,
+      sowReference: req.source || req.reference_number || req.referenceNumber || prev.sowReference,
     }))
   }
 }
