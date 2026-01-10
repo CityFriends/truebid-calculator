@@ -2584,13 +2584,15 @@ export function EstimateTab() {
       
       const data = await response.json()
       setGenerationProgress(100)
-      
+
       const newElements: EnhancedWBSElement[] = data.wbsElements.map((el: any) => {
+        // Look up the linked requirement to get the correct source
+        const linkedReq = requirements.find(r => r.id === el.linkedRequirementId)
         const element: EnhancedWBSElement = {
           id: generateId(),
           wbsNumber: el.wbsNumber,
           title: el.title,
-          sowReference: el.sowReference || '',
+          sowReference: linkedReq?.source || linkedReq?.referenceNumber || el.sowReference || '',
           clin: '',
           periodOfPerformance: { startDate: '', endDate: '' },
           why: el.why || '',
