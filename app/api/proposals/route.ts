@@ -7,9 +7,9 @@ function transformProposal(p: Record<string, unknown>) {
     id: p.id,
     title: p.title || 'Untitled Proposal',
     solicitation: p.solicitation_number || '',
-    client: p.agency || '',
+    client: p.agency || p.client || '',
     status: p.status || 'draft',
-    totalValue: p.total_value || 0,
+    totalValue: p.total_value || p.estimated_value || 0,
     dueDate: p.due_date || null,
     updatedAt: p.updated_at || new Date().toISOString(),
     createdAt: p.created_at || new Date().toISOString(),
@@ -19,9 +19,6 @@ function transformProposal(p: Record<string, unknown>) {
     archived: p.archived || false,
     contractType: p.contract_type || 'tm',
     periodOfPerformance: p.period_of_performance || '',
-    // Also include nested data if present
-    requirements: p.requirements,
-    wbs_elements: p.wbs_elements,
   }
 }
 
@@ -55,9 +52,8 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Transform to camelCase for frontend
+  // Transform all proposals to camelCase
   const proposals = (data || []).map(transformProposal)
-
   return NextResponse.json({ proposals })
 }
 
@@ -98,7 +94,7 @@ export async function POST(request: Request) {
       progress: body.progress || 0,
       starred: body.starred || false,
       archived: body.archived || false,
-      period_of_performance: body.period_of_performance || body.periodOfPerformance || '',
+      period_of_performance: body.period_of_performance || body.periodOfPerformance,
       description: body.description,
     })
     .select()
@@ -108,6 +104,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Return transformed proposal
   return NextResponse.json({ proposal: transformProposal(data) }, { status: 201 })
 }
