@@ -3,6 +3,16 @@ import { NextResponse } from 'next/server'
 
 // Transform snake_case DB response to camelCase for frontend
 function transformProposal(p: Record<string, unknown>) {
+  // Handle period_of_performance which is jsonb - extract display string if object
+  let periodOfPerformance = ''
+  if (p.period_of_performance) {
+    if (typeof p.period_of_performance === 'string') {
+      periodOfPerformance = p.period_of_performance
+    } else if (typeof p.period_of_performance === 'object' && (p.period_of_performance as Record<string, unknown>).display) {
+      periodOfPerformance = (p.period_of_performance as Record<string, unknown>).display as string
+    }
+  }
+
   return {
     id: p.id,
     title: p.title || 'Untitled Proposal',
@@ -18,7 +28,7 @@ function transformProposal(p: Record<string, unknown>) {
     starred: p.starred || false,
     archived: p.archived || false,
     contractType: p.contract_type || 'tm',
-    periodOfPerformance: p.period_of_performance || '',
+    periodOfPerformance,
   }
 }
 
@@ -79,6 +89,13 @@ export async function POST(request: Request) {
 
   const body = await request.json()
 
+  // Handle period_of_performance - convert string to jsonb object
+  let periodOfPerformance = null
+  const popValue = body.period_of_performance || body.periodOfPerformance
+  if (popValue) {
+    periodOfPerformance = typeof popValue === 'string' ? { display: popValue } : popValue
+  }
+
   const { data, error } = await supabase
     .from('proposals')
     .insert({
@@ -94,7 +111,7 @@ export async function POST(request: Request) {
       progress: body.progress || 0,
       starred: body.starred || false,
       archived: body.archived || false,
-      period_of_performance: body.period_of_performance || body.periodOfPerformance,
+      period_of_performance: periodOfPerformance,
       description: body.description,
     })
     .select()

@@ -3,6 +3,16 @@ import { NextResponse } from 'next/server'
 
 // Transform snake_case DB response to camelCase for frontend
 function transformProposal(p: Record<string, unknown>) {
+  // Handle period_of_performance which is jsonb - extract display string if object
+  let periodOfPerformance = ''
+  if (p.period_of_performance) {
+    if (typeof p.period_of_performance === 'string') {
+      periodOfPerformance = p.period_of_performance
+    } else if (typeof p.period_of_performance === 'object' && (p.period_of_performance as Record<string, unknown>).display) {
+      periodOfPerformance = (p.period_of_performance as Record<string, unknown>).display as string
+    }
+  }
+
   return {
     id: p.id,
     title: p.title || 'Untitled Proposal',
@@ -18,8 +28,7 @@ function transformProposal(p: Record<string, unknown>) {
     starred: p.starred || false,
     archived: p.archived || false,
     contractType: p.contract_type || 'tm',
-    periodOfPerformance: p.period_of_performance || '',
-    // Include nested data
+    periodOfPerformance,
     requirements: p.requirements,
     wbsElements: p.wbs_elements,
   }
@@ -40,7 +49,6 @@ export async function GET(
 
   const { id } = await params
 
-  // Fetch proposal with related data
   const { data: proposal, error } = await supabase
     .from('proposals')
     .select(`
@@ -97,8 +105,17 @@ export async function PUT(
   if (body.progress !== undefined) updateData.progress = body.progress
   if (body.starred !== undefined) updateData.starred = body.starred
   if (body.archived !== undefined) updateData.archived = body.archived
-  if (body.period_of_performance !== undefined) updateData.period_of_performance = body.period_of_performance
-  if (body.periodOfPerformance !== undefined) updateData.period_of_performance = body.periodOfPerformance
+  // period_of_performance is jsonb - convert string to object if needed
+  if (body.period_of_performance !== undefined) {
+    updateData.period_of_performance = typeof body.period_of_performance === 'string'
+      ? { display: body.period_of_performance }
+      : body.period_of_performance
+  }
+  if (body.periodOfPerformance !== undefined) {
+    updateData.period_of_performance = typeof body.periodOfPerformance === 'string'
+      ? { display: body.periodOfPerformance }
+      : body.periodOfPerformance
+  }
   if (body.description !== undefined) updateData.description = body.description
 
   console.log('[PUT /api/proposals] Updating proposal:', id)
