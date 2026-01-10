@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { 
   Upload, 
   Users, 
@@ -133,6 +134,15 @@ export function TabsNavigation() {
     setActiveMainTab(tab)
     setActiveUtilityTool(null) // Clear utility tool when switching to main tab
   }
+
+  // Read tab from URL params on mount
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam && ['upload', 'estimate', 'roles', 'rate-justification', 'teaming-partners', 'export'].includes(tabParam)) {
+      setActiveMainTab(tabParam as TabType)
+    }
+  }, [searchParams, setActiveMainTab])
 
   // Main bid flow tabs - ordered by workflow sequence
   // Upload → Estimate → Roles & Pricing → Rate Justification → Teaming Partners → Export
