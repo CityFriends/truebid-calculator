@@ -70,17 +70,15 @@ export async function POST(
 
   // Map from extraction format to DB format
   // Extraction format: { id, text, type, sourceSection, title?, pageNumber? }
-  // DB format: { reference_number, title, description, section, priority, is_mapped, req_type }
+  // DB format: { reference_number, title, description, type, source, priority }
   const insertData = requirements.map(req => ({
     proposal_id: id,
-    // Support both formats
     reference_number: req.reference_number || req.id || '',
     title: req.title || extractTitle(req.text || req.description || ''),
     description: req.description || req.text || '',
-    section: req.section || req.sourceSection || '',
+    source: req.source || req.sourceSection || '',
     priority: req.priority || mapTypeToPriority(req.type),
-    is_mapped: req.is_mapped || false,
-    req_type: req.req_type || req.type || 'shall',
+    type: req.type || 'shall',
   }))
 
   const { data, error } = await supabase
@@ -89,6 +87,7 @@ export async function POST(
     .select()
 
   if (error) {
+    console.log('[POST requirements] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
