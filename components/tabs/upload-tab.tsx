@@ -159,6 +159,7 @@ export function UploadTab({ onContinue }: UploadTabProps) {
       try {
         const response = await requirementsApi.list(proposalId as string)
         if (response.requirements && response.requirements.length > 0) {
+          console.log('[Upload] Requirements data:', response.requirements[0])
           setExtractedRequirements(response.requirements)
         }
       } catch (error) {
