@@ -2408,7 +2408,7 @@ export function EstimateTab() {
       id: req.id,
       referenceNumber: req.pageNumber ? `p.${req.pageNumber}` : req.id,
       title: req.title,
-      description: req.text,
+      description: req.description,
       type: 'shall' as RequirementType,
       category: categoryMap[req.type] || 'other',
       priority: 'medium' as const,
@@ -2435,7 +2435,7 @@ export function EstimateTab() {
   id: req.id,
   referenceNumber: req.pageNumber ? `p.${req.pageNumber}` : req.id,  // "p.7" or "REQ-001"
   title: req.title,  // AI keyword title: "Labor Category Pricing"
-  description: req.text,
+  description: req.description,
   type: 'shall' as RequirementType,
   category: categoryMap[req.type] || 'other',
   priority: 'medium' as const,
