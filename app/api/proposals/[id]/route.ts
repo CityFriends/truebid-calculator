@@ -99,6 +99,9 @@ export async function PUT(
   if (body.periodOfPerformance !== undefined) updateData.period_of_performance = body.periodOfPerformance
   if (body.description !== undefined) updateData.description = body.description
 
+  console.log('[PUT /api/proposals] Updating proposal:', id)
+  console.log('[PUT /api/proposals] Update data:', JSON.stringify(updateData, null, 2))
+
   const { data, error } = await supabase
     .from('proposals')
     .update(updateData)
@@ -107,6 +110,7 @@ export async function PUT(
     .single()
 
   if (error) {
+    console.error('[PUT /api/proposals] Supabase error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
