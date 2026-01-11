@@ -2643,67 +2643,114 @@ export function EstimateTab() {
   }
 
  const handleAcceptGeneratedWbs = async () => {
-  // Create elements with fresh IDs and track the mapping
-  const elementMapping: { reqId: string; wbsId: string }[] = []
-
-  const elementsToAdd = generatedWbs.map(el => {
-    const { _linkedRequirementId, ...cleanElement } = el as any
-    const newId = generateId()
-
-    if (_linkedRequirementId) {
-      elementMapping.push({ reqId: _linkedRequirementId, wbsId: newId })
+  // Track mapping from AI's linkedRequirementId to wbsNumber (so we can map to DB UUIDs later)
+  const wbsNumberToReqId: Record<string, string> = {}
+  generatedWbs.forEach(el => {
+    const linkedReqId = (el as any)._linkedRequirementId
+    if (linkedReqId && el.wbsNumber) {
+      wbsNumberToReqId[el.wbsNumber] = linkedReqId
     }
-
-    return { ...cleanElement, id: newId } as EnhancedWBSElement
   })
 
-  // Add WBS elements to state
-  setWbsElements([...wbsElements, ...elementsToAdd])
+  // Prepare data for API - save FIRST to get real UUIDs
+  const wbsToSave = generatedWbs.map(el => ({
+    wbs_number: el.wbsNumber,
+    title: el.title,
+    description: el.what || '',
+    hours: el.laborEstimates?.reduce((sum, l) =>
+      sum + (l.hoursByPeriod?.base || 0) + (l.hoursByPeriod?.option1 || 0) + (l.hoursByPeriod?.option2 || 0), 0
+    ) || 0,
+    labor_cost: 0,
+  }))
 
-  // Save to API if we have a proposal ID
+  let elementsWithDbIds: EnhancedWBSElement[] = []
+  let elementMapping: { reqId: string; wbsId: string }[] = []
+
   if (proposalId) {
     try {
-      const wbsToSave = elementsToAdd.map(el => ({
-        wbs_number: el.wbsNumber,
-        title: el.title,
-        description: el.what, // "what" is the description
-        why: el.why,
-        what: el.what,
-        assumptions: el.assumptions,
-        story_points: el.qualityScore, // Use quality score as story points proxy
-        labor_hours: el.laborEstimates?.reduce((sum, l) =>
-          sum + (l.hoursByPeriod?.base || 0) + (l.hoursByPeriod?.option1 || 0) + (l.hoursByPeriod?.option2 || 0), 0
-        ) || 0,
-        roles: el.laborEstimates?.map(l => ({ roleId: l.roleId, roleName: l.roleName, hours: l.hoursByPeriod })),
-      }))
-      await wbsApi.create(proposalId, wbsToSave)
-      console.log('[Estimate] Saved WBS elements to API')
+      const response = await wbsApi.create(proposalId, wbsToSave) as { wbsElements: Array<{ id: string; wbs_number: string; title: string; description: string; hours: number }> }
+      console.log('[Estimate] Saved WBS elements to API, got UUIDs:', response.wbsElements?.map(e => e.id))
+
+      // Build local elements using the DB-generated UUIDs
+      elementsWithDbIds = response.wbsElements.map(dbEl => {
+        // Find the original generated element by wbs_number to get full data
+        const originalEl = generatedWbs.find(g => g.wbsNumber === dbEl.wbs_number) || {} as any
+        const element: EnhancedWBSElement = {
+          id: dbEl.id, // Use the real UUID from database
+          wbsNumber: dbEl.wbs_number,
+          title: dbEl.title,
+          sowReference: originalEl.sowReference || '',
+          clin: '',
+          periodOfPerformance: { startDate: '', endDate: '' },
+          why: originalEl.why || '',
+          what: originalEl.what || dbEl.description || '',
+          notIncluded: originalEl.notIncluded || '',
+          assumptions: originalEl.assumptions || [],
+          estimateMethod: originalEl.estimateMethod || 'engineering',
+          complexityFactor: 1.0,
+          complexityJustification: '',
+          laborEstimates: originalEl.laborEstimates || [],
+          risks: [],
+          dependencies: [],
+          qualityGrade: 'yellow',
+          qualityScore: 0,
+          qualityIssues: [],
+          isAIGenerated: true,
+          aiConfidence: 0.8,
+        }
+        const { score, grade, issues } = calculateQualityScore(element)
+        element.qualityScore = score
+        element.qualityGrade = grade
+        element.qualityIssues = issues
+
+        // Build element mapping using the REAL UUID
+        const linkedReqId = wbsNumberToReqId[dbEl.wbs_number]
+        if (linkedReqId) {
+          elementMapping.push({ reqId: linkedReqId, wbsId: dbEl.id })
+        }
+
+        return element
+      })
     } catch (error) {
       console.warn('[Estimate] Failed to save WBS elements to API:', error)
-      // Continue anyway - localStorage backup via useProposalSync will handle this
+      // Fallback to local IDs if API fails
+      elementsWithDbIds = generatedWbs.map(el => {
+        const { _linkedRequirementId, ...cleanElement } = el as any
+        const localId = generateId()
+        if (_linkedRequirementId) {
+          elementMapping.push({ reqId: _linkedRequirementId, wbsId: localId })
+        }
+        return { ...cleanElement, id: localId } as EnhancedWBSElement
+      })
     }
+  } else {
+    // No proposalId - use local IDs
+    elementsWithDbIds = generatedWbs.map(el => {
+      const { _linkedRequirementId, ...cleanElement } = el as any
+      const localId = generateId()
+      if (_linkedRequirementId) {
+        elementMapping.push({ reqId: _linkedRequirementId, wbsId: localId })
+      }
+      return { ...cleanElement, id: localId } as EnhancedWBSElement
+    })
   }
 
-  // Auto-link requirements - SINGLE state update, not multiple
+  // Add WBS elements to state with real UUIDs
+  setWbsElements([...wbsElements, ...elementsWithDbIds])
+
+  // Auto-link requirements using the real UUIDs
   if (elementMapping.length > 0) {
-    // Debug: Log the IDs to see if they match
-    console.log('[Auto-link] Element mapping from AI:', elementMapping)
+    console.log('[Auto-link] Element mapping with DB UUIDs:', elementMapping)
     console.log('[Auto-link] Requirement IDs in state:', requirements.map(r => r.id))
-    console.log('[Auto-link] Do they match?', elementMapping.map(m => ({
-      aiReqId: m.reqId,
-      matchesStateReq: requirements.some(r => r.id === m.reqId)
-    })))
 
     setRequirements(prev => {
       return prev.map(r => {
-        // Find all WBS IDs that should link to this requirement
         const wbsIdsToLink = elementMapping
           .filter(m => m.reqId === r.id)
           .map(m => m.wbsId)
 
         if (wbsIdsToLink.length === 0) return r
 
-        // Add new WBS IDs that aren't already linked
         const newLinkedIds = [...r.linkedWbsIds]
         wbsIdsToLink.forEach(wbsId => {
           if (!newLinkedIds.includes(wbsId)) {
@@ -2807,55 +2854,84 @@ const handleRequirementSelect = (reqId: string) => {
   }
 }
 
-const handleAddElement = () => {
+const handleAddElement = async () => {
   if (!newElement.wbsNumber || !newElement.title) return
-  const element: EnhancedWBSElement = { 
-    id: generateId(), 
-    wbsNumber: newElement.wbsNumber!, 
-    title: newElement.title!, 
-    sowReference: newElement.sowReference || '', 
-    clin: newElement.clin, 
-    periodOfPerformance: newElement.periodOfPerformance || { startDate: '', endDate: '' }, 
-    why: newElement.why || '', 
-    what: newElement.what || '', 
-    notIncluded: newElement.notIncluded || '', 
-    assumptions: newElement.assumptions || [], 
-    estimateMethod: newElement.estimateMethod || 'engineering', 
-    complexityFactor: newElement.complexityFactor || 1.0, 
-    complexityJustification: newElement.complexityJustification || '', 
-    laborEstimates: [], 
-    risks: [], 
-    dependencies: [], 
-    qualityGrade: 'red', 
-    qualityScore: 0, 
-    qualityIssues: [], 
-    isAIGenerated: false, 
-    aiConfidence: 0 
+
+  const linkedReqId = newElement.linkedRequirementId
+
+  // Build the element data (without ID yet)
+  const elementData = {
+    wbsNumber: newElement.wbsNumber!,
+    title: newElement.title!,
+    sowReference: newElement.sowReference || '',
+    clin: newElement.clin,
+    periodOfPerformance: newElement.periodOfPerformance || { startDate: '', endDate: '' },
+    why: newElement.why || '',
+    what: newElement.what || '',
+    notIncluded: newElement.notIncluded || '',
+    assumptions: newElement.assumptions || [],
+    estimateMethod: newElement.estimateMethod || 'engineering',
+    complexityFactor: newElement.complexityFactor || 1.0,
+    complexityJustification: newElement.complexityJustification || '',
+    laborEstimates: [],
+    risks: [],
+    dependencies: [],
+    qualityGrade: 'red' as const,
+    qualityScore: 0,
+    qualityIssues: [] as string[],
+    isAIGenerated: false,
+    aiConfidence: 0,
   }
+
+  let elementId: string
+
+  // Save to API first to get real UUID
+  if (proposalId) {
+    try {
+      const response = await wbsApi.create(proposalId, [{
+        wbs_number: elementData.wbsNumber,
+        title: elementData.title,
+        description: elementData.what,
+        hours: 0,
+        labor_cost: 0,
+      }]) as { wbsElements: Array<{ id: string }> }
+      elementId = response.wbsElements[0].id
+      console.log('[Estimate] Created WBS element with UUID:', elementId)
+    } catch (error) {
+      console.warn('[Estimate] Failed to save WBS element to API, using local ID:', error)
+      elementId = generateId()
+    }
+  } else {
+    elementId = generateId()
+  }
+
+  const element: EnhancedWBSElement = {
+    id: elementId,
+    ...elementData,
+  }
+
   const { score, grade, issues } = calculateQualityScore(element)
   element.qualityScore = score
   element.qualityGrade = grade
   element.qualityIssues = issues
-  
+
   setWbsElements([...wbsElements, element])
-  
-  // Auto-link to requirement if one was selected
-  if (newElement.linkedRequirementId) {
-    setTimeout(() => {
-      handleLinkWbs(newElement.linkedRequirementId!, element.id)
-    }, 0)
+
+  // Auto-link to requirement if one was selected (now with real UUID)
+  if (linkedReqId) {
+    handleLinkWbs(linkedReqId, elementId)
   }
-  
+
   setShowAddElement(false)
-  setNewElement({ 
-    wbsNumber: '', 
-    title: '', 
-    sowReference: '', 
-    estimateMethod: 'engineering', 
+  setNewElement({
+    wbsNumber: '',
+    title: '',
+    sowReference: '',
+    estimateMethod: 'engineering',
     complexityFactor: 1.0,
     linkedRequirementId: ''
   })
-  setSelectedElementId(element.id)
+  setSelectedElementId(elementId)
 }
   const handleLinkWbs = async (reqId: string, wbsId: string) => {
     // Update local state
