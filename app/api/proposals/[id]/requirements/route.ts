@@ -94,6 +94,44 @@ export async function POST(
   return NextResponse.json({ requirements: data })
 }
 
+// PUT - Update a requirement (e.g., link to WBS)
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient()
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { id } = await params
+  const body = await request.json()
+
+  // Expect { reqId, linked_wbs_id } in body
+  const { reqId, linked_wbs_id } = body
+
+  if (!reqId) {
+    return NextResponse.json({ error: 'reqId is required' }, { status: 400 })
+  }
+
+  const { data, error } = await supabase
+    .from('requirements')
+    .update({ linked_wbs_id })
+    .eq('id', reqId)
+    .eq('proposal_id', id)
+    .select()
+
+  if (error) {
+    console.log('[PUT requirements] Error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ requirement: data?.[0] })
+}
+
 // DELETE - Delete all requirements for a proposal
 export async function DELETE(
   request: Request,

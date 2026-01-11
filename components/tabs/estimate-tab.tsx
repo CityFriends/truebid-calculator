@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { wbsApi } from '@/lib/api'
+import { wbsApi, requirementsApi } from '@/lib/api'
 import {
   Search, Plus, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Info, HelpCircle,
   Clock, Calendar, AlertTriangle, Link2, Pencil, Trash2, X, Check,
@@ -2686,6 +2686,14 @@ export function EstimateTab() {
 
   // Auto-link requirements - SINGLE state update, not multiple
   if (elementMapping.length > 0) {
+    // Debug: Log the IDs to see if they match
+    console.log('[Auto-link] Element mapping from AI:', elementMapping)
+    console.log('[Auto-link] Requirement IDs in state:', requirements.map(r => r.id))
+    console.log('[Auto-link] Do they match?', elementMapping.map(m => ({
+      aiReqId: m.reqId,
+      matchesStateReq: requirements.some(r => r.id === m.reqId)
+    })))
+
     setRequirements(prev => {
       return prev.map(r => {
         // Find all WBS IDs that should link to this requirement
@@ -2849,8 +2857,32 @@ const handleAddElement = () => {
   })
   setSelectedElementId(element.id)
 }
-  const handleLinkWbs = (reqId: string, wbsId: string) => { setRequirements(prev => prev.map(r => (r.id !== reqId || r.linkedWbsIds.includes(wbsId)) ? r : { ...r, linkedWbsIds: [...r.linkedWbsIds, wbsId] })) }
-  const handleUnlinkWbs = (reqId: string, wbsId: string) => { setRequirements(prev => prev.map(r => r.id !== reqId ? r : { ...r, linkedWbsIds: r.linkedWbsIds.filter(id => id !== wbsId) })) }
+  const handleLinkWbs = async (reqId: string, wbsId: string) => {
+    // Update local state
+    setRequirements(prev => prev.map(r => (r.id !== reqId || r.linkedWbsIds.includes(wbsId)) ? r : { ...r, linkedWbsIds: [...r.linkedWbsIds, wbsId] }))
+    // Persist to API (stores first/primary linked WBS)
+    if (proposalId) {
+      try {
+        await requirementsApi.update(proposalId, { reqId, linked_wbs_id: wbsId })
+      } catch (error) {
+        console.warn('[Estimate] Failed to persist WBS link:', error)
+      }
+    }
+  }
+  const handleUnlinkWbs = async (reqId: string, wbsId: string) => {
+    // Update local state
+    const req = requirements.find(r => r.id === reqId)
+    const remainingIds = req?.linkedWbsIds.filter(id => id !== wbsId) || []
+    setRequirements(prev => prev.map(r => r.id !== reqId ? r : { ...r, linkedWbsIds: remainingIds }))
+    // Persist to API (set to first remaining or null)
+    if (proposalId) {
+      try {
+        await requirementsApi.update(proposalId, { reqId, linked_wbs_id: remainingIds[0] || null })
+      } catch (error) {
+        console.warn('[Estimate] Failed to persist WBS unlink:', error)
+      }
+    }
+  }
 const handleNavigateToRoles = () => { setActiveMainTab('roles') }
   
   // Add role to team (from Labor Summary missing roles)

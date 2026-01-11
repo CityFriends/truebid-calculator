@@ -248,6 +248,9 @@ export function useProposalSync(proposalId: string) {
 }
 
 // Helper: Calculate total contract value from roles and subs
+// NOTE: This is a SIMPLIFIED estimate for dashboard display only.
+// It uses baseSalary * FTE * years, without escalation, ODCs, or travel.
+// The accurate total is in Roles & Pricing tab (calculations.totalContract).
 function calculateTotalValue(
   roles: Array<{ baseSalary: number; fte: number; years: Record<string, boolean> }>,
   subs: Array<{ billedRate: number; fte: number; years: Record<string, boolean> }>
