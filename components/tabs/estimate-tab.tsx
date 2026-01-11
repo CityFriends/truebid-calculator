@@ -2860,8 +2860,9 @@ const handleAddElement = () => {
   const handleLinkWbs = async (reqId: string, wbsId: string) => {
     // Update local state
     setRequirements(prev => prev.map(r => (r.id !== reqId || r.linkedWbsIds.includes(wbsId)) ? r : { ...r, linkedWbsIds: [...r.linkedWbsIds, wbsId] }))
-    // Persist to API (stores first/primary linked WBS)
-    if (proposalId) {
+    // Persist to API only if both IDs are valid UUIDs (not local IDs like "1768089020449-x7itlewfs")
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (proposalId && uuidRegex.test(reqId) && uuidRegex.test(wbsId)) {
       try {
         await requirementsApi.update(proposalId, { reqId, linked_wbs_id: wbsId })
       } catch (error) {
@@ -2874,10 +2875,12 @@ const handleAddElement = () => {
     const req = requirements.find(r => r.id === reqId)
     const remainingIds = req?.linkedWbsIds.filter(id => id !== wbsId) || []
     setRequirements(prev => prev.map(r => r.id !== reqId ? r : { ...r, linkedWbsIds: remainingIds }))
-    // Persist to API (set to first remaining or null)
-    if (proposalId) {
+    // Persist to API only if reqId is a valid UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const firstRemainingUuid = remainingIds.find(id => uuidRegex.test(id))
+    if (proposalId && uuidRegex.test(reqId)) {
       try {
-        await requirementsApi.update(proposalId, { reqId, linked_wbs_id: remainingIds[0] || null })
+        await requirementsApi.update(proposalId, { reqId, linked_wbs_id: firstRemainingUuid || null })
       } catch (error) {
         console.warn('[Estimate] Failed to persist WBS unlink:', error)
       }
