@@ -64,6 +64,9 @@ export interface ExtractedRequirement {
   type: 'delivery' | 'reporting' | 'staffing' | 'compliance' | 'governance' | 'transition' | 'other'
   sourceSection: string
   pageNumber: number | null  // ← Must exist
+  reference_number?: string  // Optional: from API
+  description?: string       // Optional: from API
+  source?: string            // Optional: from API
 }
 
 // ==================== ESTIMATE TAB TYPES (BOE Support) ====================
