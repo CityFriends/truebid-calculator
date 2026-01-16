@@ -116,11 +116,11 @@ export function useProposalSync(proposalId: string) {
           // This preserves fields like analyzedFromDocument, setAside, placeOfPerformance
           updateSolicitation({
             ...localSolicitation,
-            title: proposal.title || localSolicitation.title || '',
-            solicitationNumber: proposal.solicitation || localSolicitation.solicitationNumber || '',
-            clientAgency: proposal.client || localSolicitation.clientAgency || '',
+            title: proposal.title || (localSolicitation.title as string) || '',
+            solicitationNumber: proposal.solicitation || (localSolicitation.solicitationNumber as string) || '',
+            clientAgency: proposal.client || (localSolicitation.clientAgency as string) || '',
             contractType: mapContractType(proposal.contractType || 'tm'),
-            proposalDueDate: proposal.dueDate || localSolicitation.proposalDueDate || '',
+            proposalDueDate: proposal.dueDate || (localSolicitation.proposalDueDate as string) || '',
           })
 
           console.log('[ProposalSync] Loaded proposal from API:', proposalId)
