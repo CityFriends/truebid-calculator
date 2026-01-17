@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { CardSkeletonGrid } from '@/components/ui/skeletons'
 import {
   Plus,
   Search,
@@ -1344,8 +1345,31 @@ export function Dashboard() {
   // Loading state
   if (!isLoaded) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-400">Loading...</div>
+      <div className="min-h-screen bg-gray-50">
+        <main className="max-w-7xl mx-auto px-6 py-6">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <div className="h-6 w-32 bg-gray-200 rounded animate-pulse mb-2" />
+              <div className="h-4 w-64 bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div className="h-9 w-32 bg-gray-200 rounded animate-pulse" />
+          </div>
+
+          {/* Stats skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-white p-4 rounded-lg border border-gray-200">
+                <div className="h-4 w-24 bg-gray-200 rounded animate-pulse mb-2" />
+                <div className="h-8 w-16 bg-gray-200 rounded animate-pulse mb-1" />
+                <div className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+
+          {/* Cards skeleton */}
+          <CardSkeletonGrid count={6} />
+        </main>
       </div>
     )
   }
