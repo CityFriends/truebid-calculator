@@ -126,26 +126,26 @@ export function AppHeader() {
   }
 
   return (
-    <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50">
+    <header className="h-14 bg-slate-900 border-b-2 border-emerald-500 sticky top-0 z-50">
       <div className="h-full max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between">
         {/* Left: Logo + Breadcrumb */}
         <div className="flex items-center gap-3">
           {/* TrueBid Logo */}
-          <Link 
+          <Link
             href="/dashboard"
-            className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-sm"
+            className="flex items-center justify-center w-8 h-8 bg-emerald-500 rounded-lg hover:bg-emerald-600 transition-all shadow-sm"
             aria-label="Go to dashboard"
           >
             <span className="text-white font-bold text-sm">T</span>
           </Link>
 
           {/* Separator */}
-          <span className="text-gray-300 dark:text-gray-600 text-lg font-light">/</span>
+          <span className="text-slate-600 text-lg font-light">/</span>
 
           {/* Company Name */}
-          <Link 
+          <Link
             href="/dashboard"
-            className="text-sm font-medium text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="text-sm font-medium text-white hover:text-slate-300 transition-colors"
           >
             {companyName}
           </Link>
@@ -156,7 +156,7 @@ export function AppHeader() {
           {/* Tools Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+              <Button variant="ghost" size="sm" className="gap-1.5 text-slate-400 hover:text-white hover:bg-slate-800">
                 <Wrench className="w-4 h-4" />
                 <span className="hidden sm:inline">Tools</span>
                 <ChevronDown className="w-3.5 h-3.5" />
@@ -202,7 +202,7 @@ export function AppHeader() {
           </DropdownMenu>
 
           {/* Help */}
-          <Button variant="ghost" size="sm" className="gap-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+          <Button variant="ghost" size="sm" className="gap-1.5 text-slate-400 hover:text-white hover:bg-slate-800">
             <HelpCircle className="w-4 h-4" />
             <span className="hidden sm:inline">Help</span>
           </Button>
@@ -210,15 +210,15 @@ export function AppHeader() {
           {/* User Menu (Avatar) */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+              <button className="flex items-center gap-2 p-0.5 rounded-full hover:ring-2 hover:ring-emerald-500 transition-all">
                 {userProfile.avatarUrl ? (
-                  <img 
-                    src={userProfile.avatarUrl} 
+                  <img
+                    src={userProfile.avatarUrl}
                     alt={userProfile.name}
                     className="w-8 h-8 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-white text-xs font-medium">
+                  <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs font-medium">
                     {getInitials(userProfile.name)}
                   </div>
                 )}
@@ -226,16 +226,16 @@ export function AppHeader() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
               {/* User Identity */}
-              <div className="px-3 py-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="px-3 py-3 border-b border-gray-100">
                 <div className="flex items-center gap-3">
                   {userProfile.avatarUrl ? (
-                    <img 
-                      src={userProfile.avatarUrl} 
+                    <img
+                      src={userProfile.avatarUrl}
                       alt={userProfile.name}
                       className="w-10 h-10 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-white text-sm font-medium">
+                    <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-white text-sm font-medium">
                       {getInitials(userProfile.name)}
                     </div>
                   )}
