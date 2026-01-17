@@ -91,6 +91,7 @@ interface SOORequirement {
   linkedWbsIds: string[]
   notes: string
   isAIExtracted: boolean
+  reference_number?: string  // Optional: snake_case alias from API
 }
 
 interface HistoricalReference {
