@@ -1420,10 +1420,8 @@ export function Dashboard() {
                 className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-blue-600">Active Proposals</span>
-                  <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-blue-600" />
-                  </div>
+                  <span className="text-sm font-medium text-gray-600">Active Proposals</span>
+                  <FileText className="w-5 h-5 text-gray-400" />
                 </div>
                 <div className="text-3xl font-bold text-gray-900">{stats.active}</div>
                 <div className="text-xs text-gray-500">In progress</div>
@@ -1434,10 +1432,8 @@ export function Dashboard() {
                 className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-emerald-600">Pipeline Value</span>
-                  <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
-                    <DollarSign className="w-5 h-5 text-emerald-600" />
-                  </div>
+                  <span className="text-sm font-medium text-gray-600">Pipeline Value</span>
+                  <DollarSign className="w-5 h-5 text-gray-400" />
                 </div>
                 <div className="text-3xl font-bold text-emerald-600">{formatCurrency(stats.pipelineValue)}</div>
                 <div className="text-xs text-gray-500">Total potential</div>
@@ -1448,10 +1444,8 @@ export function Dashboard() {
                 className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-yellow-600">Submitted</span>
-                  <div className="w-9 h-9 rounded-lg bg-yellow-100 flex items-center justify-center">
-                    <Send className="w-5 h-5 text-yellow-600" />
-                  </div>
+                  <span className="text-sm font-medium text-gray-600">Submitted</span>
+                  <Send className="w-5 h-5 text-gray-400" />
                 </div>
                 <div className="text-3xl font-bold text-gray-900">{stats.submitted}</div>
                 <div className="text-xs text-gray-500">Awaiting decision</div>
@@ -1462,10 +1456,8 @@ export function Dashboard() {
                 className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-purple-600">Win Rate</span>
-                  <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-purple-600" />
-                  </div>
+                  <span className="text-sm font-medium text-gray-600">Win Rate</span>
+                  <TrendingUp className="w-5 h-5 text-gray-400" />
                 </div>
                 <div className="text-3xl font-bold text-gray-900">{stats.winRate}%</div>
                 <div className="text-xs text-gray-500">Historical</div>
