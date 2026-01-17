@@ -1430,7 +1430,7 @@ export function Dashboard() {
                 <h1 className="text-xl font-semibold text-gray-900">Proposals</h1>
                 <p className="text-sm text-gray-500">Manage and track your government contract proposals</p>
               </div>
-              <Button onClick={handleImportRFP} className="gap-2">
+              <Button onClick={handleImportRFP} className="gap-2 bg-emerald-600 hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-200">
                 <Plus className="w-4 h-4" />
                 New Proposal
               </Button>
