@@ -207,10 +207,10 @@ const CONFIDENCE_CONFIG: Record<string, { label: string; color: string }> = {
 }
 
 const REQUIREMENT_TYPE_CONFIG: Record<RequirementType, { label: string; description: string; color: string }> = {
-  'shall': { label: 'Shall', description: 'Mandatory requirement - must be met', color: 'text-red-700 bg-red-50 border-red-200' },
-  'should': { label: 'Should', description: 'Expected requirement - strongly recommended', color: 'text-orange-700 bg-orange-50 border-orange-100' },
+  'shall': { label: 'Shall', description: 'Mandatory requirement - must be met', color: 'text-gray-700 bg-gray-100 border-gray-200' },
+  'should': { label: 'Should', description: 'Expected requirement - strongly recommended', color: 'text-amber-700 bg-amber-50 border-amber-200' },
   'will': { label: 'Will', description: 'Government action or statement of fact', color: 'text-blue-700 bg-blue-50 border-blue-100' },
-  'may': { label: 'May', description: 'Optional - at contractor discretion', color: 'text-gray-700 bg-gray-50 border-gray-100' },
+  'may': { label: 'May', description: 'Optional - at contractor discretion', color: 'text-gray-600 bg-gray-50 border-gray-100' },
 }
 
 const RISK_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -985,18 +985,18 @@ function RequirementsSection({
         </div>
       </div>
       
-      {/* Select All Unmapped prompt */}
+      {/* AI WBS Generation CTA */}
       {stats.unmapped > 0 && selectedRequirements.size === 0 && (
-        <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
+        <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
           <div className="flex items-center gap-2">
-            <Wand2 className="w-5 h-5 text-purple-600" />
-            <span className="text-sm text-purple-800">
+            <Wand2 className="w-5 h-5 text-emerald-600" />
+            <span className="text-sm text-emerald-800">
               <strong>{stats.unmapped} unmapped requirement{stats.unmapped !== 1 ? 's' : ''}</strong> ready for AI WBS generation
             </span>
           </div>
-          <Button size="sm" variant="outline" onClick={onSelectAllUnmapped} className="border-purple-300 text-purple-700 hover:bg-purple-100">
-            <CheckSquare className="w-4 h-4 mr-1.5" />
-            Select All Unmapped
+          <Button size="sm" onClick={onSelectAllUnmapped} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Wand2 className="w-4 h-4 mr-1.5" />
+            Generate WBS with AI
           </Button>
         </div>
       )}
@@ -1043,7 +1043,7 @@ function RequirementsSection({
                   className="pl-9 h-8 text-sm"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-4">
                 {filteredRequirements.map((req, idx) => {
               const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
               const linkedWbs = getLinkedWbsElements(req.linkedWbsIds)
@@ -1051,11 +1051,11 @@ function RequirementsSection({
               const displayNumber = req.referenceNumber.startsWith('p.') || req.referenceNumber.startsWith('SOO')
                 ? req.referenceNumber
                 : `REQ-${String(idx + 1).padStart(3, '0')}`
-              
+
               return (
-                <div 
-                  key={req.id} 
-                  className={`group bg-white border rounded-lg p-3 transition-all hover:border-gray-300 ${!isMapped ? 'border-l-4 border-l-red-400' : 'border-gray-200'}`}
+                <div
+                  key={req.id}
+                  className={`group bg-white shadow-sm rounded-xl p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${isMapped ? 'border-l-4 border-l-emerald-500' : ''}`}
                 >
                   <div className="flex items-start gap-3">
                     {/* Checkbox */}
@@ -1063,8 +1063,8 @@ function RequirementsSection({
                       onClick={(e) => { e.stopPropagation(); onToggleSelection(req.id) }}
                       className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                         selectedRequirements.has(req.id)
-                          ? 'bg-purple-600 border-purple-600 text-white'
-                          : 'border-gray-300 hover:border-purple-400'
+                          ? 'bg-emerald-600 border-emerald-600 text-white'
+                          : 'border-gray-300 hover:border-emerald-400'
                       }`}
                     >
                       {selectedRequirements.has(req.id) && <Check className="w-3 h-3" />}
@@ -1096,7 +1096,7 @@ function RequirementsSection({
                               </Badge>
                             ))}
                             <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
-                              <SelectTrigger className="h-5 w-auto px-2 text-[10px] text-blue-600 border-none bg-transparent hover:bg-blue-50">
+                              <SelectTrigger className="h-5 w-auto px-2 text-[10px] text-emerald-600 border-none bg-transparent hover:bg-emerald-50 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <span>+ Link WBS</span>
                               </SelectTrigger>
                               <SelectContent position="popper" sideOffset={4} className="z-[100] max-h-[200px] overflow-y-auto">
@@ -1206,10 +1206,10 @@ function RequirementsSection({
       {/* Floating Selection Bar */}
       {selectedRequirements.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-          <div className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-lg shadow-lg">
+          <div className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-lg">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center">
-                <span className="text-xs font-semibold text-purple-700">{selectedRequirements.size}</span>
+              <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                <span className="text-xs font-semibold text-emerald-700">{selectedRequirements.size}</span>
               </div>
               <span className="text-sm font-medium text-gray-900">selected</span>
             </div>
@@ -1233,7 +1233,7 @@ function RequirementsSection({
               size="sm"
               onClick={onBulkGenerate}
               disabled={isGenerating}
-              className="bg-purple-600 hover:bg-purple-700"
+              className="bg-emerald-600 hover:bg-emerald-700"
             >
               {isGenerating ? (
                 <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
@@ -2290,7 +2290,7 @@ function BulkGenerateDialog({
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wand2 className="w-5 h-5 text-purple-600" />
+            <Wand2 className="w-5 h-5 text-emerald-600" />
             AI WBS Generation
           </DialogTitle>
           <DialogDescription>
@@ -2306,11 +2306,11 @@ function BulkGenerateDialog({
         <div className="flex-1 overflow-y-auto py-4">
           {isGenerating && (
             <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="w-12 h-12 text-purple-600 animate-spin mb-4" />
+              <Loader2 className="w-12 h-12 text-emerald-600 animate-spin mb-4" />
               <p className="text-sm text-gray-600 mb-2">Analyzing requirements and generating WBS...</p>
               <div className="w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-purple-600 transition-all duration-300"
+                <div
+                  className="h-full bg-emerald-600 transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -2345,7 +2345,7 @@ function BulkGenerateDialog({
                         <span className="text-xs text-gray-500">{wbs.sowReference}</span>
                       )}
                     </div>
-                    <Badge className="bg-purple-100 text-purple-700 border-purple-200">AI Generated</Badge>
+                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">AI Generated</Badge>
                   </div>
                   
                   {wbs.why && (
