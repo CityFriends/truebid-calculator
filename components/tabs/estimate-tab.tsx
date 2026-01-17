@@ -2404,7 +2404,7 @@ export function EstimateTab() {
     selectedRoles: contextRoles,
     addRole,
     solicitation,
-    resetSolicitation,
+    updateSolicitation,
     setExtractedRequirements,
     uiBillableHours,
     setActiveMainTab,
@@ -3213,7 +3213,8 @@ const handleAddRoleToTeam = (roleName: string) => {
             setSelectedRequirements(new Set())
             // Reset context state so Upload tab shows initial state
             setExtractedRequirements([])
-            resetSolicitation()
+            // Only clear the analyzed document flag, preserve proposal metadata (title, agency, etc.)
+            updateSolicitation({ analyzedFromDocument: undefined })
           }}
           onLinkWbs={handleLinkWbs}
           onUnlinkWbs={handleUnlinkWbs}
