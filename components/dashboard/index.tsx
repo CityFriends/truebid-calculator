@@ -1373,7 +1373,7 @@ export function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 pt-8 pb-6">
+      <main className="max-w-7xl mx-auto px-6 pt-10 pb-6">
         {proposals.length === 0 ? (
           <EmptyState
             companyName={companyName}
@@ -1403,7 +1403,7 @@ export function Dashboard() {
             {/* Page Header with New Proposal CTA */}
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h1 className="text-3xl font-medium text-gray-900">Proposals</h1>
+                <h1 className="text-3xl font-medium text-black">Proposals</h1>
                 <p className="text-sm text-gray-500 mt-2">Manage and track your government contract proposals</p>
               </div>
               <Button onClick={handleImportRFP} className="gap-2 bg-emerald-600 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-100">
