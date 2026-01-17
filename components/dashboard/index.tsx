@@ -1431,7 +1431,7 @@ export function Dashboard() {
 
               <button
                 onClick={() => handleStatClick('pipeline')}
-                className="bg-white p-4 rounded-xl shadow-sm ring-1 ring-emerald-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
+                className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-emerald-600">Pipeline Value</span>
