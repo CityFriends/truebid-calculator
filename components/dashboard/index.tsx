@@ -1373,7 +1373,7 @@ export function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-6">
+      <main className="max-w-7xl mx-auto px-6 pt-8 pb-6">
         {proposals.length === 0 ? (
           <EmptyState
             companyName={companyName}
@@ -1403,8 +1403,8 @@ export function Dashboard() {
             {/* Page Header with New Proposal CTA */}
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h1 className="text-3xl font-semibold text-gray-900 tracking-tight">Proposals</h1>
-                <p className="text-sm text-gray-500 mt-1">Manage and track your government contract proposals</p>
+                <h1 className="text-3xl font-medium text-gray-900">Proposals</h1>
+                <p className="text-sm text-gray-500 mt-2">Manage and track your government contract proposals</p>
               </div>
               <Button onClick={handleImportRFP} className="gap-2 bg-emerald-600 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-100">
                 <Plus className="w-4 h-4" />
@@ -1414,7 +1414,7 @@ export function Dashboard() {
 
             {/* Stats Row - Clickable (hidden in archive view) */}
             {!showArchived && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <button
                 onClick={() => handleStatClick('active')}
                 className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
