@@ -3146,11 +3146,11 @@ const handleAddRoleToTeam = (roleName: string) => {
                 <TabsTrigger value="requirements" className="text-xs px-4 data-[state=active]:bg-white"><ClipboardCheck className="w-3.5 h-3.5 mr-1.5" />Requirements{stats.unmappedRequirements > 0 && <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.unmappedRequirements}</Badge>}</TabsTrigger>
                 <TabsTrigger value="wbs" className="text-xs px-4 data-[state=active]:bg-white"><Layers className="w-3.5 h-3.5 mr-1.5" />WBS Elements<Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">{wbsElements.length}</Badge></TabsTrigger>
               </TabsList>
-              {/* Secondary tabs - muted */}
+              {/* Secondary tabs - muted with hover */}
               <div className="flex items-center gap-1 border-l border-gray-200 pl-4">
                 <TabsList className="bg-transparent p-0 h-auto">
-                  <TabsTrigger value="labor" className="text-xs px-3 py-1.5 text-gray-500 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md"><PieChart className="w-3.5 h-3.5 mr-1.5" />Labor Summary</TabsTrigger>
-                  <TabsTrigger value="charges" className="text-xs px-3 py-1.5 text-gray-500 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md"><Hash className="w-3.5 h-3.5 mr-1.5" />Charge Codes</TabsTrigger>
+                  <TabsTrigger value="labor" className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md transition-colors"><PieChart className="w-3.5 h-3.5 mr-1.5" />Labor Summary</TabsTrigger>
+                  <TabsTrigger value="charges" className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md transition-colors"><Hash className="w-3.5 h-3.5 mr-1.5" />Charge Codes</TabsTrigger>
                 </TabsList>
               </div>
             </div>
