@@ -146,6 +146,11 @@ export const requirementsApi = {
     fetch(`${API_BASE}/proposals/${proposalId}/requirements?reqId=${reqId}`, {
       method: 'DELETE',
     }).then(handleResponse),
+
+  deleteAll: (proposalId: string) =>
+    fetch(`${API_BASE}/proposals/${proposalId}/requirements?all=true`, {
+      method: 'DELETE',
+    }).then(handleResponse),
 }
 
 // WBS Elements
