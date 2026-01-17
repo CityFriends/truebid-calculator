@@ -1406,7 +1406,7 @@ export function Dashboard() {
                 <h1 className="text-xl font-semibold text-gray-900">Proposals</h1>
                 <p className="text-sm text-gray-500">Manage and track your government contract proposals</p>
               </div>
-              <Button onClick={handleImportRFP} className="gap-2 bg-emerald-600 hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-200">
+              <Button onClick={handleImportRFP} className="gap-2 bg-emerald-600 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-100">
                 <Plus className="w-4 h-4" />
                 New Proposal
               </Button>
@@ -1417,49 +1417,57 @@ export function Dashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <button
                 onClick={() => handleStatClick('active')}
-                className="bg-white p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:shadow-sm transition-all text-left"
+                className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-blue-600">Active Proposals</span>
-                  <FileText className="w-4 h-4 text-blue-400" />
+                  <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                  </div>
                 </div>
-                <div className="text-2xl font-bold text-gray-900">{stats.active}</div>
+                <div className="text-3xl font-bold text-gray-900">{stats.active}</div>
                 <div className="text-xs text-gray-500">In progress</div>
               </button>
 
               <button
                 onClick={() => handleStatClick('pipeline')}
-                className="bg-white p-4 rounded-lg border border-gray-200 hover:border-green-400 hover:shadow-sm transition-all text-left"
+                className="bg-white p-4 rounded-xl shadow-sm ring-1 ring-emerald-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-green-600">Pipeline Value</span>
-                  <DollarSign className="w-4 h-4 text-green-400" />
+                  <span className="text-sm font-medium text-emerald-600">Pipeline Value</span>
+                  <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
+                    <DollarSign className="w-5 h-5 text-emerald-600" />
+                  </div>
                 </div>
-                <div className="text-2xl font-bold text-gray-900">{formatCurrency(stats.pipelineValue)}</div>
+                <div className="text-3xl font-bold text-emerald-600">{formatCurrency(stats.pipelineValue)}</div>
                 <div className="text-xs text-gray-500">Total potential</div>
               </button>
 
               <button
                 onClick={() => handleStatClick('submitted')}
-                className="bg-white p-4 rounded-lg border border-gray-200 hover:border-yellow-400 hover:shadow-sm transition-all text-left"
+                className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-yellow-600">Submitted</span>
-                  <Send className="w-4 h-4 text-yellow-400" />
+                  <div className="w-9 h-9 rounded-lg bg-yellow-100 flex items-center justify-center">
+                    <Send className="w-5 h-5 text-yellow-600" />
+                  </div>
                 </div>
-                <div className="text-2xl font-bold text-gray-900">{stats.submitted}</div>
+                <div className="text-3xl font-bold text-gray-900">{stats.submitted}</div>
                 <div className="text-xs text-gray-500">Awaiting decision</div>
               </button>
 
               <button
                 onClick={() => handleStatClick('winRate')}
-                className="bg-white p-4 rounded-lg border border-gray-200 hover:border-purple-400 hover:shadow-sm transition-all text-left"
+                className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-purple-600">Win Rate</span>
-                  <TrendingUp className="w-4 h-4 text-purple-400" />
+                  <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
+                    <TrendingUp className="w-5 h-5 text-purple-600" />
+                  </div>
                 </div>
-                <div className="text-2xl font-bold text-gray-900">{stats.winRate}%</div>
+                <div className="text-3xl font-bold text-gray-900">{stats.winRate}%</div>
                 <div className="text-xs text-gray-500">Historical</div>
               </button>
             </div>
