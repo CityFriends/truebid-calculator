@@ -1401,10 +1401,10 @@ export function Dashboard() {
             )}
 
             {/* Page Header with New Proposal CTA */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-8">
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">Proposals</h1>
-                <p className="text-sm text-gray-500">Manage and track your government contract proposals</p>
+                <h1 className="text-3xl font-semibold text-gray-900 tracking-tight">Proposals</h1>
+                <p className="text-sm text-gray-500 mt-1">Manage and track your government contract proposals</p>
               </div>
               <Button onClick={handleImportRFP} className="gap-2 bg-emerald-600 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-100">
                 <Plus className="w-4 h-4" />
