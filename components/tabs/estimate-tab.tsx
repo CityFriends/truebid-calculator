@@ -976,8 +976,8 @@ function RequirementsSection({
             </button>
           </div>
           
-          {/* Delete All button */}
-          {requirements.length > 0 && (
+          {/* Delete All button - only show when requirements exist and none selected */}
+          {requirements.length > 0 && selectedRequirements.size === 0 && (
             <Button
               size="sm"
               variant="outline"
