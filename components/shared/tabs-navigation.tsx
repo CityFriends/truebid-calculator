@@ -8,7 +8,6 @@ import {
   TrendingUp,
   Building2,
   FileDown,
-  FileText,
   Clock,
   X,
   Pencil,
@@ -416,83 +415,61 @@ export function TabsNavigation() {
         </div>
       )}
 
-      {/* Solicitation Bar - Own row below tabs */}
+      {/* Metadata Bar - badges only, scrolls away */}
       {showSolicitationBar && (
-        <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 shrink-0" role="region" aria-label="Solicitation information">
+        <div className="bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-800 shrink-0" role="region" aria-label="Solicitation metadata">
           <div className="container mx-auto px-4 md:px-6">
-            {/* Collapsed view */}
             <div className="flex items-center justify-between py-2 gap-2">
-              <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                <div className="flex items-center gap-2 shrink-0">
-                  <FileText className="w-4 h-4 text-gray-400 hidden sm:block" aria-hidden="true" />
-                  <span className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[120px] sm:max-w-none">
-                    {solicitation.solicitationNumber}
+              {/* Left: Badges */}
+              <div className="flex items-center gap-2" aria-label="Contract details">
+                {solicitation.contractType && (
+                  <Badge variant="secondary" className="text-xs">
+                    {solicitation.contractType}
+                  </Badge>
+                )}
+                {solicitation.setAside && solicitation.setAside !== 'full-open' && (
+                  <Badge
+                    variant="outline"
+                    className="text-xs bg-purple-50 text-purple-700 border-purple-200"
+                  >
+                    {SET_ASIDE_LABELS[solicitation.setAside] || solicitation.setAside}
+                  </Badge>
+                )}
+                {solicitation.clearanceLevel && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-full">
+                    <Shield className="w-3 h-3" aria-hidden="true" />
+                    <span>{CLEARANCE_LEVEL_LABELS[solicitation.clearanceLevel] || solicitation.clearanceLevel}</span>
                   </span>
-                  {solicitation.title && (
-                    <>
-                      <span className="text-gray-300 dark:text-gray-600 hidden md:inline" aria-hidden="true">·</span>
-                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[150px] md:max-w-md hidden md:inline">
-                        {solicitation.title}
-                      </span>
-                    </>
-                  )}
-                </div>
-                
-                {/* Badges */}
-                <div className="flex items-center gap-1 md:gap-2 shrink-0" aria-label="Contract details">
-                  {solicitation.contractType && (
-                    <Badge variant="secondary" className="text-xs">
-                      {solicitation.contractType}
-                    </Badge>
-                  )}
-                  {solicitation.setAside && solicitation.setAside !== 'full-open' && (
-                    <Badge 
-                      variant="outline" 
-                      className="text-xs bg-purple-50 text-purple-700 border-purple-200"
-                    >
-                      {SET_ASIDE_LABELS[solicitation.setAside] || solicitation.setAside}
-                    </Badge>
-                  )}
-                  {solicitation.clearanceLevel && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-full">
-                      <Shield className="w-3 h-3" aria-hidden="true" />
-                      <span>{CLEARANCE_LEVEL_LABELS[solicitation.clearanceLevel] || solicitation.clearanceLevel}</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1 md:gap-3 shrink-0">
-                {/* Due date */}
+                )}
+                {/* Due date badge */}
                 {daysUntilDue !== null && (
                   <div
-                    className={`flex items-center gap-1 md:gap-1.5 px-1.5 md:px-2 py-1 rounded text-xs font-medium ${
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
                       isOverdue
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'
+                        ? 'bg-red-100 text-red-700'
                         : isUrgent
-                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-gray-100 text-gray-600'
                     }`}
                     role="status"
-                    aria-label={isOverdue ? 'Proposal is overdue' : `${daysUntilDue} days until proposal is due`}
                   >
                     <Clock className="w-3 h-3" aria-hidden="true" />
                     <span>{isOverdue ? 'Overdue' : `${daysUntilDue}d`}</span>
                   </div>
                 )}
-
-                {/* Edit button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => openSolicitationEditor()}
-                  className="h-7 px-1.5 md:px-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  aria-label="Edit solicitation details"
-                >
-                  <Pencil className="w-3.5 h-3.5 md:mr-1" aria-hidden="true" />
-                  <span className="hidden md:inline">Edit</span>
-                </Button>
               </div>
+
+              {/* Right: Edit button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => openSolicitationEditor()}
+                className="h-7 px-2 text-gray-500 hover:text-gray-700"
+                aria-label="Edit solicitation details"
+              >
+                <Pencil className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+                <span>Edit</span>
+              </Button>
             </div>
           </div>
         </div>
@@ -524,7 +501,8 @@ export function TabsNavigation() {
       )}
 
       {/* Tab Content */}
-      <main className="container mx-auto px-4 md:px-6 py-4 md:py-6 flex-1 overflow-y-auto">
+      <main className="bg-gray-50 flex-1 overflow-y-auto">
+        <div className="container mx-auto px-4 md:px-6 py-4 md:py-6">
         {/* Utility Tools (shown when active) */}
         {activeUtilityTool === 'sub-rates' && <SubRatesTab />}
         
@@ -544,6 +522,7 @@ export function TabsNavigation() {
             {activeTab === 'export' && <ExportTab />}
           </div>
         )}
+        </div>
       </main>
     </div>
   )

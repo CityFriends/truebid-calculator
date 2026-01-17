@@ -642,7 +642,7 @@ function WBSCard({ element, onClick, onEdit, onDelete }: { element: EnhancedWBSE
             </div>
           </div>
           <div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onClick(); }} className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50">
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onClick(); }} className="h-7 w-7 p-0 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50">
               <Pencil className="w-3.5 h-3.5" />
             </Button>
             <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onDelete(); }} className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -733,7 +733,7 @@ function WBSTableView({ elements, onElementClick, onEdit, onDelete, contractPeri
                 <td className="px-4 py-3 text-right font-semibold text-gray-900">{totalHours.toLocaleString()}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1 justify-end">
-                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onElementClick(element.id); }} className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"><Pencil className="w-3.5 h-3.5" /></Button>                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onDelete(element.id); }} className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></Button>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onElementClick(element.id); }} className="h-7 w-7 p-0 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"><Pencil className="w-3.5 h-3.5" /></Button>                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onDelete(element.id); }} className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
                 </td>
               </tr>
@@ -816,7 +816,7 @@ function ChargeCodeLibrary({ chargeCodes, onAdd, onEdit, onDelete }: { chargeCod
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">{cc.totalHours.toLocaleString()} hrs</Badge>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => onEdit(cc)} aria-label="Edit charge code"><Pencil className="w-3.5 h-3.5" /></Button>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50" onClick={() => onEdit(cc)} aria-label="Edit charge code"><Pencil className="w-3.5 h-3.5" /></Button>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => onDelete(cc.id)} aria-label="Delete charge code"><Trash2 className="w-3.5 h-3.5" /></Button>
                 </div>
               </div>
@@ -922,8 +922,23 @@ function RequirementsSection({
 
   return (
     <div className="space-y-4">
-      {/* Controls */}
-      <div className="flex items-center justify-end gap-3">
+      {/* Toolbar - Search + View Controls + Add */}
+      <div className="flex items-center gap-3">
+          {/* Search */}
+          <div className="flex-1 max-w-xs">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Search requirements..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1" />
+
           {/* View mode toggle */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button
@@ -945,9 +960,11 @@ function RequirementsSection({
             </button>
           </div>
 
-          {/* Add button */}
+          {/* Add button - outline emerald */}
           <Button
+            variant="outline"
             size="sm"
+            className="border-emerald-600 text-emerald-600 hover:bg-emerald-50"
             onClick={() => onAdd({
               id: `req-${Date.now()}`,
               referenceNumber: '',
@@ -965,20 +982,6 @@ function RequirementsSection({
             <Plus className="w-4 h-4 mr-1" />Add
           </Button>
       </div>
-
-      {/* Quick Actions - Select All Unmapped */}
-      {stats.unmapped > 0 && selectedRequirements.size === 0 && (
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <span>{stats.unmapped} unmapped requirement{stats.unmapped !== 1 ? 's' : ''}</span>
-          <span>·</span>
-          <button
-            onClick={onSelectAllUnmapped}
-            className="text-emerald-600 hover:text-emerald-700 font-medium"
-          >
-            Select all unmapped
-          </button>
-        </div>
-      )}
       
       {/* List View */}
       {viewMode === 'list' && (
@@ -1092,7 +1095,7 @@ function RequirementsSection({
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" 
+                            className="h-7 w-7 p-0 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50" 
                             onClick={() => onEdit(req)} 
                             aria-label="Edit requirement"
                           >
@@ -1164,7 +1167,7 @@ function RequirementsSection({
                             <Button 
                               variant="ghost" 
                               size="sm" 
-                              className="h-7 w-7 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" 
+                              className="h-7 w-7 p-0 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50" 
                               onClick={() => onEdit(req)} 
                               aria-label="Edit requirement"
                             >
@@ -1465,7 +1468,7 @@ function WBSSlideout({ element, isOpen, onClose, onUpdate, contractPeriods, sele
                 ) : (
                   <h3 
                     id="slideout-title" 
-                    className="text-lg font-semibold text-gray-900 cursor-pointer hover:text-blue-600 truncate"
+                    className="text-lg font-semibold text-gray-900 cursor-pointer hover:text-emerald-600 truncate"
                     onClick={handleStartEditTitle}
                     title="Click to edit"
                   >
@@ -3128,17 +3131,26 @@ const handleAddRoleToTeam = (roleName: string) => {
         {/* Header */}
         <div>
           <h1 className="text-3xl font-medium text-black">Estimate</h1>
+          <p className="text-sm text-gray-500 mt-1">Map requirements to your work breakdown structure.</p>
         </div>
-        
+
         {/* Tabs */}
         <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-4">
           <div className="flex items-center justify-between">
-            <TabsList className="bg-gray-100 p-1">
-              <TabsTrigger value="requirements" className="text-xs px-4 data-[state=active]:bg-white"><ClipboardCheck className="w-3.5 h-3.5 mr-1.5" />Requirements{stats.unmappedRequirements > 0 && <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.unmappedRequirements}</Badge>}</TabsTrigger>
-              <TabsTrigger value="wbs" className="text-xs px-4 data-[state=active]:bg-white"><Layers className="w-3.5 h-3.5 mr-1.5" />WBS Elements<Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">{wbsElements.length}</Badge></TabsTrigger>
-              <TabsTrigger value="labor" className="text-xs px-4 data-[state=active]:bg-white"><PieChart className="w-3.5 h-3.5 mr-1.5" />Labor Summary</TabsTrigger>
-              <TabsTrigger value="charges" className="text-xs px-4 data-[state=active]:bg-white"><Hash className="w-3.5 h-3.5 mr-1.5" />Charge Codes</TabsTrigger>
-            </TabsList>
+            {/* Primary tabs - left */}
+            <div className="flex items-center gap-4">
+              <TabsList className="bg-gray-100 p-1">
+                <TabsTrigger value="requirements" className="text-xs px-4 data-[state=active]:bg-white"><ClipboardCheck className="w-3.5 h-3.5 mr-1.5" />Requirements{stats.unmappedRequirements > 0 && <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.unmappedRequirements}</Badge>}</TabsTrigger>
+                <TabsTrigger value="wbs" className="text-xs px-4 data-[state=active]:bg-white"><Layers className="w-3.5 h-3.5 mr-1.5" />WBS Elements<Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">{wbsElements.length}</Badge></TabsTrigger>
+              </TabsList>
+              {/* Secondary tabs - muted */}
+              <div className="flex items-center gap-1 border-l border-gray-200 pl-4">
+                <TabsList className="bg-transparent p-0 h-auto">
+                  <TabsTrigger value="labor" className="text-xs px-3 py-1.5 text-gray-500 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md"><PieChart className="w-3.5 h-3.5 mr-1.5" />Labor Summary</TabsTrigger>
+                  <TabsTrigger value="charges" className="text-xs px-3 py-1.5 text-gray-500 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md"><Hash className="w-3.5 h-3.5 mr-1.5" />Charge Codes</TabsTrigger>
+                </TabsList>
+              </div>
+            </div>
             {activeSection === 'wbs' && <div className="flex gap-2"><Button size="sm" onClick={() => setShowAddElement(true)}><Plus className="w-4 h-4 mr-2" />Add Element</Button></div>}
           </div>
           
