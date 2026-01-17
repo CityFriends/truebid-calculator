@@ -984,20 +984,18 @@ function RequirementsSection({
           </Button>
         </div>
       </div>
-      
-      {/* AI WBS Generation CTA */}
+
+      {/* Quick Actions - Select All Unmapped */}
       {stats.unmapped > 0 && selectedRequirements.size === 0 && (
-        <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-          <div className="flex items-center gap-2">
-            <Wand2 className="w-5 h-5 text-emerald-600" />
-            <span className="text-sm text-emerald-800">
-              <strong>{stats.unmapped} unmapped requirement{stats.unmapped !== 1 ? 's' : ''}</strong> ready for AI WBS generation
-            </span>
-          </div>
-          <Button size="sm" onClick={onSelectAllUnmapped} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-            <Wand2 className="w-4 h-4 mr-1.5" />
-            Generate WBS with AI
-          </Button>
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <span>{stats.unmapped} unmapped requirement{stats.unmapped !== 1 ? 's' : ''}</span>
+          <span>·</span>
+          <button
+            onClick={onSelectAllUnmapped}
+            className="text-emerald-600 hover:text-emerald-700 font-medium"
+          >
+            Select all unmapped
+          </button>
         </div>
       )}
       
@@ -1206,42 +1204,50 @@ function RequirementsSection({
       {/* Floating Selection Bar */}
       {selectedRequirements.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-          <div className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-lg">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
-                <span className="text-xs font-semibold text-emerald-700">{selectedRequirements.size}</span>
+          <div className="flex flex-col items-center gap-2">
+            {/* Large batch warning */}
+            {selectedRequirements.size > 15 && (
+              <div className="text-xs text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+                Large batch selected. Consider generating in smaller groups for better results.
               </div>
-              <span className="text-sm font-medium text-gray-900">selected</span>
+            )}
+            <div className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <span className="text-xs font-semibold text-emerald-700">{selectedRequirements.size}</span>
+                </div>
+                <span className="text-sm font-medium text-gray-900">selected</span>
+              </div>
+              <div className="w-px h-5 bg-gray-200" />
+              <button
+                onClick={onClearSelection}
+                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                Clear
+              </button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-red-600 border-red-200 hover:bg-red-50"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Delete
+              </Button>
+              <Button
+                size="sm"
+                onClick={onBulkGenerate}
+                disabled={isGenerating}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Wand2 className="w-4 h-4 mr-1.5" />
+                )}
+                Generate WBS
+              </Button>
             </div>
-            <div className="w-px h-5 bg-gray-200" />
-            <button
-              onClick={onClearSelection}
-              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              Clear
-            </button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-red-600 border-red-200 hover:bg-red-50"
-              onClick={() => setShowDeleteConfirm(true)}
-            >
-              <Trash2 className="w-4 h-4 mr-1" />
-              Delete
-            </Button>
-            <Button
-              size="sm"
-              onClick={onBulkGenerate}
-              disabled={isGenerating}
-              className="bg-emerald-600 hover:bg-emerald-700"
-            >
-              {isGenerating ? (
-                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-              ) : (
-                <Wand2 className="w-4 h-4 mr-1.5" />
-              )}
-              Generate WBS
-            </Button>
           </div>
         </div>
       )}
