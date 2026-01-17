@@ -942,26 +942,16 @@ function RequirementsSection({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Selection indicator */}
-          {selectedRequirements.size > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-              <span className="text-sm font-medium text-blue-700">{selectedRequirements.size} selected</span>
-              <button onClick={onClearSelection} className="text-blue-600 hover:text-blue-800">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-          
           {/* View mode toggle */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            <button 
-              onClick={() => setViewMode('list')} 
+            <button
+              onClick={() => setViewMode('list')}
               className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
             >
               <List className="w-4 h-4 inline mr-1.5" />List
             </button>
-            <button 
-              onClick={() => setViewMode('gaps')} 
+            <button
+              onClick={() => setViewMode('gaps')}
               className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors relative ${viewMode === 'gaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
             >
               <AlertTriangle className="w-4 h-4 inline mr-1.5" />Gaps
@@ -972,46 +962,6 @@ function RequirementsSection({
               )}
             </button>
           </div>
-          
-          {/* Delete All button - only show when requirements are selected */}
-          {selectedRequirements.size > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-red-600 border-red-200 hover:bg-red-50"
-              onClick={() => setShowDeleteConfirm(true)}
-            >
-              <Trash2 className="w-4 h-4 mr-1" />Delete All
-            </Button>
-          )}
-
-          {/* Delete Confirmation Dialog */}
-          <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>
-                  Permanently delete all {requirements.length} requirements?
-                </DialogTitle>
-                <DialogDescription>
-                  You'll need to upload your RFP again to start over.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => {
-                    onDeleteAll()
-                    setShowDeleteConfirm(false)
-                  }}
-                >
-                  Delete
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
 
           {/* Add button */}
           <Button
@@ -1270,8 +1220,17 @@ function RequirementsSection({
             >
               Clear
             </button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-red-600 border-red-200 hover:bg-red-50"
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Delete
+            </Button>
+            <Button
+              size="sm"
               onClick={onBulkGenerate}
               disabled={isGenerating}
               className="bg-purple-600 hover:bg-purple-700"
@@ -1286,6 +1245,34 @@ function RequirementsSection({
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Permanently delete all {requirements.length} requirements?
+            </DialogTitle>
+            <DialogDescription>
+              You'll need to upload your RFP again to start over.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                onDeleteAll()
+                setShowDeleteConfirm(false)
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
