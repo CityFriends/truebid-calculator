@@ -5,8 +5,8 @@ import { AppProvider } from '@/contexts/app-context'
 import { AuthProvider } from '@/contexts/auth-context'
 import { ThemeProvider } from '@/components/shared/theme-provider'
 import { LayoutWrapper } from '@/components/shared/layout-wrapper'
-import { Toaster } from '@/components/ui/sonner'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { Toaster } from '@/components/ui/sonner'
 
 export const metadata: Metadata = {
   title: 'TrueBid - Government Contracting Calculator',
@@ -21,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${GeistSans.className} min-h-screen flex flex-col`}>
-                <ErrorBoundary>
+        <ErrorBoundary>
           <ThemeProvider>
             <AuthProvider>
               <AppProvider>

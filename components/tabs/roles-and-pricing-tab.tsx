@@ -2134,7 +2134,7 @@ setExpandedWbsRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }))
               <div className="pt-3 border-t border-gray-200">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-600">Total Contract:</span>
-                  <span className="text-2xl font-semibold text-green-600">{formatCurrency(calculations.totalContract)}</span>
+                  <span className={`text-2xl font-semibold ${calculations.totalContract > 0 ? 'text-green-600' : 'text-gray-400'}`}>{formatCurrency(calculations.totalContract)}</span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">Labor + Subs + ODCs + Travel (with escalation)</p>
               </div>
