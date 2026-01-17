@@ -1,15 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Settings, X } from 'lucide-react'
+import { useState } from 'react'
+import { Settings, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppContext } from '@/contexts/app-context'
 
 // ============================================================================
 // SETTINGS CALLOUT COMPONENT
 // ============================================================================
-// Displays a dismissable callout prompting users to review bid settings
-// before estimating. Shows once per proposal, dismissal persisted to localStorage.
+// Displays a collapsible panel showing bid settings.
+// Collapsed by default, can be expanded to see full details.
 
 interface SettingsCalloutProps {
   proposalId?: string
@@ -24,35 +24,12 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
 
 export function SettingsCallout({ proposalId }: SettingsCalloutProps) {
   const { solicitation, openSolicitationEditor } = useAppContext()
-  const [isDismissed, setIsDismissed] = useState(true) // Start hidden, show after check
-  
-  // Check localStorage on mount
-  useEffect(() => {
-    if (!proposalId) {
-      setIsDismissed(false)
-      return
-    }
-    
-    const dismissedKey = `truebid-settings-callout-dismissed-${proposalId}`
-    const wasDismissed = localStorage.getItem(dismissedKey) === 'true'
-    setIsDismissed(wasDismissed)
-  }, [proposalId])
-  
-  const handleDismiss = () => {
-    setIsDismissed(true)
-    if (proposalId) {
-      localStorage.setItem(`truebid-settings-callout-dismissed-${proposalId}`, 'true')
-    }
-  }
-  
+  const [isExpanded, setIsExpanded] = useState(false) // Collapsed by default
+
   const handleEditSettings = () => {
     openSolicitationEditor()
-    handleDismiss() // Dismiss after they click edit
   }
-  
-  // Don't render if dismissed
-  if (isDismissed) return null
-  
+
   // Get current settings for display
   const contractType = solicitation?.contractType || 'T&M'
   const contractTypeLabel = CONTRACT_TYPE_LABELS[contractType] || contractType
@@ -60,52 +37,64 @@ export function SettingsCallout({ proposalId }: SettingsCalloutProps) {
   const billableHours = solicitation?.pricingSettings?.billableHours ?? 1920
   const escalationEnabled = solicitation?.pricingSettings?.escalationEnabled ?? true
   const laborEscalation = solicitation?.pricingSettings?.laborEscalation ?? 3
-  
+
   return (
-    <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-            <Settings className="w-4 h-4 text-blue-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-blue-900 mb-1">
-              Review your bid settings before estimating
-            </p>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-blue-700">
-              <span className="font-medium">{contractTypeLabel}</span>
-              <span className="text-blue-300">•</span>
-              <span>{profitMargin}% profit</span>
-              <span className="text-blue-300">•</span>
-              <span>{billableHours.toLocaleString()} hrs/year</span>
+    <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg">
+      {/* Collapsed header - always visible */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-100 transition-colors rounded-lg"
+      >
+        <div className="flex items-center gap-3">
+          <Settings className="w-4 h-4 text-gray-400" />
+          <span className="text-sm text-gray-600">Bid Settings</span>
+          <span className="text-xs text-gray-400">·</span>
+          <span className="text-xs text-gray-500">{contractTypeLabel}</span>
+          <span className="text-xs text-gray-400">·</span>
+          <span className="text-xs text-gray-500">{profitMargin}% profit</span>
+        </div>
+        {isExpanded ? (
+          <ChevronUp className="w-4 h-4 text-gray-400" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-gray-400" />
+        )}
+      </button>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className="px-4 pb-4 border-t border-gray-200">
+          <div className="flex items-center justify-between pt-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+              <div>
+                <span className="text-gray-400">Contract:</span>{' '}
+                <span className="font-medium">{contractTypeLabel}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Profit:</span>{' '}
+                <span className="font-medium">{profitMargin}%</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Billable:</span>{' '}
+                <span className="font-medium">{billableHours.toLocaleString()} hrs/year</span>
+              </div>
               {escalationEnabled && (
-                <>
-                  <span className="text-blue-300">•</span>
-                  <span>+{laborEscalation}% annually</span>
-                </>
+                <div>
+                  <span className="text-gray-400">Escalation:</span>{' '}
+                  <span className="font-medium">+{laborEscalation}%/year</span>
+                </div>
               )}
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleEditSettings}
+              className="h-7 text-xs"
+            >
+              Edit
+            </Button>
           </div>
         </div>
-        
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleEditSettings}
-            className="h-8 text-xs bg-white border-blue-200 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
-          >
-            Edit Settings
-          </Button>
-          <button
-            onClick={handleDismiss}
-            className="p-1 text-blue-400 hover:text-blue-600 transition-colors"
-            aria-label="Dismiss"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

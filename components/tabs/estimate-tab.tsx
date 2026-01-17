@@ -923,25 +923,8 @@ function RequirementsSection({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Requirements & Traceability</h2>
-          <p className="text-xs text-gray-600 mt-1 flex items-center gap-1.5">
-            <span>{stats.total} requirements</span>
-            <span className="w-1 h-1 rounded-full bg-gray-400" aria-hidden="true" />
-            <span>{stats.mapped} mapped</span>
-            <span className="w-1 h-1 rounded-full bg-gray-400" aria-hidden="true" />
-            <span>{stats.shallCoverage}% "shall" covered</span>
-            {stats.unmapped > 0 && (
-              <>
-                <span className="w-1 h-1 rounded-full bg-red-400" aria-hidden="true" />
-                <span className="text-red-600">{stats.unmapped} gaps</span>
-              </>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      {/* Controls */}
+      <div className="flex items-center justify-end gap-3">
           {/* View mode toggle */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button
@@ -982,7 +965,6 @@ function RequirementsSection({
           >
             <Plus className="w-4 h-4 mr-1" />Add
           </Button>
-        </div>
       </div>
 
       {/* Quick Actions - Select All Unmapped */}
@@ -3146,16 +3128,8 @@ const handleAddRoleToTeam = (roleName: string) => {
       <div className="space-y-6">
       <SettingsCallout proposalId={solicitation?.solicitationNumber} />
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3"><h1 className="text-xl font-semibold text-gray-900">Estimate</h1><Badge variant="outline" className="text-xs">{wbsElements.length} WBS</Badge></div>
-         <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 rounded-lg text-xs">
-         <div className="flex items-center gap-1.5"><span className="text-gray-500">Hours</span><span className="font-semibold text-gray-900">{stats.totalHours.toLocaleString()}</span></div>
-          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
-         <div className="flex items-center gap-1.5"><span className="text-gray-500">Quality</span><span className="font-semibold text-gray-900">{stats.avgQuality}%</span></div>
-         <span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" />
-         <div className="flex items-center gap-1.5"><span className="text-gray-500">Reqs</span><span className={`font-semibold ${stats.requirementsCoverage === 100 ? 'text-green-600' : 'text-yellow-600'}`}>{stats.requirementsCoverage}%</span></div>
-           {stats.issueCount > 0 && <><span className="w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden="true" /><div className="flex items-center gap-1.5"><span className="text-yellow-600">Issues</span><span className="font-semibold text-yellow-600">{stats.issueCount}</span></div></>}
-        </div>
+        <div>
+          <h1 className="text-3xl font-medium text-black">Estimate</h1>
         </div>
         
         {/* Tabs */}
