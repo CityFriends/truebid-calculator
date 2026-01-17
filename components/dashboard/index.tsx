@@ -441,7 +441,7 @@ function ProposalCard({
       {(isRecentlyViewed || (isUrgent && displaySettings.showDueDate)) && !proposal.archived && (
         <div className="flex items-center gap-2 mb-2">
           {isRecentlyViewed && (
-            <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">
+            <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded font-medium">
               Recently viewed
             </span>
           )}
@@ -1680,7 +1680,7 @@ export function Dashboard() {
                           <div className="flex items-center gap-2">
                             <h3 className="font-medium text-sm text-gray-900 truncate">{proposal.title}</h3>
                             {isRecent && (
-                              <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium shrink-0">
+                              <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded font-medium shrink-0">
                                 Recently viewed
                               </span>
                             )}
