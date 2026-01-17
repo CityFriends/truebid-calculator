@@ -5,6 +5,7 @@ import { AppProvider } from '@/contexts/app-context'
 import { AuthProvider } from '@/contexts/auth-context'
 import { ThemeProvider } from '@/components/shared/theme-provider'
 import { LayoutWrapper } from '@/components/shared/layout-wrapper'
+import { ErrorBoundary } from '@/components/shared/error-boundary'
 import { Toaster } from '@/components/ui/sonner'
 
 export const metadata: Metadata = {
@@ -20,15 +21,17 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${GeistSans.className} min-h-screen flex flex-col`}>
-        <ThemeProvider>
-          <AuthProvider>
-            <AppProvider>
-              <LayoutWrapper>
-                {children}
-              </LayoutWrapper>
-            </AppProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <ErrorBoundary>
+          <ThemeProvider>
+            <AuthProvider>
+              <AppProvider>
+                <LayoutWrapper>
+                  {children}
+                </LayoutWrapper>
+              </AppProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </ErrorBoundary>
         <Toaster position="bottom-right" />
       </body>
     </html>
