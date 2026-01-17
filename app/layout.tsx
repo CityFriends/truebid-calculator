@@ -21,25 +21,17 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${GeistSans.className} min-h-screen flex flex-col`}>
-<<<<<<< HEAD
-        <ThemeProvider>
-          <AuthProvider>
-=======
-        <ErrorBoundary>
+                <ErrorBoundary>
           <ThemeProvider>
->>>>>>> claude/update-checkbox-color-HzPMG
-            <AppProvider>
-              <LayoutWrapper>
-                {children}
-              </LayoutWrapper>
-            </AppProvider>
-<<<<<<< HEAD
-          </AuthProvider>
-        </ThemeProvider>
-=======
+            <AuthProvider>
+              <AppProvider>
+                <LayoutWrapper>
+                  {children}
+                </LayoutWrapper>
+              </AppProvider>
+            </AuthProvider>
           </ThemeProvider>
         </ErrorBoundary>
->>>>>>> claude/update-checkbox-color-HzPMG
         <Toaster position="bottom-right" />
       </body>
     </html>
