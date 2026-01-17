@@ -1124,44 +1124,56 @@ function RequirementsSection({
             </div>
           ) : (
             <>
-              {unmappedRequirements.map(req => {
+              {unmappedRequirements.map((req, idx) => {
                 const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
+                const displayNumber = req.referenceNumber.startsWith('p.') || req.referenceNumber.startsWith('SOO')
+                  ? req.referenceNumber
+                  : `REQ-${String(idx + 1).padStart(3, '0')}`
                 return (
-                  <div key={req.id} className="group bg-white shadow-sm rounded-xl p-4 hover:shadow-md transition-all duration-200">
-                    <div className="flex items-start justify-between gap-4">
+                  <div key={req.id} className="group bg-white shadow-sm rounded-xl p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+                    <div className="flex items-start gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${typeConfig.color}`}>{typeConfig.label}</Badge>
-                          <span className="font-mono text-sm font-medium text-gray-900">{req.referenceNumber}</span>
+                          <span className="font-mono text-xs text-gray-500">{displayNumber}</span>
+                          <span className="text-sm font-medium text-gray-900 truncate">{req.title || 'Untitled'}</span>
                         </div>
-                        <p className="text-sm font-medium text-gray-900 mb-1">{req.title}</p>
                         {req.description && (
-                          <p className="text-sm text-gray-600 line-clamp-2">{req.description}</p>
+                          <p className="text-xs text-gray-600 line-clamp-2 mb-1.5">{req.description}</p>
                         )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {/* Link to WBS - muted until hover */}
-                        <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
-                          <SelectTrigger className="w-[160px] h-8 text-xs text-gray-400 border-gray-200 opacity-60 group-hover:opacity-100 transition-opacity">
-                            <SelectValue placeholder="Link to WBS..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {wbsElements.map(wbs => (
-                              <SelectItem key={wbs.id} value={wbs.id}>{wbs.wbsNumber} - {wbs.title}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"
-                            onClick={() => onEdit(req)}
-                            aria-label="Edit requirement"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
+                        {req.source && (
+                          <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{req.source}</span>
+                        )}
+                        {/* Link to WBS - show on hover */}
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <Select onValueChange={(wbsId) => onLinkWbs(req.id, wbsId)}>
+                            <SelectTrigger className="h-5 w-auto px-2 text-[10px] text-emerald-600 border-none bg-transparent hover:bg-emerald-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <span>+ Link WBS</span>
+                            </SelectTrigger>
+                            <SelectContent position="popper" sideOffset={4} className="z-[100] max-h-[200px] overflow-y-auto">
+                              {wbsElements.length === 0 ? (
+                                <div className="px-2 py-1.5 text-xs text-gray-500">No WBS elements yet</div>
+                              ) : (
+                                wbsElements.map(wbs => (
+                                  <SelectItem key={wbs.id} value={wbs.id} className="text-xs">
+                                    {wbs.wbsNumber} - {wbs.title}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
                         </div>
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"
+                          onClick={() => onEdit(req)}
+                          aria-label="Edit requirement"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
                   </div>
