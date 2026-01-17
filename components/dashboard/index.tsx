@@ -1425,10 +1425,10 @@ export function Dashboard() {
             )}
 
             {/* Page Header with New Proposal CTA */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-8">
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">Proposals</h1>
-                <p className="text-sm text-gray-500">Manage and track your government contract proposals</p>
+                <h1 className="text-3xl font-semibold text-gray-900 tracking-tight">Proposals</h1>
+                <p className="text-sm text-gray-500 mt-1">Manage and track your government contract proposals</p>
               </div>
               <Button onClick={handleImportRFP} className="gap-2 bg-emerald-600 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-100">
                 <Plus className="w-4 h-4" />
@@ -1455,7 +1455,7 @@ export function Dashboard() {
 
               <button
                 onClick={() => handleStatClick('pipeline')}
-                className="bg-white p-4 rounded-xl shadow-sm ring-1 ring-emerald-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
+                className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-emerald-600">Pipeline Value</span>
