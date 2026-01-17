@@ -587,13 +587,13 @@ function ProposalCard({
           {displaySettings.showValue && (
             <div className="flex-1">
               <div className="text-[10px] text-gray-400 uppercase tracking-wide">Value</div>
-              <div className="text-sm font-semibold text-gray-900">{formatCurrency(proposal.totalValue)}</div>
+              <div className="text-sm text-gray-900">{formatCurrency(proposal.totalValue)}</div>
             </div>
           )}
           {displaySettings.showDueDate && proposal.dueDate && ['draft', 'in-review'].includes(proposal.status) && (
             <div className="flex-1">
               <div className="text-[10px] text-gray-400 uppercase tracking-wide">Due</div>
-              <div className="text-sm font-semibold text-gray-900">
+              <div className="text-sm text-gray-900">
                 {new Date(proposal.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </div>
             </div>
@@ -601,13 +601,13 @@ function ProposalCard({
           {displaySettings.showTeamSize && (
             <div className="flex-1">
               <div className="text-[10px] text-gray-400 uppercase tracking-wide">Team</div>
-              <div className="text-sm font-semibold text-gray-900">{proposal.teamSize}</div>
+              <div className="text-sm text-gray-900">{proposal.teamSize}</div>
             </div>
           )}
           {displaySettings.showProgress && ['draft', 'in-review'].includes(proposal.status) && (
             <div className="flex-1">
               <div className="text-[10px] text-gray-400 uppercase tracking-wide">Progress</div>
-              <div className="text-sm font-semibold text-gray-900">{proposal.progress}%</div>
+              <div className="text-sm text-gray-900">{proposal.progress}%</div>
             </div>
           )}
         </div>
@@ -1407,7 +1407,7 @@ export function Dashboard() {
                 <h1 className="text-3xl font-medium text-black">Proposals</h1>
                 <p className="text-sm text-gray-500 mt-2">Manage and track your government contract proposals</p>
               </div>
-              <Button onClick={handleImportRFP} className="gap-2 bg-emerald-600 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-100">
+              <Button onClick={handleImportRFP} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
                 <Plus className="w-4 h-4" />
                 New Proposal
               </Button>
