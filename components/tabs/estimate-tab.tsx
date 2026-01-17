@@ -877,6 +877,7 @@ function RequirementsSection({
 }) {
   const [viewMode, setViewMode] = useState<'list' | 'gaps'>('list')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   
   const filteredRequirements = useMemo(() => {
     let filtered = requirements
@@ -978,15 +979,40 @@ function RequirementsSection({
               size="sm"
               variant="outline"
               className="text-red-600 border-red-200 hover:bg-red-50"
-              onClick={() => {
-                if (window.confirm(`Are you sure you want to delete all ${requirements.length} requirements? This cannot be undone.`)) {
-                  onDeleteAll()
-                }
-              }}
+              onClick={() => setShowDeleteConfirm(true)}
             >
               <Trash2 className="w-4 h-4 mr-1" />Delete All
             </Button>
           )}
+
+          {/* Delete Confirmation Dialog */}
+          <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-red-600">
+                  <AlertTriangle className="w-5 h-5" />
+                  Delete all {requirements.length} requirements?
+                </DialogTitle>
+                <DialogDescription>
+                  You'll need to re-extract from the Upload tab to restore them.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    onDeleteAll()
+                    setShowDeleteConfirm(false)
+                  }}
+                >
+                  Delete
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Add button */}
           <Button
