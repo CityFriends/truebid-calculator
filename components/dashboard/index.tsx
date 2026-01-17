@@ -24,6 +24,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Plus,
   Search,
   FileText,
@@ -999,6 +1007,10 @@ export function Dashboard() {
   // Card display settings
   const [cardSettings, setCardSettings] = useState<CardDisplaySettings>(DEFAULT_CARD_SETTINGS)
 
+  // Delete confirmation
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [proposalToDelete, setProposalToDelete] = useState<string | null>(null)
+
   // Load proposals from API
   useEffect(() => {
     async function loadProposals() {
@@ -1280,17 +1292,25 @@ export function Dashboard() {
     }
   }
 
-  const handleDelete = async (proposalId: string) => {
-    if (confirm('Are you sure you want to delete this proposal?')) {
-      try {
-        await proposalsApi.delete(proposalId)
-        setProposals(prev => prev.filter(p => p.id !== proposalId))
-      } catch (error) {
-        console.error('Failed to delete proposal:', error)
-        // Still remove from UI even if API fails
-        setProposals(prev => prev.filter(p => p.id !== proposalId))
-      }
+  const handleDelete = (proposalId: string) => {
+    setProposalToDelete(proposalId)
+    setDeleteConfirmOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!proposalToDelete) return
+
+    try {
+      await proposalsApi.delete(proposalToDelete)
+      setProposals(prev => prev.filter(p => p.id !== proposalToDelete))
+    } catch (error) {
+      console.error('Failed to delete proposal:', error)
+      // Still remove from UI even if API fails
+      setProposals(prev => prev.filter(p => p.id !== proposalToDelete))
     }
+
+    setDeleteConfirmOpen(false)
+    setProposalToDelete(null)
   }
 
   const handleStatusChange = async (proposalId: string, newStatus: ProposalStatus) => {
@@ -1770,6 +1790,35 @@ export function Dashboard() {
           </>
         )}
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this proposal?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the proposal and all its data including requirements and WBS elements.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteConfirmOpen(false)
+                setProposalToDelete(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
