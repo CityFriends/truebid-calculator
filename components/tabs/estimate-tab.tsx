@@ -3133,7 +3133,7 @@ const handleAddRoleToTeam = (roleName: string) => {
       <div className="space-y-0">
         <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-0">
           {/* Sticky Header Container */}
-          <div className="sticky top-[49px] z-30 bg-gray-50 -mx-4 md:-mx-6 px-4 md:px-6 pb-4 pt-4 space-y-4">
+          <div className="sticky top-[49px] z-30 bg-gray-50 -mx-4 md:-mx-6 px-4 md:px-6 pb-4 space-y-4">
             {/* Title */}
             <div>
               <h1 className="text-3xl font-medium text-black">Estimate</h1>
