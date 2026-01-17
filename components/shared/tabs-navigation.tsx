@@ -295,8 +295,8 @@ export function TabsNavigation() {
         aria-atomic="true"
       />
 
-      {/* Breadcrumb Header */}
-      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50 shrink-0">
+      {/* Breadcrumb Header - scrolls away */}
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shrink-0">
         <div className="container mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-12">
             {/* Left: Breadcrumb */}
@@ -359,9 +359,9 @@ export function TabsNavigation() {
         </div>
       </header>
 
-      {/* Tab Navigation */}
-      <nav 
-        className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 sticky top-12 z-40 shrink-0"
+      {/* Tab Navigation - sticky */}
+      <nav
+        className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 sticky top-0 z-40 shrink-0"
         role="navigation"
         aria-label="Main navigation"
       >

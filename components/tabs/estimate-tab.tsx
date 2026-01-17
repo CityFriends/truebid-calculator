@@ -3130,32 +3130,38 @@ const handleAddRoleToTeam = (roleName: string) => {
   
   return (
     <TooltipProvider>
-      <div className="space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-medium text-black">Estimate</h1>
-          <p className="text-sm text-gray-500 mt-1">Map requirements to your work breakdown structure.</p>
-        </div>
-
-        {/* Tabs */}
-        <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-4">
-          <div className="flex items-center justify-between">
-            {/* Primary tabs - left */}
-            <div className="flex items-center gap-4">
-              <TabsList className="bg-gray-100 p-1">
-                <TabsTrigger value="requirements" className="text-xs px-4 data-[state=active]:bg-white"><ClipboardCheck className="w-3.5 h-3.5 mr-1.5" />Requirements{stats.unmappedRequirements > 0 && <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.unmappedRequirements}</Badge>}</TabsTrigger>
-                <TabsTrigger value="wbs" className="text-xs px-4 data-[state=active]:bg-white"><Layers className="w-3.5 h-3.5 mr-1.5" />WBS Elements<Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">{wbsElements.length}</Badge></TabsTrigger>
-              </TabsList>
-              {/* Secondary tabs - muted with hover */}
-              <div className="flex items-center gap-1 border-l border-gray-200 pl-4">
-                <TabsList className="bg-transparent p-0 h-auto">
-                  <TabsTrigger value="labor" className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md transition-colors"><PieChart className="w-3.5 h-3.5 mr-1.5" />Labor Summary</TabsTrigger>
-                  <TabsTrigger value="charges" className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md transition-colors"><Hash className="w-3.5 h-3.5 mr-1.5" />Charge Codes</TabsTrigger>
-                </TabsList>
-              </div>
+      <div className="space-y-0">
+        <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-0">
+          {/* Sticky Header Container */}
+          <div className="sticky top-[49px] z-30 bg-gray-50 -mx-4 md:-mx-6 px-4 md:px-6 pb-4 pt-4 space-y-4">
+            {/* Title */}
+            <div>
+              <h1 className="text-3xl font-medium text-black">Estimate</h1>
+              <p className="text-sm text-gray-500 mt-1">Map requirements to your work breakdown structure.</p>
             </div>
-            {activeSection === 'wbs' && <div className="flex gap-2"><Button size="sm" onClick={() => setShowAddElement(true)}><Plus className="w-4 h-4 mr-2" />Add Element</Button></div>}
+
+            {/* Tab Triggers */}
+            <div className="flex items-center justify-between">
+              {/* Primary tabs - left */}
+              <div className="flex items-center gap-4">
+                <TabsList className="bg-gray-100 p-1">
+                  <TabsTrigger value="requirements" className="text-xs px-4 data-[state=active]:bg-white"><ClipboardCheck className="w-3.5 h-3.5 mr-1.5" />Requirements{stats.unmappedRequirements > 0 && <Badge variant="destructive" className="ml-1.5 text-[10px] px-1 py-0 h-4">{stats.unmappedRequirements}</Badge>}</TabsTrigger>
+                  <TabsTrigger value="wbs" className="text-xs px-4 data-[state=active]:bg-white"><Layers className="w-3.5 h-3.5 mr-1.5" />WBS Elements<Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 h-4">{wbsElements.length}</Badge></TabsTrigger>
+                </TabsList>
+                {/* Secondary tabs - muted with hover */}
+                <div className="flex items-center gap-1 border-l border-gray-200 pl-4">
+                  <TabsList className="bg-transparent p-0 h-auto">
+                    <TabsTrigger value="labor" className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md transition-colors"><PieChart className="w-3.5 h-3.5 mr-1.5" />Labor Summary</TabsTrigger>
+                    <TabsTrigger value="charges" className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 data-[state=active]:text-gray-900 data-[state=active]:bg-gray-100 rounded-md transition-colors"><Hash className="w-3.5 h-3.5 mr-1.5" />Charge Codes</TabsTrigger>
+                  </TabsList>
+                </div>
+              </div>
+              {activeSection === 'wbs' && <div className="flex gap-2"><Button size="sm" onClick={() => setShowAddElement(true)}><Plus className="w-4 h-4 mr-2" />Add Element</Button></div>}
+            </div>
           </div>
+
+          {/* Tab Content - scrolls under sticky header */}
+          <div className="space-y-4 pt-4">
           
           {/* WBS Tab */}
           <TabsContent value="wbs" className="space-y-4 mt-0">
@@ -3221,6 +3227,7 @@ const handleAddRoleToTeam = (roleName: string) => {
 </TabsContent>
           <TabsContent value="labor" className="mt-0"><LaborSummary wbsElements={wbsElements} billableHoursPerYear={uiBillableHours} onNavigateToRoles={handleNavigateToRoles} /></TabsContent>
           <TabsContent value="charges" className="mt-0"><ChargeCodeLibrary chargeCodes={chargeCodes} onAdd={() => handleOpenChargeCodeDialog()} onEdit={handleOpenChargeCodeDialog} onDelete={(id) => setChargeCodes(prev => prev.filter(c => c.id !== id))} /></TabsContent>
+          </div>
         </Tabs>
         
         {/* Slideout */}
