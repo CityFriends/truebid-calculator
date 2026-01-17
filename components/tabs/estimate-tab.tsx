@@ -989,12 +989,11 @@ function RequirementsSection({
           <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-red-600">
-                  <AlertTriangle className="w-5 h-5" />
-                  Delete all {requirements.length} requirements?
+                <DialogTitle>
+                  Permanently delete all {requirements.length} requirements?
                 </DialogTitle>
                 <DialogDescription>
-                  You'll need to re-extract from the Upload tab to restore them.
+                  You'll need to upload your RFP again to start over.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter className="gap-2 sm:gap-0">
@@ -2418,6 +2417,8 @@ export function EstimateTab() {
     selectedRoles: contextRoles,
     addRole,
     solicitation,
+    resetSolicitation,
+    setExtractedRequirements,
     uiBillableHours,
     setActiveMainTab,
     // Shared WBS elements state - this is the key change!
@@ -3220,8 +3221,12 @@ const handleAddRoleToTeam = (roleName: string) => {
                 console.error('[Estimate] Failed to delete requirements from database:', error)
               }
             }
+            // Clear local state
             setRequirements([])
             setSelectedRequirements(new Set())
+            // Reset context state so Upload tab shows initial state
+            setExtractedRequirements([])
+            resetSolicitation()
           }}
           onLinkWbs={handleLinkWbs}
           onUnlinkWbs={handleUnlinkWbs}
