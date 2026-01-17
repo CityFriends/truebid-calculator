@@ -1073,11 +1073,15 @@ function RequirementsSection({
                                 <span>+ Link WBS</span>
                               </SelectTrigger>
                               <SelectContent position="popper" sideOffset={4} className="z-[100] max-h-[200px] overflow-y-auto">
-                                {wbsElements.filter(wbs => !req.linkedWbsIds.includes(wbs.id)).map(wbs => (
-                                  <SelectItem key={wbs.id} value={wbs.id} className="text-xs">
-                                    {wbs.wbsNumber} - {wbs.title}
-                                  </SelectItem>
-                                ))}
+                                {wbsElements.filter(wbs => !req.linkedWbsIds.includes(wbs.id)).length === 0 ? (
+                                  <div className="px-2 py-1.5 text-xs text-gray-500">No WBS elements yet</div>
+                                ) : (
+                                  wbsElements.filter(wbs => !req.linkedWbsIds.includes(wbs.id)).map(wbs => (
+                                    <SelectItem key={wbs.id} value={wbs.id} className="text-xs">
+                                      {wbs.wbsNumber} - {wbs.title}
+                                    </SelectItem>
+                                  ))
+                                )}
                               </SelectContent>
                             </Select>
                           </div>
