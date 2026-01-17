@@ -1034,17 +1034,47 @@ function RequirementsSection({
       {/* List View */}
       {viewMode === 'list' && (
         <>
-          <div className="relative max-w-xs">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input 
-              placeholder="Search..." 
-              value={searchQuery} 
-              onChange={(e) => setSearchQuery(e.target.value)} 
-              className="pl-9 h-8 text-sm" 
-            />
-          </div>
-          <div className="space-y-2">
-            {filteredRequirements.map((req, idx) => {
+          {requirements.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <FileText className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No requirements yet</h3>
+              <p className="text-sm text-gray-500 max-w-sm mb-4">
+                Upload an RFP to extract requirements automatically, or add them manually.
+              </p>
+              <Button
+                size="sm"
+                onClick={() => onAdd({
+                  id: `req-${Date.now()}`,
+                  referenceNumber: '',
+                  title: '',
+                  description: '',
+                  type: 'shall',
+                  category: 'functional',
+                  priority: 'medium',
+                  source: '',
+                  linkedWbsIds: [],
+                  notes: '',
+                  isAIExtracted: false
+                })}
+              >
+                <Plus className="w-4 h-4 mr-1" />Add Requirement
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="relative max-w-xs">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                {filteredRequirements.map((req, idx) => {
               const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
               const linkedWbs = getLinkedWbsElements(req.linkedWbsIds)
               const isMapped = linkedWbs.length > 0
@@ -1135,10 +1165,12 @@ function RequirementsSection({
                 </div>
               )
             })}
-          </div>
+              </div>
+            </>
+          )}
         </>
       )}
-      
+
       {/* Gaps View */}
       {viewMode === 'gaps' && (
         <div className="space-y-4">
@@ -3149,7 +3181,7 @@ const handleAddRoleToTeam = (roleName: string) => {
           onAdd={() => handleOpenReqDialog()}
           onEdit={handleOpenReqDialog}
           onDelete={(id) => setRequirements(prev => prev.filter(r => r.id !== id))}
-          onDeleteAll={() => setRequirements([])}
+          onDeleteAll={() => { setRequirements([]); setSelectedRequirements(new Set()) }}
           onLinkWbs={handleLinkWbs}
           onUnlinkWbs={handleUnlinkWbs}
           selectedRequirements={selectedRequirements}
