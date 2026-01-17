@@ -1016,16 +1016,7 @@ function RequirementsSection({
             </div>
           ) : (
             <>
-              <div className="relative max-w-xs">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-8 text-sm"
-                />
-              </div>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {filteredRequirements.map((req, idx) => {
               const typeConfig = REQUIREMENT_TYPE_CONFIG[req.type]
               const linkedWbs = getLinkedWbsElements(req.linkedWbsIds)

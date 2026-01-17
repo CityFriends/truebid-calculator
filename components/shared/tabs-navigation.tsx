@@ -279,9 +279,6 @@ export function TabsNavigation() {
     })
   }
 
-  // Show solicitation bar on main bid flow tabs (not upload, not utility tools)
-  const showSolicitationBar = !isUtilityToolActive && activeTab !== 'upload' && solicitation?.solicitationNumber
-
   // Get proposal display name
   const proposalName = solicitation?.title || solicitation?.solicitationNumber || 'New Proposal'
 
@@ -317,15 +314,47 @@ export function TabsNavigation() {
               </span>
             </nav>
 
-            {/* Right: Status indicator - only show on editing tabs */}
-{activeTab !== 'upload' && (
-  <div className="flex items-center gap-3 shrink-0">
-    <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-      <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
-      Saved
-    </span>
-  </div>
-)}
+            {/* Right: Badges + Status indicator */}
+            {activeTab !== 'upload' && (
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Contract type badge */}
+                {solicitation?.contractType && (
+                  <Badge variant="secondary" className="text-xs">
+                    {solicitation.contractType}
+                  </Badge>
+                )}
+                {/* Due date badge */}
+                {daysUntilDue !== null && (
+                  <div
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                      isOverdue
+                        ? 'bg-red-100 text-red-700'
+                        : isUrgent
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    <Clock className="w-3 h-3" />
+                    <span>{isOverdue ? 'Overdue' : `${daysUntilDue}d`}</span>
+                  </div>
+                )}
+                {/* Edit button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => openSolicitationEditor()}
+                  className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                  aria-label="Edit solicitation"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                {/* Saved status */}
+                <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
+                  Saved
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -411,66 +440,6 @@ export function TabsNavigation() {
               <ChevronRight className="w-4 h-4 mr-1 rotate-180" aria-hidden="true" />
               Back to Bid Flow
             </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Metadata Bar - badges only, scrolls away */}
-      {showSolicitationBar && (
-        <div className="bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-800 shrink-0" role="region" aria-label="Solicitation metadata">
-          <div className="container mx-auto px-4 md:px-6">
-            <div className="flex items-center justify-between py-2 gap-2">
-              {/* Left: Badges */}
-              <div className="flex items-center gap-2" aria-label="Contract details">
-                {solicitation.contractType && (
-                  <Badge variant="secondary" className="text-xs">
-                    {solicitation.contractType}
-                  </Badge>
-                )}
-                {solicitation.setAside && solicitation.setAside !== 'full-open' && (
-                  <Badge
-                    variant="outline"
-                    className="text-xs bg-purple-50 text-purple-700 border-purple-200"
-                  >
-                    {SET_ASIDE_LABELS[solicitation.setAside] || solicitation.setAside}
-                  </Badge>
-                )}
-                {solicitation.clearanceLevel && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-full">
-                    <Shield className="w-3 h-3" aria-hidden="true" />
-                    <span>{CLEARANCE_LEVEL_LABELS[solicitation.clearanceLevel] || solicitation.clearanceLevel}</span>
-                  </span>
-                )}
-                {/* Due date badge */}
-                {daysUntilDue !== null && (
-                  <div
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
-                      isOverdue
-                        ? 'bg-red-100 text-red-700'
-                        : isUrgent
-                        ? 'bg-yellow-100 text-yellow-700'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                    role="status"
-                  >
-                    <Clock className="w-3 h-3" aria-hidden="true" />
-                    <span>{isOverdue ? 'Overdue' : `${daysUntilDue}d`}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Right: Edit button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => openSolicitationEditor()}
-                className="h-7 px-2 text-gray-500 hover:text-gray-700"
-                aria-label="Edit solicitation details"
-              >
-                <Pencil className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
-                <span>Edit</span>
-              </Button>
-            </div>
           </div>
         </div>
       )}
