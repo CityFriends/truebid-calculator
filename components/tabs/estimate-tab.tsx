@@ -869,8 +869,8 @@ function RequirementsSection({
   wbsElements: EnhancedWBSElement[];
   onAdd: (req: SOORequirement) => void;
   onEdit: (req: SOORequirement) => void;
-  onDelete: (id: string) => void;
-  onDeleteAll: () => void;
+  onDelete: (id: string) => void | Promise<void>;
+  onDeleteAll: () => void | Promise<void>;
   onLinkWbs: (reqId: string, wbsId: string) => void;
   onUnlinkWbs: (reqId: string, wbsId: string) => void;
   selectedRequirements: Set<string>;
@@ -3180,8 +3180,28 @@ const handleAddRoleToTeam = (roleName: string) => {
           wbsElements={wbsElements}
           onAdd={() => handleOpenReqDialog()}
           onEdit={handleOpenReqDialog}
-          onDelete={(id) => setRequirements(prev => prev.filter(r => r.id !== id))}
-          onDeleteAll={() => { setRequirements([]); setSelectedRequirements(new Set()) }}
+          onDelete={async (id) => {
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+            if (proposalId && uuidRegex.test(id)) {
+              try {
+                await requirementsApi.delete(proposalId, id)
+              } catch (error) {
+                console.error('[Estimate] Failed to delete requirement from database:', error)
+              }
+            }
+            setRequirements(prev => prev.filter(r => r.id !== id))
+          }}
+          onDeleteAll={async () => {
+            if (proposalId) {
+              try {
+                await requirementsApi.deleteAll(proposalId)
+              } catch (error) {
+                console.error('[Estimate] Failed to delete requirements from database:', error)
+              }
+            }
+            setRequirements([])
+            setSelectedRequirements(new Set())
+          }}
           onLinkWbs={handleLinkWbs}
           onUnlinkWbs={handleUnlinkWbs}
           selectedRequirements={selectedRequirements}

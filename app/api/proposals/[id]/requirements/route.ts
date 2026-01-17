@@ -132,7 +132,7 @@ export async function PUT(
   return NextResponse.json({ requirement: data?.[0] })
 }
 
-// DELETE - Delete all requirements for a proposal
+// DELETE - Delete requirements (single by reqId, or all with ?all=true)
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -146,15 +146,38 @@ export async function DELETE(
   }
 
   const { id } = await params
+  const { searchParams } = new URL(request.url)
+  const reqId = searchParams.get('reqId')
+  const deleteAll = searchParams.get('all') === 'true'
 
-  const { error } = await supabase
-    .from('requirements')
-    .delete()
-    .eq('proposal_id', id)
+  if (deleteAll) {
+    // Delete all requirements for this proposal
+    const { error } = await supabase
+      .from('requirements')
+      .delete()
+      .eq('proposal_id', id)
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, deleted: 'all' })
   }
 
-  return NextResponse.json({ success: true })
+  if (reqId) {
+    // Delete single requirement
+    const { error } = await supabase
+      .from('requirements')
+      .delete()
+      .eq('id', reqId)
+      .eq('proposal_id', id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, deleted: reqId })
+  }
+
+  return NextResponse.json({ error: 'Either reqId or all=true is required' }, { status: 400 })
 }
