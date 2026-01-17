@@ -1,5 +1,6 @@
 'use client'
 
+// Estimate tab - WBS, Requirements, Labor, Charge Codes
 import React, { useState, useMemo, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { wbsApi, requirementsApi } from '@/lib/api'
