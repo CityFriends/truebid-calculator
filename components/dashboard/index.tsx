@@ -61,6 +61,7 @@ import {
   Settings2,
   SlidersHorizontal,
   Eye,
+  Filter,
 } from 'lucide-react'
 
 // ============================================================================
@@ -420,14 +421,11 @@ function ProposalCard({
   return (
     <div
       className={`
-        group border rounded-lg p-4 
-        hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] 
-        transition-all cursor-pointer bg-white
-        ${proposal.archived ? 'opacity-60 border-gray-200' : ''}
-        ${isUrgent && !proposal.archived && displaySettings.showDueDate
-          ? 'border-l-4 border-l-amber-400 border-t-gray-200 border-r-gray-200 border-b-gray-200' 
-          : 'border-gray-200 hover:border-blue-400'
-        }
+        group rounded-xl p-4 bg-white shadow-sm
+        border-l-4 border-l-emerald-500
+        hover:shadow-md hover:-translate-y-0.5
+        transition-all duration-200 cursor-pointer
+        ${proposal.archived ? 'opacity-60' : ''}
       `}
       onClick={onOpen}
       role="button"
@@ -583,66 +581,45 @@ function ProposalCard({
         </div>
       )}
 
-      {/* Metadata footer */}
+      {/* Horizontal Metrics Row */}
       {hasFooterContent && (
-        <div className="space-y-1.5 text-xs border-t border-gray-100 pt-3">
-          {displaySettings.showSolicitation && (
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500">Solicitation</span>
-              <span className="font-mono text-gray-700">{proposal.solicitation || '—'}</span>
-            </div>
-          )}
+        <div className="flex items-center gap-4 pt-3 border-t border-gray-100">
           {displaySettings.showValue && (
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500">Value</span>
-              <span className="font-semibold text-gray-900">{formatCurrency(proposal.totalValue)}</span>
+            <div className="flex-1">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide">Value</div>
+              <div className="text-sm font-semibold text-gray-900">{formatCurrency(proposal.totalValue)}</div>
             </div>
           )}
-          {displaySettings.showDueDate && proposal.dueDate && ['draft', 'in-review'].includes(proposal.status) && !isUrgent && (
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500">Due</span>
-              <span className="text-gray-700">
+          {displaySettings.showDueDate && proposal.dueDate && ['draft', 'in-review'].includes(proposal.status) && (
+            <div className="flex-1">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide">Due</div>
+              <div className="text-sm font-semibold text-gray-900">
                 {new Date(proposal.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </span>
+              </div>
             </div>
           )}
           {displaySettings.showTeamSize && (
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500">Team</span>
-              <span className="flex items-center gap-1 text-gray-700">
-                <Users className="w-3 h-3" />
-                {proposal.teamSize} members
-              </span>
+            <div className="flex-1">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide">Team</div>
+              <div className="text-sm font-semibold text-gray-900">{proposal.teamSize}</div>
             </div>
           )}
-          
-          {/* Last updated */}
-          {displaySettings.showLastUpdated && (
-            <div className="flex items-center justify-between pt-1 border-t border-gray-50">
-              <span className="text-gray-400">Updated</span>
-              <span className="text-gray-400">{formatRelativeTime(proposal.updatedAt)}</span>
-            </div>
-          )}
-          
-          {/* Progress bar for active proposals */}
           {displaySettings.showProgress && ['draft', 'in-review'].includes(proposal.status) && (
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-gray-500">Progress</span>
-                <span className="text-gray-700">{proposal.progress}%</span>
-              </div>
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    proposal.progress >= 90 ? 'bg-green-500' :
-                    proposal.progress >= 50 ? 'bg-blue-500' :
-                    'bg-yellow-500'
-                  }`}
-                  style={{ width: `${proposal.progress}%` }}
-                />
-              </div>
+            <div className="flex-1">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide">Progress</div>
+              <div className="text-sm font-semibold text-gray-900">{proposal.progress}%</div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Progress bar - full width at bottom */}
+      {displaySettings.showProgress && ['draft', 'in-review'].includes(proposal.status) && (
+        <div className="mt-3 -mx-4 -mb-4 h-2 bg-gray-100 rounded-b-xl overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all"
+            style={{ width: `${proposal.progress}%` }}
+          />
         </div>
       )}
     </div>
@@ -1491,9 +1468,9 @@ export function Dashboard() {
 
             {/* Toolbar - Sticky */}
             <div className="sticky top-14 z-20 bg-gray-50 py-3 -mx-6 px-6 mb-4 border-b border-gray-200">
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-3">
                 {/* Search */}
-                <div className="flex-1 min-w-[200px] relative">
+                <div className="flex-1 min-w-[200px] max-w-md relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <Input
                     id="search-input"
@@ -1504,75 +1481,73 @@ export function Dashboard() {
                   />
                 </div>
 
-                {/* Status Filter */}
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ProposalStatus | 'all')}>
-                  <SelectTrigger className="w-[140px] h-9">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
+                {/* Combined Filter Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5">
+                      <Filter className="w-3.5 h-3.5" />
+                      Filter
+                      {(hasActiveFilters || showArchived) && (
+                        <span className="ml-1 w-2 h-2 rounded-full bg-emerald-500" />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <DropdownMenuLabel className="text-xs text-gray-500">Status</DropdownMenuLabel>
                     {STATUS_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
+                      <DropdownMenuCheckboxItem
+                        key={opt.value}
+                        checked={statusFilter === opt.value}
+                        onCheckedChange={() => setStatusFilter(opt.value as ProposalStatus | 'all')}
+                      >
                         {opt.label}
-                      </SelectItem>
+                      </DropdownMenuCheckboxItem>
                     ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Type Filter */}
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="w-[120px] h-9">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-gray-500">Contract Type</DropdownMenuLabel>
                     {CONTRACT_TYPE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
+                      <DropdownMenuCheckboxItem
+                        key={opt.value}
+                        checked={typeFilter === opt.value}
+                        onCheckedChange={() => setTypeFilter(opt.value)}
+                      >
                         {opt.label}
-                      </SelectItem>
+                      </DropdownMenuCheckboxItem>
                     ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Agency Filter */}
-                <Select value={agencyFilter} onValueChange={setAgencyFilter}>
-                  <SelectTrigger className="w-[180px] h-9">
-                    <SelectValue placeholder="Agency" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Agencies</SelectItem>
-                    {uniqueAgencies.filter(agency => agency).map((agency) => (
-                      <SelectItem key={agency} value={agency}>
-                        {agency.length > 30 ? agency.substring(0, 30) + '...' : agency}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Clear Filters */}
-                {hasActiveFilters && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setStatusFilter('all')
-                      setTypeFilter('all')
-                      setAgencyFilter('all')
-                    }}
-                    className="h-9 text-xs text-gray-500"
-                  >
-                    Clear filters
-                  </Button>
-                )}
-
-                {/* Spacer */}
-                <div className="flex-1" />
-
-                {/* Card Display Settings */}
-                {(viewMode === 'grid' || viewMode === 'list') && (
-                  <CardSettingsDropdown
-                    settings={cardSettings}
-                    onSettingsChange={setCardSettings}
-                  />
-                )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuCheckboxItem
+                      checked={showArchived}
+                      onCheckedChange={() => {
+                        const newShowArchived = !showArchived
+                        setShowArchived(newShowArchived)
+                        if (newShowArchived && (viewMode === 'kanban' || viewMode === 'calendar')) {
+                          setViewMode('grid')
+                        }
+                      }}
+                    >
+                      Show archived
+                      {archivedCount > 0 && (
+                        <span className="ml-auto text-xs text-gray-400">{archivedCount}</span>
+                      )}
+                    </DropdownMenuCheckboxItem>
+                    {(hasActiveFilters || showArchived) && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setStatusFilter('all')
+                            setTypeFilter('all')
+                            setAgencyFilter('all')
+                            setShowArchived(false)
+                          }}
+                          className="text-xs text-gray-500 justify-center"
+                        >
+                          Clear all filters
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                 {/* Sort */}
                 <DropdownMenu>
@@ -1582,7 +1557,7 @@ export function Dashboard() {
                       Sort
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="start">
                     <DropdownMenuLabel className="text-xs">Sort by</DropdownMenuLabel>
                     {SORT_OPTIONS.map((opt) => (
                       <DropdownMenuCheckboxItem
@@ -1602,6 +1577,9 @@ export function Dashboard() {
                     </DropdownMenuCheckboxItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+
+                {/* Spacer */}
+                <div className="flex-1" />
 
                 {/* View Toggle */}
                 <div className="flex gap-1 border border-gray-200 rounded-md p-0.5 bg-white">
@@ -1644,31 +1622,6 @@ export function Dashboard() {
                     <CalendarDays className="w-4 h-4" />
                   </Button>
                 </div>
-
-                {/* Archive Toggle */}
-                <Button
-                  variant={showArchived ? 'secondary' : 'outline'}
-                  size="sm"
-                  onClick={() => {
-                    const newShowArchived = !showArchived
-                    setShowArchived(newShowArchived)
-                    // Reset to grid view when entering archive (kanban/calendar don't apply)
-                    if (newShowArchived && (viewMode === 'kanban' || viewMode === 'calendar')) {
-                      setViewMode('grid')
-                    }
-                  }}
-                  className="h-9 gap-1.5"
-                  title="Toggle archive"
-                  disabled={archivedCount === 0 && !showArchived}
-                >
-                  <Archive className="w-4 h-4" />
-                  Archive
-                  {archivedCount > 0 && (
-                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
-                      {archivedCount}
-                    </Badge>
-                  )}
-                </Button>
               </div>
             </div>
 
