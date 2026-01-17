@@ -848,13 +848,14 @@ function ChargeCodeLibrary({ chargeCodes, onAdd, onEdit, onDelete }: { chargeCod
   )
 }
 
-function RequirementsSection({ 
-  requirements, 
-  wbsElements, 
-  onAdd, 
-  onEdit, 
-  onDelete, 
-  onLinkWbs, 
+function RequirementsSection({
+  requirements,
+  wbsElements,
+  onAdd,
+  onEdit,
+  onDelete,
+  onDeleteAll,
+  onLinkWbs,
   onUnlinkWbs,
   selectedRequirements,
   onToggleSelection,
@@ -862,13 +863,14 @@ function RequirementsSection({
   onClearSelection,
   onBulkGenerate,
   isGenerating
-}: { 
-  requirements: SOORequirement[]; 
-  wbsElements: EnhancedWBSElement[]; 
-  onAdd: (req: SOORequirement) => void; 
-  onEdit: (req: SOORequirement) => void; 
-  onDelete: (id: string) => void; 
-  onLinkWbs: (reqId: string, wbsId: string) => void; 
+}: {
+  requirements: SOORequirement[];
+  wbsElements: EnhancedWBSElement[];
+  onAdd: (req: SOORequirement) => void;
+  onEdit: (req: SOORequirement) => void;
+  onDelete: (id: string) => void;
+  onDeleteAll: () => void;
+  onLinkWbs: (reqId: string, wbsId: string) => void;
   onUnlinkWbs: (reqId: string, wbsId: string) => void;
   selectedRequirements: Set<string>;
   onToggleSelection: (reqId: string) => void;
@@ -974,21 +976,37 @@ function RequirementsSection({
             </button>
           </div>
           
+          {/* Delete All button */}
+          {requirements.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-red-600 border-red-200 hover:bg-red-50"
+              onClick={() => {
+                if (window.confirm(`Are you sure you want to delete all ${requirements.length} requirements? This cannot be undone.`)) {
+                  onDeleteAll()
+                }
+              }}
+            >
+              <Trash2 className="w-4 h-4 mr-1" />Clear All
+            </Button>
+          )}
+
           {/* Add button */}
-          <Button 
-            size="sm" 
-            onClick={() => onAdd({ 
-              id: `req-${Date.now()}`, 
-              referenceNumber: '', 
-              title: '', 
-              description: '', 
-              type: 'shall', 
-              category: 'functional', 
-              priority: 'medium', 
-              source: '', 
-              linkedWbsIds: [], 
-              notes: '', 
-              isAIExtracted: false 
+          <Button
+            size="sm"
+            onClick={() => onAdd({
+              id: `req-${Date.now()}`,
+              referenceNumber: '',
+              title: '',
+              description: '',
+              type: 'shall',
+              category: 'functional',
+              priority: 'medium',
+              source: '',
+              linkedWbsIds: [],
+              notes: '',
+              isAIExtracted: false
             })}
           >
             <Plus className="w-4 h-4 mr-1" />Add
@@ -3124,21 +3142,22 @@ const handleAddRoleToTeam = (roleName: string) => {
           </TabsContent>
           
        <TabsContent value="requirements" className="mt-0">
-          <RequirementsSection 
-          requirements={requirements} 
-          wbsElements={wbsElements} 
-          onAdd={() => handleOpenReqDialog()} 
-          onEdit={handleOpenReqDialog} 
-          onDelete={(id) => setRequirements(prev => prev.filter(r => r.id !== id))} 
-          onLinkWbs={handleLinkWbs} 
+          <RequirementsSection
+          requirements={requirements}
+          wbsElements={wbsElements}
+          onAdd={() => handleOpenReqDialog()}
+          onEdit={handleOpenReqDialog}
+          onDelete={(id) => setRequirements(prev => prev.filter(r => r.id !== id))}
+          onDeleteAll={() => setRequirements([])}
+          onLinkWbs={handleLinkWbs}
           onUnlinkWbs={handleUnlinkWbs}
           selectedRequirements={selectedRequirements}
           onToggleSelection={handleToggleRequirementSelection}
           onSelectAllUnmapped={handleSelectAllUnmapped}
           onClearSelection={handleClearSelection}
           onBulkGenerate={handleBulkGenerateWBS}
-         isGenerating={isGenerating}
-  />
+          isGenerating={isGenerating}
+        />
 </TabsContent>
           <TabsContent value="labor" className="mt-0"><LaborSummary wbsElements={wbsElements} billableHoursPerYear={uiBillableHours} onNavigateToRoles={handleNavigateToRoles} /></TabsContent>
           <TabsContent value="charges" className="mt-0"><ChargeCodeLibrary chargeCodes={chargeCodes} onAdd={() => handleOpenChargeCodeDialog()} onEdit={handleOpenChargeCodeDialog} onDelete={(id) => setChargeCodes(prev => prev.filter(c => c.id !== id))} /></TabsContent>
