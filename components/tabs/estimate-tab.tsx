@@ -19,7 +19,6 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { SettingsCallout } from '@/components/shared/settings-callout'
 import { Loader2, Wand2 } from 'lucide-react'
 import {
   Select,
@@ -3126,7 +3125,6 @@ const handleAddRoleToTeam = (roleName: string) => {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-      <SettingsCallout proposalId={solicitation?.solicitationNumber} />
         {/* Header */}
         <div>
           <h1 className="text-3xl font-medium text-black">Estimate</h1>

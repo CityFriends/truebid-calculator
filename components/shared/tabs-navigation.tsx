@@ -2,19 +2,17 @@
 
 import React, { useState, useCallback, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { 
-  Upload, 
-  Users, 
-  TrendingUp, 
-  Building2, 
-  FileDown, 
-  FileText, 
-  Clock, 
-  ChevronUp, 
-  ChevronDown, 
-  X, 
-  Pencil, 
-  Shield, 
+import {
+  Upload,
+  Users,
+  TrendingUp,
+  Building2,
+  FileDown,
+  FileText,
+  Clock,
+  X,
+  Pencil,
+  Shield,
   AlertCircle,
   Layers,
   HelpCircle,
@@ -102,7 +100,6 @@ interface TabConfig {
 // ==================== MAIN COMPONENT ====================
 
 export function TabsNavigation() {
-  const [showSolicitationExpanded, setShowSolicitationExpanded] = useState(false)
   const [isVersionsSlideoutOpen, setIsVersionsSlideoutOpen] = useState(false)
   const [newVersionName, setNewVersionName] = useState('')
   const [newVersionNotes, setNewVersionNotes] = useState('')
@@ -222,15 +219,13 @@ export function TabsNavigation() {
           setIsVersionsSlideoutOpen(false)
         } else if (isSolicitationEditorOpen) {
           closeSolicitationEditor()
-        } else if (showSolicitationExpanded) {
-          setShowSolicitationExpanded(false)
         }
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isSolicitationEditorOpen, closeSolicitationEditor, showSolicitationExpanded, isVersionsSlideoutOpen])
+  }, [isSolicitationEditorOpen, closeSolicitationEditor, isVersionsSlideoutOpen])
 
   // ==================== TAB CHANGE HANDLER ====================
 
@@ -470,11 +465,11 @@ export function TabsNavigation() {
               <div className="flex items-center gap-1 md:gap-3 shrink-0">
                 {/* Due date */}
                 {daysUntilDue !== null && (
-                  <div 
+                  <div
                     className={`flex items-center gap-1 md:gap-1.5 px-1.5 md:px-2 py-1 rounded text-xs font-medium ${
-                      isOverdue 
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' 
-                        : isUrgent 
+                      isOverdue
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'
+                        : isUrgent
                         ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300'
                         : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                     }`}
@@ -485,23 +480,6 @@ export function TabsNavigation() {
                     <span>{isOverdue ? 'Overdue' : `${daysUntilDue}d`}</span>
                   </div>
                 )}
-
-                {/* Versions button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsVersionsSlideoutOpen(true)}
-                  className="h-7 px-1.5 md:px-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  aria-label="View version history"
-                >
-                  <History className="w-3.5 h-3.5 md:mr-1" aria-hidden="true" />
-                  <span className="hidden md:inline">Versions</span>
-                  {projectVersions.length > 0 && (
-                    <Badge variant="secondary" className="ml-1 md:ml-1.5 h-4 px-1 text-[10px]">
-                      {projectVersions.length}
-                    </Badge>
-                  )}
-                </Button>
 
                 {/* Edit button */}
                 <Button
@@ -514,233 +492,8 @@ export function TabsNavigation() {
                   <Pencil className="w-3.5 h-3.5 md:mr-1" aria-hidden="true" />
                   <span className="hidden md:inline">Edit</span>
                 </Button>
-
-                {/* Expand/Collapse */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowSolicitationExpanded(!showSolicitationExpanded)}
-                  className="h-7 w-7 p-0 text-gray-400 dark:text-gray-500"
-                  aria-expanded={showSolicitationExpanded}
-                  aria-label={showSolicitationExpanded ? 'Collapse solicitation details' : 'Expand solicitation details'}
-                >
-                  {showSolicitationExpanded ? (
-                    <ChevronUp className="w-4 h-4" aria-hidden="true" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" aria-hidden="true" />
-                  )}
-                </Button>
               </div>
             </div>
-
-            {/* Expanded view */}
-            {showSolicitationExpanded && (
-              <div className="pb-4 pt-3 border-t border-gray-100">
-                {/* Title row */}
-                {solicitation.title && (
-                  <div className="mb-3">
-                    <h3 className="text-sm font-semibold text-gray-900">
-                      {solicitation.title}
-                    </h3>
-                  </div>
-                )}
-
-                {/* Pricing Assumptions - Prominent top section */}
-                <div 
-                  className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200"
-                  role="region"
-                  aria-label="Pricing assumptions for this bid"
-                >
-                  <div className="flex items-center justify-between">
-                    <dl className="flex items-center gap-6">
-                      <div>
-                        <dt className="text-xs text-gray-600">Profit Margin</dt>
-                        <dd className="text-sm font-semibold text-gray-900">
-                          {solicitation.pricingSettings?.profitMargin ?? 8}%
-                        </dd>
-                      </div>
-                      <div className="h-8 w-px bg-blue-200" aria-hidden="true" />
-                      <div>
-                        <dt className="text-xs text-gray-600">Billable Hours</dt>
-                        <dd className="text-sm font-semibold text-gray-900">
-                          {(solicitation.pricingSettings?.billableHours ?? 1920).toLocaleString()} per year
-                        </dd>
-                      </div>
-                      <div className="h-8 w-px bg-blue-200" aria-hidden="true" />
-                      <div>
-                        <dt className="text-xs text-gray-600">Annual Increases</dt>
-                        <dd className="text-sm font-semibold text-gray-900">
-                          {(solicitation.pricingSettings?.escalationEnabled ?? true) 
-                            ? `Labor ${solicitation.pricingSettings?.laborEscalation ?? 3}%, ODCs ${solicitation.pricingSettings?.odcEscalation ?? 0}%`
-                            : 'None'
-                          }
-                        </dd>
-                      </div>
-                    </dl>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openSolicitationEditor()}
-                      className="h-7 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-100"
-                      aria-label="Edit pricing settings for this bid"
-                    >
-                      <Pencil className="w-3 h-3 mr-1" aria-hidden="true" />
-                      Edit Settings
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Detail columns */}
-                <div className="grid grid-cols-4 gap-6">
-                  {/* Column 1: Solicitation */}
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                      Solicitation
-                    </h4>
-                    <dl className="space-y-1.5">
-                      <div className="text-sm">
-                        <dt className="inline text-gray-600">Number: </dt>
-                        <dd className="inline font-medium text-gray-900">{solicitation.solicitationNumber}</dd>
-                      </div>
-                      {solicitation.clientAgency && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">Agency: </dt>
-                          <dd className="inline text-gray-900">{solicitation.clientAgency}</dd>
-                        </div>
-                      )}
-                      {solicitation.subAgency && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">Office: </dt>
-                          <dd className="inline text-gray-900">{solicitation.subAgency}</dd>
-                        </div>
-                      )}
-                    </dl>
-                  </div>
-
-                  {/* Column 2: Contract */}
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                      Contract
-                    </h4>
-                    <dl className="space-y-1.5">
-                      {solicitation.contractType && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">Type: </dt>
-                          <dd className="inline text-gray-900">
-                            {CONTRACT_TYPE_LABELS[solicitation.contractType] || solicitation.contractType}
-                          </dd>
-                        </div>
-                      )}
-                      {solicitation.periodOfPerformance && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">Duration: </dt>
-                          <dd className="inline text-gray-900">
-                            {solicitation.periodOfPerformance.baseYear ? '1 Base Year' : ''}
-                            {solicitation.periodOfPerformance.optionYears 
-                              ? ` + ${solicitation.periodOfPerformance.optionYears} Option Years`
-                              : ''
-                            }
-                          </dd>
-                        </div>
-                      )}
-                      {solicitation.naicsCode && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">NAICS: </dt>
-                          <dd className="inline text-gray-900">{solicitation.naicsCode}</dd>
-                        </div>
-                      )}
-                    </dl>
-                  </div>
-
-                  {/* Column 3: Key Dates */}
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                      Key Dates
-                    </h4>
-                    <dl className="space-y-1.5">
-                      <div className="text-sm">
-                        <dt className="inline text-gray-600">Proposal Due: </dt>
-                        <dd className={`inline font-medium ${
-                          isOverdue ? 'text-red-600' : isUrgent ? 'text-yellow-600' : 'text-gray-900'
-                        }`}>
-                          {formatDate(solicitation.proposalDueDate)}
-                        </dd>
-                      </div>
-                      {solicitation.questionsDeadline && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">Questions Due: </dt>
-                          <dd className="inline text-gray-900">{formatDate(solicitation.questionsDeadline)}</dd>
-                        </div>
-                      )}
-                      {solicitation.anticipatedAwardDate && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">Expected Award: </dt>
-                          <dd className="inline text-gray-900">{formatDate(solicitation.anticipatedAwardDate)}</dd>
-                        </div>
-                      )}
-                    </dl>
-                  </div>
-
-                  {/* Column 4: Requirements */}
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                      Requirements
-                    </h4>
-                    <dl className="space-y-1.5">
-                      {solicitation.setAside && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">Set-Aside: </dt>
-                          <dd className="inline text-gray-900">
-                            {SET_ASIDE_LABELS[solicitation.setAside] || solicitation.setAside}
-                          </dd>
-                        </div>
-                      )}
-                      {solicitation.clearanceLevel && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">Clearance: </dt>
-                          <dd className="inline text-gray-900">
-                            {CLEARANCE_LEVEL_LABELS[solicitation.clearanceLevel] || solicitation.clearanceLevel}
-                          </dd>
-                        </div>
-                      )}
-                      {solicitation.placeOfPerformance?.type && (
-                        <div className="text-sm">
-                          <dt className="inline text-gray-600">Work Location: </dt>
-                          <dd className="inline text-gray-900 capitalize">
-                            {solicitation.placeOfPerformance.type}
-                          </dd>
-                        </div>
-                      )}
-                    </dl>
-                  </div>
-                </div>
-
-                {/* Urgency alerts */}
-                {isUrgent && !isOverdue && (
-                  <div 
-                    className="flex items-center gap-2 mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200"
-                    role="alert"
-                  >
-                    <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0" aria-hidden="true" />
-                    <p className="text-sm text-yellow-800">
-                      <span className="font-medium">Due soon!</span> Only {daysUntilDue} days remaining to submit your proposal.
-                    </p>
-                  </div>
-                )}
-
-                {isOverdue && (
-                  <div 
-                    className="flex items-center gap-2 mt-4 p-3 bg-red-50 rounded-lg border border-red-200"
-                    role="alert"
-                  >
-                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" aria-hidden="true" />
-                    <p className="text-sm text-red-800">
-                      <span className="font-medium">Overdue!</span> The proposal deadline has passed.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       )}
