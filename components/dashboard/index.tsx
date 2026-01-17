@@ -422,10 +422,9 @@ function ProposalCard({
     <div
       className={`
         group rounded-xl p-4 bg-white shadow-sm
-        border-l-4 border-l-emerald-500
         hover:shadow-md hover:-translate-y-0.5
         transition-all duration-200 cursor-pointer
-        ${proposal.archived ? 'opacity-60' : ''}
+        ${proposal.archived ? 'opacity-60' : 'border-l-4 border-l-emerald-500'}
       `}
       onClick={onOpen}
       role="button"
