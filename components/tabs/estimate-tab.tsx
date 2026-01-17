@@ -368,11 +368,6 @@ const MOCK_CHARGE_CODES: ChargeCode[] = [
   { id: 'cc-2', chargeNumber: 'DOS-2023-1547', projectName: 'Consular Scheduling MVP', client: 'Department of State', dateRange: 'Jun 2023 - Dec 2023', totalHours: 14500, description: 'Public-facing appointment scheduling system', roles: ['Product Manager', 'Frontend Engineer', 'Backend Engineer', 'QA Engineer'] },
 ]
 
-const MOCK_REQUIREMENTS: SOORequirement[] = [
-  { id: 'req-1', referenceNumber: 'SOO 3.1.1', title: 'Transition-In Support', description: 'The contractor shall provide transition-in support within 60 days of contract award.', type: 'shall', category: 'management', priority: 'critical', source: 'SOO Section 3.1', linkedWbsIds: [], notes: '', isAIExtracted: true },
-  { id: 'req-2', referenceNumber: 'SOO 3.2.1', title: 'Public Appointment Booking System', description: 'The contractor shall develop a public-facing appointment booking system.', type: 'shall', category: 'functional', priority: 'critical', source: 'SOO Section 3.2', linkedWbsIds: [], notes: '5-minute SLA is key evaluation criteria', isAIExtracted: true },
-  { id: 'req-3', referenceNumber: 'SOO 3.3.1', title: 'Section 508 Compliance', description: 'All public-facing interfaces shall comply with Section 508 and WCAG 2.1 Level AA.', type: 'shall', category: 'compliance', priority: 'critical', source: 'SOO Section 3.3', linkedWbsIds: [], notes: '', isAIExtracted: true },
-]
 
 function generateMockWBSElements(selectedRoles: SelectedRole[], optionYears: number): EnhancedWBSElement[] {
   if (selectedRoles.length === 0) return []
@@ -2449,7 +2444,7 @@ export function EstimateTab() {
   }, [solicitation.periodOfPerformance])
   
   const [chargeCodes, setChargeCodes] = useState<ChargeCode[]>(MOCK_CHARGE_CODES)
-  // Map extracted requirements to SOORequirement format, fallback to mock data
+  // Map extracted requirements to SOORequirement format, return empty array if none
  const initialRequirements = useMemo((): SOORequirement[] => {
   if (extractedRequirements && extractedRequirements.length > 0) {
     const categoryMap: Record<string, RequirementCategory> = {
@@ -2470,7 +2465,7 @@ export function EstimateTab() {
       isAIExtracted: true,
     }))
   }
-  return MOCK_REQUIREMENTS
+  return []
 }, [extractedRequirements])
   
   const [requirements, setRequirements] = useState<SOORequirement[]>(initialRequirements)
