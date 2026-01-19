@@ -3132,8 +3132,8 @@ const handleAddRoleToTeam = (roleName: string) => {
     <TooltipProvider>
       <div className="space-y-0">
         <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-0">
-          {/* Sticky Header Container */}
-          <div className="sticky top-[49px] z-30 bg-gray-50 -mx-4 md:-mx-6 px-4 md:px-6 pt-10 pb-4">
+          {/* Sticky Header Container - negate container padding, add our own */}
+          <div className="sticky top-[49px] z-30 bg-gray-50 -mx-4 md:-mx-6 -mt-4 md:-mt-6 px-4 md:px-6 pt-10 pb-4">
             {/* Title - matches Dashboard "Proposals" spacing */}
             <div className="mb-8">
               <h1 className="text-3xl font-medium text-black">Estimate</h1>
