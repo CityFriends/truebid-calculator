@@ -922,49 +922,49 @@ function RequirementsSection({
 
   return (
     <div className="space-y-4">
-      {/* Toolbar - Search + View Controls + Add */}
-      <div className="flex items-center gap-3">
-          {/* Search */}
-          <div className="w-72 shrink-0">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                placeholder="Search requirements..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9"
-              />
-            </div>
+      {/* Toolbar - Mobile-first responsive */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        {/* Search - full width on mobile, constrained on desktop */}
+        <div className="w-full sm:w-64">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              placeholder="Search requirements..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9"
+            />
+          </div>
+        </div>
+
+        {/* Controls - wrap on mobile */}
+        <div className="flex items-center justify-between sm:justify-end sm:flex-1 gap-2">
+          {/* View mode toggle */}
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1" role="group" aria-label="View mode">
+            <button
+              onClick={() => setViewMode('list')}
+              aria-label="List view"
+              aria-pressed={viewMode === 'list'}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              <List className="w-4 h-4 inline mr-1.5" aria-hidden="true" />List
+            </button>
+            <button
+              onClick={() => setViewMode('gaps')}
+              aria-label={`Gaps view${stats.unmapped > 0 ? `, ${stats.unmapped} unmapped` : ''}`}
+              aria-pressed={viewMode === 'gaps'}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors relative ${viewMode === 'gaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              <AlertTriangle className="w-4 h-4 inline mr-1.5" aria-hidden="true" />Gaps
+              {stats.unmapped > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 text-[10px] bg-red-500 text-white rounded-full flex items-center justify-center" aria-hidden="true">
+                  {stats.unmapped}
+                </span>
+              )}
+            </button>
           </div>
 
-          {/* Right controls - pushed right with ml-auto */}
-          <div className="ml-auto flex items-center gap-2">
-            {/* View mode toggle */}
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1" role="group" aria-label="View mode">
-              <button
-                onClick={() => setViewMode('list')}
-                aria-label="List view"
-                aria-pressed={viewMode === 'list'}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
-              >
-                <List className="w-4 h-4 inline mr-1.5" aria-hidden="true" />List
-              </button>
-              <button
-                onClick={() => setViewMode('gaps')}
-                aria-label={`Gaps view${stats.unmapped > 0 ? `, ${stats.unmapped} unmapped` : ''}`}
-                aria-pressed={viewMode === 'gaps'}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors relative ${viewMode === 'gaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
-              >
-                <AlertTriangle className="w-4 h-4 inline mr-1.5" aria-hidden="true" />Gaps
-                {stats.unmapped > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 text-[10px] bg-red-500 text-white rounded-full flex items-center justify-center" aria-hidden="true">
-                    {stats.unmapped}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {/* Add button - outline emerald */}
+          {/* Add button */}
           <Button
             variant="outline"
             size="sm"
@@ -985,7 +985,7 @@ function RequirementsSection({
           >
             <Plus className="w-4 h-4 mr-1" />Add
           </Button>
-          </div>
+        </div>
       </div>
       
       {/* List View */}
@@ -3167,11 +3167,16 @@ const handleAddRoleToTeam = (roleName: string) => {
           {/* WBS Tab */}
           <TabsContent value="wbs" className="space-y-4 mt-0">
             <HelpBanner />
-            <div className="flex items-center gap-2">
-              <div className="w-72 shrink-0"><div className="relative"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search WBS..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-9" /></div></div>
-              <div className="ml-auto flex items-center gap-2">
-                <Select value={filterGrade} onValueChange={setFilterGrade}><SelectTrigger className="w-[140px] h-9"><Filter className="w-4 h-4 mr-2" /><SelectValue placeholder="Grade" /></SelectTrigger><SelectContent><SelectItem value="all">All Grades</SelectItem><SelectItem value="blue">Audit-Ready</SelectItem><SelectItem value="green">Complete</SelectItem><SelectItem value="yellow">Needs Review</SelectItem><SelectItem value="red">Incomplete</SelectItem></SelectContent></Select>
-                <Select value={sortBy} onValueChange={setSortBy}><SelectTrigger className="w-[130px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="wbs">By WBS #</SelectItem><SelectItem value="quality">By Quality</SelectItem><SelectItem value="hours">By Hours</SelectItem></SelectContent></Select>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="w-full sm:w-64">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input placeholder="Search WBS..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-9" />
+                </div>
+              </div>
+              <div className="flex items-center justify-between sm:justify-end sm:flex-1 gap-2 flex-wrap">
+                <Select value={filterGrade} onValueChange={setFilterGrade}><SelectTrigger className="w-[120px] h-9"><Filter className="w-4 h-4 mr-2" /><SelectValue placeholder="Grade" /></SelectTrigger><SelectContent><SelectItem value="all">All Grades</SelectItem><SelectItem value="blue">Audit-Ready</SelectItem><SelectItem value="green">Complete</SelectItem><SelectItem value="yellow">Needs Review</SelectItem><SelectItem value="red">Incomplete</SelectItem></SelectContent></Select>
+                <Select value={sortBy} onValueChange={setSortBy}><SelectTrigger className="w-[110px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="wbs">By WBS #</SelectItem><SelectItem value="quality">By Quality</SelectItem><SelectItem value="hours">By Hours</SelectItem></SelectContent></Select>
                 <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
                 <Button variant="outline" size="sm" className="border-emerald-600 text-emerald-600 hover:bg-emerald-50" onClick={() => setShowAddElement(true)}><Plus className="w-4 h-4 mr-1" />Add</Button>
               </div>
