@@ -1036,6 +1036,7 @@ export function EstimateTab() {
   const handleWbsDragStart = useCallback((e: React.DragEvent, wbs: EnhancedWBSElement) => {
     setDraggedWbs(wbs)
     e.dataTransfer.effectAllowed = 'link'
+    e.dataTransfer.setData('text/plain', wbs.id) // Required for drag to work in some browsers
   }, [])
 
   const handleWbsDragEnd = useCallback(() => {
