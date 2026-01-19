@@ -925,7 +925,7 @@ function RequirementsSection({
       {/* Toolbar - Search + View Controls + Add */}
       <div className="flex items-center gap-3">
           {/* Search */}
-          <div className="flex-1 max-w-xs">
+          <div className="w-72 shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
@@ -937,30 +937,34 @@ function RequirementsSection({
             </div>
           </div>
 
-          <div className="flex-1" />
+          {/* Right controls - pushed right with ml-auto */}
+          <div className="ml-auto flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1" role="group" aria-label="View mode">
+              <button
+                onClick={() => setViewMode('list')}
+                aria-label="List view"
+                aria-pressed={viewMode === 'list'}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                <List className="w-4 h-4 inline mr-1.5" aria-hidden="true" />List
+              </button>
+              <button
+                onClick={() => setViewMode('gaps')}
+                aria-label={`Gaps view${stats.unmapped > 0 ? `, ${stats.unmapped} unmapped` : ''}`}
+                aria-pressed={viewMode === 'gaps'}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors relative ${viewMode === 'gaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                <AlertTriangle className="w-4 h-4 inline mr-1.5" aria-hidden="true" />Gaps
+                {stats.unmapped > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 text-[10px] bg-red-500 text-white rounded-full flex items-center justify-center" aria-hidden="true">
+                    {stats.unmapped}
+                  </span>
+                )}
+              </button>
+            </div>
 
-          {/* View mode toggle */}
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
-            >
-              <List className="w-4 h-4 inline mr-1.5" />List
-            </button>
-            <button
-              onClick={() => setViewMode('gaps')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors relative ${viewMode === 'gaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
-            >
-              <AlertTriangle className="w-4 h-4 inline mr-1.5" />Gaps
-              {stats.unmapped > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 text-[10px] bg-red-500 text-white rounded-full flex items-center justify-center">
-                  {stats.unmapped}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {/* Add button - outline emerald */}
+            {/* Add button - outline emerald */}
           <Button
             variant="outline"
             size="sm"
@@ -981,6 +985,7 @@ function RequirementsSection({
           >
             <Plus className="w-4 h-4 mr-1" />Add
           </Button>
+          </div>
       </div>
       
       {/* List View */}
@@ -3137,7 +3142,7 @@ const handleAddRoleToTeam = (roleName: string) => {
             {/* Title */}
             <div>
               <h1 className="text-3xl font-medium text-black">Estimate</h1>
-              <p className="text-sm text-gray-500 mt-1">Map requirements to your work breakdown structure.</p>
+              <p className="text-sm text-gray-500 mt-2">Map requirements to your work breakdown structure.</p>
             </div>
 
             {/* Tab Triggers */}
