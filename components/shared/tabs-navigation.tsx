@@ -285,8 +285,8 @@ export function TabsNavigation() {
     })
   }
 
-  // Show solicitation bar on main bid flow tabs (not upload, not utility tools)
-  const showSolicitationBar = !isUtilityToolActive && activeTab !== 'upload' && solicitation?.solicitationNumber
+  // Show solicitation bar on main bid flow tabs (not upload, not estimate, not utility tools)
+  const showSolicitationBar = !isUtilityToolActive && activeTab !== 'upload' && activeTab !== 'estimate' && solicitation?.solicitationNumber
 
   // Get proposal display name
   const proposalName = solicitation?.title || solicitation?.solicitationNumber || 'New Proposal'
