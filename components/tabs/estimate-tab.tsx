@@ -43,7 +43,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useApp } from '@/context/app-context'
+import { useAppContext } from '@/contexts/app-context'
 import { Progress } from '@/components/ui/progress'
 
 // ============================================================================
@@ -802,7 +802,7 @@ function WBSEmptyState({ hasRequirements }: { hasRequirements: boolean }) {
 // ============================================================================
 
 export function EstimateTab() {
-  const { currentProposal } = useApp()
+  const { currentProposal } = useAppContext()
   
   // ========== STATE ==========
   
