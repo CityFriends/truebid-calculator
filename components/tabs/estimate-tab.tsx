@@ -126,7 +126,7 @@ const getConfidenceColor = (confidence: string) => {
 }
 
 const formatHours = (hours: number) => {
-  return hours.toLocaleString()
+  return (hours || 0).toLocaleString()
 }
 
 // ============================================================================
