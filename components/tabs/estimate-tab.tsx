@@ -3133,9 +3133,9 @@ const handleAddRoleToTeam = (roleName: string) => {
       <div className="space-y-0">
         <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-0">
           {/* Sticky Header Container */}
-          <div className="sticky top-[49px] z-30 bg-gray-50 -mx-4 md:-mx-6 px-4 md:px-6 pt-4 md:pt-6 pb-4 space-y-4">
-            {/* Title */}
-            <div>
+          <div className="sticky top-[49px] z-30 bg-gray-50 -mx-4 md:-mx-6 px-4 md:px-6 pt-10 pb-4">
+            {/* Title - matches Dashboard "Proposals" spacing */}
+            <div className="mb-8">
               <h1 className="text-3xl font-medium text-black">Estimate</h1>
               <p className="text-sm text-gray-500 mt-2">Map requirements to your work breakdown structure.</p>
             </div>
