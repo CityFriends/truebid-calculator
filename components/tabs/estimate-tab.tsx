@@ -923,9 +923,9 @@ function RequirementsSection({
   return (
     <div className="space-y-4">
       {/* Toolbar - Search + View Controls + Add */}
-      <div className="flex items-center gap-3 w-full">
+      <div className="flex items-center gap-3">
           {/* Search */}
-          <div className="w-72 shrink-0">
+          <div className="flex-1 max-w-xs">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
@@ -937,7 +937,8 @@ function RequirementsSection({
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex-1" />
+
           {/* View mode toggle */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button
@@ -980,7 +981,6 @@ function RequirementsSection({
           >
             <Plus className="w-4 h-4 mr-1" />Add
           </Button>
-          </div>
       </div>
       
       {/* List View */}
@@ -3132,12 +3132,12 @@ const handleAddRoleToTeam = (roleName: string) => {
     <TooltipProvider>
       <div className="space-y-0">
         <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-0">
-          {/* Sticky Header Container - negate container padding, add our own */}
-          <div className="sticky top-[49px] z-30 bg-gray-50 -mx-4 md:-mx-6 -mt-4 md:-mt-6 px-4 md:px-6 pt-4 md:pt-6 pb-4">
-            {/* Title - matches Dashboard "Proposals" spacing */}
-            <div className="mb-8">
+          {/* Sticky Header Container */}
+          <div className="sticky top-[49px] z-30 bg-gray-50 -mx-4 md:-mx-6 px-4 md:px-6 pb-4 pt-4 space-y-4">
+            {/* Title */}
+            <div>
               <h1 className="text-3xl font-medium text-black">Estimate</h1>
-              <p className="text-sm text-gray-500 mt-2">Map requirements to your work breakdown structure.</p>
+              <p className="text-sm text-gray-500 mt-1">Map requirements to your work breakdown structure.</p>
             </div>
 
             {/* Tab Triggers */}
