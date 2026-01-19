@@ -397,12 +397,12 @@ export function TabsNavigation() {
                     }
                   }}
                   className={`
-                    flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap 
-                    border-b-2 transition-colors focus:outline-none focus-visible:ring-2 
-                    focus-visible:ring-blue-500 focus-visible:ring-offset-2
-                    ${isActive 
-                      ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' 
-                      : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600'
+                    flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap
+                    border-b-2 transition-colors focus:outline-none focus-visible:ring-2
+                    focus-visible:ring-emerald-500 focus-visible:ring-offset-2
+                    ${isActive
+                      ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+                      : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-600'
                     }
                   `}
                 >

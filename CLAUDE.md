@@ -54,3 +54,129 @@ The Supabase `proposals` table has these columns:
 - snake_case for database columns
 - camelCase for TypeScript/React
 - Transform between them in API routes
+
+## Review Council
+
+When asked to review code, UI, or features, evaluate from these perspectives:
+
+### 🎯 Product Manager
+- Does this meet the stated requirements?
+- What edge cases are unhandled?
+- Is this the MVP or are we over-engineering?
+- What would make the client say "wow"?
+- What would make the client complain?
+- Is this shippable for a demo tomorrow?
+
+### 💼 Business Analyst
+- Does this solve the user's actual problem?
+- What assumptions are we making about user behavior?
+- Is there a simpler way to achieve the same outcome?
+- What's the ROI of this feature vs. effort to build it?
+
+### 🔬 UX Researcher
+- What user need does this address?
+- What research or evidence supports this design decision?
+- What assumptions are we making that we should validate?
+- Who are the edge-case users we might be forgetting?
+- What would a usability test reveal?
+
+### 🧭 UX Designer
+- Can a user complete their goal in 3 clicks or less?
+- Is the information architecture intuitive?
+- Are there unnecessary friction points?
+- Is the cognitive load reasonable?
+- Are error messages helpful and actionable?
+- Does the flow match user mental models?
+
+### 🎨 UI Designer
+- Is the visual hierarchy clear? (What do you see first, second, third?)
+- Are spacing and alignment consistent?
+- Does typography guide the eye appropriately?
+- Are interactive elements obviously clickable/tappable?
+- Is there appropriate use of color for meaning?
+- Does this feel polished or rushed?
+- Is it consistent with the rest of the app?
+
+### ♿ Accessibility Specialist
+- Does this meet WCAG 2.1 AA standards?
+- Is color contrast sufficient (4.5:1 for text)?
+- Can this be navigated with keyboard only?
+- Are there appropriate ARIA labels?
+- Do focus states exist and make sense?
+- Will this work with a screen reader?
+- Are touch targets at least 44x44px?
+
+### 💻 Frontend Developer
+- Is the code clean and maintainable?
+- Are components appropriately sized (not too big, not too granular)?
+- Is state management appropriate for the complexity?
+- Are there performance concerns? (re-renders, bundle size)
+- Is this following React/Next.js best practices?
+- Would a new developer understand this code?
+
+### 🏗️ Solutions Architect
+- Is this the right technical approach for the problem?
+- Will this scale if usage grows 10x?
+- Are we creating technical debt we'll regret?
+- How does this integrate with existing systems?
+- Are there simpler alternatives we should consider?
+
+### 🔧 DevOps Engineer
+- Will this deploy cleanly?
+- Are there cold start concerns?
+- Is error logging/monitoring in place?
+- Are environment variables handled correctly?
+- Is this secure in production?
+
+### 🔒 Security Reviewer
+- Is authentication/authorization handled correctly?
+- Is user input validated and sanitized?
+- Are there any data exposure risks?
+- Is sensitive data encrypted/protected?
+- Would this pass a basic penetration test?
+
+### 🧪 QA Tester
+- What happens if the user does something unexpected?
+- What if the API is slow or fails?
+- What if the user has no data yet (empty states)?
+- What if the user has tons of data (pagination, performance)?
+- What happens on slow/offline connections?
+- Have all the happy paths been tested?
+- Have all the sad paths been tested?
+
+### 📝 Technical Writer
+- Is this feature documented?
+- Could someone else maintain this code?
+- Are complex functions commented?
+- Is the README up to date?
+- Would a handoff to another team be smooth?
+
+### 🤝 Client Success Manager
+- Will the client understand how to use this?
+- What questions will they ask?
+- Does this look professional enough for a client demo?
+- What will impress them? What might disappoint them?
+- Is there anything that needs explanation before they see it?
+
+## Government-Specific Reviews
+
+When building for government clients, also consider:
+
+### 📋 Contracting Officer Perspective
+- Does this align with the Statement of Work?
+- Are there any scope creep concerns?
+- Would this raise questions during a contract review?
+- Is the deliverable clearly defined?
+
+### 🏛️ Federal User Advocate
+- Government employees have specific constraints (older browsers, locked-down machines)
+- They may have limited tech savviness
+- They're risk-averse — anything confusing will get escalated
+- They need to justify their decisions to supervisors
+
+### 🛡️ ATO/Compliance Reviewer
+- Is this FedRAMP-ready (or on a path to it)?
+- Does it meet Section 508 accessibility requirements?
+- Is there an audit trail for sensitive actions?
+- How is PII handled?
+- Is the data residency appropriate?

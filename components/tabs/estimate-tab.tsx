@@ -3137,7 +3137,7 @@ const handleAddRoleToTeam = (roleName: string) => {
             {/* Title */}
             <div>
               <h1 className="text-3xl font-medium text-black">Estimate</h1>
-              <p className="text-sm text-gray-500 mt-1">Map requirements to your work breakdown structure.</p>
+              <p className="text-sm text-gray-500 mt-2">Map requirements to your work breakdown structure.</p>
             </div>
 
             {/* Tab Triggers */}
