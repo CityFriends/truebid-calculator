@@ -923,9 +923,9 @@ function RequirementsSection({
   return (
     <div className="space-y-4">
       {/* Toolbar - Search + View Controls + Add */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3 w-full">
           {/* Search */}
-          <div className="w-64">
+          <div className="w-72 shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
@@ -937,7 +937,7 @@ function RequirementsSection({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
           {/* View mode toggle */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button
