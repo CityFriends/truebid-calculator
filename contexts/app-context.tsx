@@ -2518,3 +2518,6 @@ export function useAppContext() {
   }
   return context;
 }
+
+// Alias for backwards compatibility
+export const useApp = useAppContext;
