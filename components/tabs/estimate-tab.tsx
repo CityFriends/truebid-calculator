@@ -795,7 +795,15 @@ function WBSEmptyState({ hasRequirements }: { hasRequirements: boolean }) {
 // ============================================================================
 
 export function EstimateTab() {
-  const { currentProposal, companyRoles, selectedRoles } = useAppContext()
+  const {
+    currentProposal,
+    companyRoles,
+    solicitation,
+    setEstimateWbsElements,
+    indirectRates,
+    uiBillableHours,
+    uiProfitMargin,
+  } = useAppContext()
   
   // ========== STATE ==========
   
@@ -821,8 +829,15 @@ export function EstimateTab() {
   const [editingWbs, setEditingWbs] = useState<EnhancedWBSElement | null>(null)
   const [preLinkedRequirement, setPreLinkedRequirement] = useState<SOORequirement | null>(null)
 
-  // WBS form state (for Add/Edit dialog)
+  // WBS form state (for Add/Edit slideout)
   const [wbsFormLoading, setWbsFormLoading] = useState(false)
+  const [expandedSections, setExpandedSections] = useState({
+    taskDescription: true,
+    laborEstimates: true,
+    assumptions: false,
+    risks: false,
+    dependencies: false,
+  })
   const [wbsForm, setWbsForm] = useState({
     wbsNumber: '',
     title: '',
@@ -960,12 +975,19 @@ export function EstimateTab() {
             return `${highest.major}.${highest.minor + 1}`
           })()
 
-      // Use selected roles from Roles & Pricing, fallback to company roles
-      const availableRolesForApi = (selectedRoles.length > 0 ? selectedRoles : companyRoles).map(r => ({
+      // Use Labor Categories from Account Center (companyRoles)
+      // These are the company's defined roles that the AI should pick from
+      const availableRolesForApi = companyRoles.map(r => ({
         id: r.id,
-        name: r.name,
-        category: 'category' in r ? r.category : 'General',
+        name: r.title,
+        laborCategory: r.laborCategory,
         description: r.description,
+        levels: r.levels.map(l => ({
+          level: l.level,
+          levelName: l.levelName,
+          yearsExperience: l.yearsExperience,
+          baseSalary: l.steps[0]?.salary || 0,
+        })),
       }))
 
       // Call API to generate WBS
@@ -1051,7 +1073,7 @@ export function EstimateTab() {
           setWbsFormLoading(false)
         })
     }
-  }, [preLinkedRequirement, showAddWbs, editingWbs, wbsElements, currentProposal, selectedRoles, companyRoles])
+  }, [preLinkedRequirement, showAddWbs, editingWbs, wbsElements, currentProposal, companyRoles])
 
   // Reset form when dialog closes
   useEffect(() => {
@@ -1228,6 +1250,17 @@ export function EstimateTab() {
     setIsDragOverWbsArea(false)
   }, [draggedRequirement])
 
+  // Helper: calculate hourly rate for a labor category
+  const calculateHourlyRate = useCallback((baseSalary: number) => {
+    const standardHours = 2080
+    const baseRate = baseSalary / standardHours
+    const afterFringe = baseRate * (1 + indirectRates.fringe)
+    const afterOverhead = afterFringe * (1 + indirectRates.overhead)
+    const afterGA = afterOverhead * (1 + indirectRates.ga)
+    const withProfit = afterGA * (1 + uiProfitMargin / 100)
+    return withProfit
+  }, [indirectRates, uiProfitMargin])
+
   // Save WBS element from form
   const handleSaveWbs = useCallback(() => {
     if (!wbsForm.title || !wbsForm.wbsNumber) return
@@ -1261,8 +1294,36 @@ export function EstimateTab() {
       dependencies: wbsForm.dependencies,
     }
 
-    // Add the new WBS element
+    // Add the new WBS element to local state
     setWbsElements(prev => [...prev, newWbs])
+
+    // Also sync to context estimateWbsElements for Roles & Pricing tab
+    // Convert to EstimateWBSElement format
+    setEstimateWbsElements(prev => [...prev, {
+      id: newWbsId,
+      wbsNumber: wbsForm.wbsNumber,
+      title: wbsForm.title,
+      description: wbsForm.what,
+      laborEstimates: wbsForm.laborEstimates.map((le, idx) => ({
+        id: `${newWbsId}-labor-${idx}`,
+        roleId: le.roleId,
+        roleName: le.roleName,
+        hoursByPeriod: {
+          base: le.hoursByPeriod.base || 0,
+          option1: le.hoursByPeriod.option1 || 0,
+          option2: le.hoursByPeriod.option2 || 0,
+          option3: le.hoursByPeriod.option3 || 0,
+          option4: le.hoursByPeriod.option4 || 0,
+        },
+        rationale: le.rationale,
+        confidence: le.confidence,
+        isAISuggested: true,
+      })),
+      status: 'draft',
+      totalHours,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }])
 
     // Link the requirement to this WBS if there's a pre-linked requirement
     if (preLinkedRequirement) {
@@ -1274,7 +1335,7 @@ export function EstimateTab() {
       }))
     }
 
-    // Close the dialog and reset state
+    // Close the slideout and reset state
     setShowAddWbs(false)
     setPreLinkedRequirement(null)
     setWbsForm({
@@ -1291,7 +1352,7 @@ export function EstimateTab() {
       risks: [],
       dependencies: [],
     })
-  }, [wbsForm, preLinkedRequirement])
+  }, [wbsForm, preLinkedRequirement, setEstimateWbsElements])
 
   // Bulk WBS generation
   const handleBulkGenerateWBS = useCallback(async () => {
@@ -1737,621 +1798,948 @@ export function EstimateTab() {
           </DialogContent>
         </Dialog>
 
-        {/* Add/Edit WBS Dialog - Placeholder */}
-        <Dialog open={showAddWbs || !!editingWbs} onOpenChange={(open) => {
-          if (!open) {
-            setShowAddWbs(false)
-            setEditingWbs(null)
-            setPreLinkedRequirement(null)
-          }
-        }}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingWbs ? 'Edit WBS Element' : 'Add WBS Element'}
-              </DialogTitle>
-              <DialogDescription>
-                {editingWbs
-                  ? 'Update the WBS element details below.'
-                  : preLinkedRequirement
-                    ? `Create a WBS element for requirement ${preLinkedRequirement.referenceNumber}.`
-                    : 'Add a new WBS element to your estimate.'
-                }
-              </DialogDescription>
-            </DialogHeader>
-
-            {/* Show pre-linked requirement */}
-            {preLinkedRequirement && !editingWbs && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <Link2 className="w-4 h-4 text-emerald-600" />
-                  <span className="text-sm font-medium text-emerald-800">Linked Requirement</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-emerald-600">{preLinkedRequirement.referenceNumber}</span>
-                  <span className="text-sm text-emerald-700">{preLinkedRequirement.title}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Loading state while AI generates */}
-            {wbsFormLoading && (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-center">
-                  <Loader2 className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-3" />
-                  <p className="text-sm text-gray-600">AI is generating WBS details...</p>
-                  <p className="text-xs text-gray-400 mt-1">This may take a few seconds</p>
-                </div>
-              </div>
-            )}
-
-            {/* Form fields */}
-            <div className={`space-y-4 py-4 ${wbsFormLoading ? 'opacity-50 pointer-events-none' : ''}`}>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>WBS Number</Label>
-                  <Input
-                    placeholder="1.1"
-                    value={wbsForm.wbsNumber}
-                    onChange={(e) => setWbsForm(prev => ({ ...prev, wbsNumber: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>SOW Reference</Label>
-                  <Input
-                    placeholder="SOO 3.1.1"
-                    value={wbsForm.sowReference}
-                    onChange={(e) => setWbsForm(prev => ({ ...prev, sowReference: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Title</Label>
-                <Input
-                  placeholder="WBS element title..."
-                  value={wbsForm.title}
-                  onChange={(e) => setWbsForm(prev => ({ ...prev, title: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Why (Purpose)</Label>
-                <Textarea
-                  placeholder="Why is this work needed?"
-                  rows={2}
-                  value={wbsForm.why}
-                  onChange={(e) => setWbsForm(prev => ({ ...prev, why: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>What (Deliverables)</Label>
-                <Textarea
-                  placeholder="What will be delivered?"
-                  rows={2}
-                  value={wbsForm.what}
-                  onChange={(e) => setWbsForm(prev => ({ ...prev, what: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Not Included</Label>
-                <Textarea
-                  placeholder="What is explicitly out of scope?"
-                  rows={2}
-                  value={wbsForm.notIncluded}
-                  onChange={(e) => setWbsForm(prev => ({ ...prev, notIncluded: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Estimate Method</Label>
-                  <Select
-                    value={wbsForm.estimateMethod}
-                    onValueChange={(v: 'engineering' | 'analogous' | 'parametric' | 'expert') =>
-                      setWbsForm(prev => ({ ...prev, estimateMethod: v }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="engineering">Engineering</SelectItem>
-                      <SelectItem value="analogous">Analogous</SelectItem>
-                      <SelectItem value="parametric">Parametric</SelectItem>
-                      <SelectItem value="expert">Expert Judgment</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Confidence</Label>
-                  <Select
-                    value={wbsForm.confidence}
-                    onValueChange={(v: 'high' | 'medium' | 'low') =>
-                      setWbsForm(prev => ({ ...prev, confidence: v }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="low">Low</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Labor Estimates Section */}
-              <div className="space-y-3 pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-blue-600" />
-                    Labor Estimates
-                  </Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const availableRoles = selectedRoles.length > 0 ? selectedRoles : companyRoles
-                      if (availableRoles.length === 0) return
-                      setWbsForm(prev => ({
-                        ...prev,
-                        laborEstimates: [...prev.laborEstimates, {
-                          roleId: availableRoles[0].id,
-                          roleName: availableRoles[0].name,
-                          hoursByPeriod: { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 },
-                          rationale: '',
-                          confidence: 'medium',
-                        }]
-                      }))
-                    }}
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1" />
-                    Add Role
-                  </Button>
-                </div>
-                {wbsForm.laborEstimates.length === 0 ? (
-                  <p className="text-sm text-gray-500 italic">No labor estimates added yet</p>
-                ) : (
-                  <div className="space-y-3">
-                    {wbsForm.laborEstimates.map((le, idx) => (
-                      <div key={idx} className="p-3 border border-gray-200 rounded-lg space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1">
-                            <Select
-                              value={le.roleId}
-                              onValueChange={(v) => {
-                                const availableRoles = selectedRoles.length > 0 ? selectedRoles : companyRoles
-                                const role = availableRoles.find(r => r.id === v)
-                                setWbsForm(prev => ({
-                                  ...prev,
-                                  laborEstimates: prev.laborEstimates.map((l, i) =>
-                                    i === idx ? { ...l, roleId: v, roleName: role?.name || '' } : l
-                                  )
-                                }))
-                              }}
-                            >
-                              <SelectTrigger className="h-8 text-sm">
-                                <SelectValue placeholder="Select role..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(selectedRoles.length > 0 ? selectedRoles : companyRoles).map(role => (
-                                  <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
-                            onClick={() => {
-                              setWbsForm(prev => ({
-                                ...prev,
-                                laborEstimates: prev.laborEstimates.filter((_, i) => i !== idx)
-                              }))
-                            }}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-5 gap-2">
-                          <div className="text-center">
-                            <Label className="text-[10px] text-gray-500">Base</Label>
-                            <Input
-                              type="number"
-                              className="h-7 text-xs text-center"
-                              value={le.hoursByPeriod.base || ''}
-                              onChange={(e) => {
-                                setWbsForm(prev => ({
-                                  ...prev,
-                                  laborEstimates: prev.laborEstimates.map((l, i) =>
-                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, base: parseInt(e.target.value) || 0 } } : l
-                                  )
-                                }))
-                              }}
-                            />
-                          </div>
-                          <div className="text-center">
-                            <Label className="text-[10px] text-gray-500">OY1</Label>
-                            <Input
-                              type="number"
-                              className="h-7 text-xs text-center"
-                              value={le.hoursByPeriod.option1 || ''}
-                              onChange={(e) => {
-                                setWbsForm(prev => ({
-                                  ...prev,
-                                  laborEstimates: prev.laborEstimates.map((l, i) =>
-                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option1: parseInt(e.target.value) || 0 } } : l
-                                  )
-                                }))
-                              }}
-                            />
-                          </div>
-                          <div className="text-center">
-                            <Label className="text-[10px] text-gray-500">OY2</Label>
-                            <Input
-                              type="number"
-                              className="h-7 text-xs text-center"
-                              value={le.hoursByPeriod.option2 || ''}
-                              onChange={(e) => {
-                                setWbsForm(prev => ({
-                                  ...prev,
-                                  laborEstimates: prev.laborEstimates.map((l, i) =>
-                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option2: parseInt(e.target.value) || 0 } } : l
-                                  )
-                                }))
-                              }}
-                            />
-                          </div>
-                          <div className="text-center">
-                            <Label className="text-[10px] text-gray-500">OY3</Label>
-                            <Input
-                              type="number"
-                              className="h-7 text-xs text-center"
-                              value={le.hoursByPeriod.option3 || ''}
-                              onChange={(e) => {
-                                setWbsForm(prev => ({
-                                  ...prev,
-                                  laborEstimates: prev.laborEstimates.map((l, i) =>
-                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option3: parseInt(e.target.value) || 0 } } : l
-                                  )
-                                }))
-                              }}
-                            />
-                          </div>
-                          <div className="text-center">
-                            <Label className="text-[10px] text-gray-500">OY4</Label>
-                            <Input
-                              type="number"
-                              className="h-7 text-xs text-center"
-                              value={le.hoursByPeriod.option4 || ''}
-                              onChange={(e) => {
-                                setWbsForm(prev => ({
-                                  ...prev,
-                                  laborEstimates: prev.laborEstimates.map((l, i) =>
-                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option4: parseInt(e.target.value) || 0 } } : l
-                                  )
-                                }))
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-4 gap-2">
-                          <div className="col-span-3">
-                            <Input
-                              placeholder="Rationale for this estimate..."
-                              className="h-7 text-xs"
-                              value={le.rationale}
-                              onChange={(e) => {
-                                setWbsForm(prev => ({
-                                  ...prev,
-                                  laborEstimates: prev.laborEstimates.map((l, i) =>
-                                    i === idx ? { ...l, rationale: e.target.value } : l
-                                  )
-                                }))
-                              }}
-                            />
-                          </div>
-                          <Select
-                            value={le.confidence}
-                            onValueChange={(v: 'high' | 'medium' | 'low') => {
-                              setWbsForm(prev => ({
-                                ...prev,
-                                laborEstimates: prev.laborEstimates.map((l, i) =>
-                                  i === idx ? { ...l, confidence: v } : l
-                                )
-                              }))
-                            }}
-                          >
-                            <SelectTrigger className="h-7 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="high">High</SelectItem>
-                              <SelectItem value="medium">Medium</SelectItem>
-                              <SelectItem value="low">Low</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Assumptions Section */}
-              <div className="space-y-3 pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-500" />
-                    Assumptions
-                  </Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setWbsForm(prev => ({
-                        ...prev,
-                        assumptions: [...prev.assumptions, '']
-                      }))
-                    }}
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1" />
-                    Add
-                  </Button>
-                </div>
-                {wbsForm.assumptions.length === 0 ? (
-                  <p className="text-sm text-gray-500 italic">No assumptions added yet</p>
-                ) : (
-                  <div className="space-y-2">
-                    {wbsForm.assumptions.map((assumption, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <Input
-                          placeholder="Enter assumption..."
-                          className="h-8 text-sm"
-                          value={assumption}
-                          onChange={(e) => {
-                            setWbsForm(prev => ({
-                              ...prev,
-                              assumptions: prev.assumptions.map((a, i) => i === idx ? e.target.value : a)
-                            }))
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
-                          onClick={() => {
-                            setWbsForm(prev => ({
-                              ...prev,
-                              assumptions: prev.assumptions.filter((_, i) => i !== idx)
-                            }))
-                          }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Risks Section */}
-              <div className="space-y-3 pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-red-500" />
-                    Risks
-                  </Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setWbsForm(prev => ({
-                        ...prev,
-                        risks: [...prev.risks, {
-                          id: `risk-${Date.now()}`,
-                          description: '',
-                          probability: 'medium',
-                          impact: 'medium',
-                          mitigation: '',
-                        }]
-                      }))
-                    }}
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1" />
-                    Add Risk
-                  </Button>
-                </div>
-                {wbsForm.risks.length === 0 ? (
-                  <p className="text-sm text-gray-500 italic">No risks identified yet</p>
-                ) : (
-                  <div className="space-y-3">
-                    {wbsForm.risks.map((risk, idx) => (
-                      <div key={risk.id} className="p-3 border border-gray-200 rounded-lg space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <Input
-                            placeholder="Risk description..."
-                            className="h-8 text-sm"
-                            value={risk.description}
-                            onChange={(e) => {
-                              setWbsForm(prev => ({
-                                ...prev,
-                                risks: prev.risks.map((r, i) =>
-                                  i === idx ? { ...r, description: e.target.value } : r
-                                )
-                              }))
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
-                            onClick={() => {
-                              setWbsForm(prev => ({
-                                ...prev,
-                                risks: prev.risks.filter((_, i) => i !== idx)
-                              }))
-                            }}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-[10px] text-gray-500">Probability</Label>
-                            <Select
-                              value={risk.probability}
-                              onValueChange={(v: 'low' | 'medium' | 'high') => {
-                                setWbsForm(prev => ({
-                                  ...prev,
-                                  risks: prev.risks.map((r, i) =>
-                                    i === idx ? { ...r, probability: v } : r
-                                  )
-                                }))
-                              }}
-                            >
-                              <SelectTrigger className="h-7 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="low">Low</SelectItem>
-                                <SelectItem value="medium">Medium</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label className="text-[10px] text-gray-500">Impact</Label>
-                            <Select
-                              value={risk.impact}
-                              onValueChange={(v: 'low' | 'medium' | 'high') => {
-                                setWbsForm(prev => ({
-                                  ...prev,
-                                  risks: prev.risks.map((r, i) =>
-                                    i === idx ? { ...r, impact: v } : r
-                                  )
-                                }))
-                              }}
-                            >
-                              <SelectTrigger className="h-7 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="low">Low</SelectItem>
-                                <SelectItem value="medium">Medium</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <Input
-                          placeholder="Mitigation strategy..."
-                          className="h-7 text-xs"
-                          value={risk.mitigation}
-                          onChange={(e) => {
-                            setWbsForm(prev => ({
-                              ...prev,
-                              risks: prev.risks.map((r, i) =>
-                                i === idx ? { ...r, mitigation: e.target.value } : r
-                              )
-                            }))
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Dependencies Section */}
-              <div className="space-y-3 pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <ArrowRight className="w-4 h-4 text-gray-500" />
-                    Dependencies
-                  </Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setWbsForm(prev => ({
-                        ...prev,
-                        dependencies: [...prev.dependencies, '']
-                      }))
-                    }}
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1" />
-                    Add
-                  </Button>
-                </div>
-                {wbsForm.dependencies.length === 0 ? (
-                  <p className="text-sm text-gray-500 italic">No dependencies specified</p>
-                ) : (
-                  <div className="space-y-2">
-                    {wbsForm.dependencies.map((dep, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <Input
-                          placeholder="WBS number (e.g., 1.1) or description..."
-                          className="h-8 text-sm"
-                          value={dep}
-                          onChange={(e) => {
-                            setWbsForm(prev => ({
-                              ...prev,
-                              dependencies: prev.dependencies.map((d, i) => i === idx ? e.target.value : d)
-                            }))
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
-                          onClick={() => {
-                            setWbsForm(prev => ({
-                              ...prev,
-                              dependencies: prev.dependencies.filter((_, i) => i !== idx)
-                            }))
-                          }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => {
+        {/* Add/Edit WBS Slideout Panel */}
+        {(showAddWbs || editingWbs) && (
+          <>
+            {/* Overlay */}
+            <div
+              className="fixed inset-0 bg-black/20 z-40"
+              onClick={() => {
                 setShowAddWbs(false)
                 setEditingWbs(null)
                 setPreLinkedRequirement(null)
-              }}>
-                Cancel
-              </Button>
-              <Button
-                className="bg-emerald-600 hover:bg-emerald-700"
-                disabled={wbsFormLoading || !wbsForm.title || !wbsForm.wbsNumber}
-                onClick={handleSaveWbs}
-              >
-                {wbsFormLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Generating...
-                  </>
-                ) : editingWbs ? 'Save Changes' : 'Add WBS Element'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              }}
+            />
+
+            {/* Slideout Panel */}
+            <div className="fixed inset-y-0 right-0 w-[600px] bg-white shadow-2xl
+                            border-l border-gray-200 overflow-hidden z-50
+                            animate-in slide-in-from-right duration-200 flex flex-col">
+              {/* Header */}
+              <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {editingWbs ? 'Edit WBS Element' : 'Add WBS Element'}
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {preLinkedRequirement
+                        ? `Creating WBS for ${preLinkedRequirement.referenceNumber}`
+                        : 'Define work breakdown structure element'}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowAddWbs(false)
+                      setEditingWbs(null)
+                      setPreLinkedRequirement(null)
+                    }}
+                    className="text-2xl leading-none h-8 w-8 p-0"
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+
+                {/* Auto-fill with AI Button */}
+                {preLinkedRequirement && !wbsFormLoading && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => {
+                      setWbsFormLoading(true)
+                      // Reset form first
+                      setWbsForm({
+                        wbsNumber: '',
+                        title: '',
+                        sowReference: preLinkedRequirement.source || '',
+                        why: '',
+                        what: '',
+                        notIncluded: '',
+                        estimateMethod: 'engineering',
+                        confidence: 'medium',
+                        laborEstimates: [],
+                        assumptions: [],
+                        risks: [],
+                        dependencies: [],
+                      })
+
+                      // Calculate next WBS number
+                      const nextWbsNumber = wbsElements.length === 0
+                        ? '1.1'
+                        : (() => {
+                            const numbers = wbsElements.map(w => {
+                              const parts = w.wbsNumber.split('.')
+                              return { major: parseInt(parts[0]) || 1, minor: parseInt(parts[1]) || 0 }
+                            }).sort((a, b) => a.major === b.major ? b.minor - a.minor : b.major - a.major)
+                            const highest = numbers[0]
+                            return `${highest.major}.${highest.minor + 1}`
+                          })()
+
+                      // Use Labor Categories from Account Center
+                      const availableRolesForApi = companyRoles.map(r => ({
+                        id: r.id,
+                        name: r.title,
+                        laborCategory: r.laborCategory,
+                        description: r.description,
+                        levels: r.levels.map(l => ({
+                          level: l.level,
+                          levelName: l.levelName,
+                          yearsExperience: l.yearsExperience,
+                          baseSalary: l.steps[0]?.salary || 0,
+                        })),
+                      }))
+
+                      fetch('/api/generate-wbs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          requirements: [{
+                            id: preLinkedRequirement.id,
+                            referenceNumber: preLinkedRequirement.referenceNumber,
+                            title: preLinkedRequirement.title,
+                            description: preLinkedRequirement.description,
+                            type: preLinkedRequirement.type,
+                            category: preLinkedRequirement.category,
+                            source: preLinkedRequirement.source,
+                          }],
+                          availableRoles: availableRolesForApi,
+                          existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
+                          contractContext: {
+                            title: currentProposal?.name || solicitation?.title || 'Untitled',
+                            agency: solicitation?.clientAgency || 'Government Agency',
+                            contractType: solicitation?.contractType || 'T&M',
+                            periodOfPerformance: {
+                              baseYear: solicitation?.periodOfPerformance?.baseYear ?? true,
+                              optionYears: solicitation?.periodOfPerformance?.optionYears ?? 2
+                            }
+                          }
+                        })
+                      })
+                        .then(res => res.json())
+                        .then(data => {
+                          if (data.wbsElements && data.wbsElements.length > 0) {
+                            const generated = data.wbsElements[0]
+                            setWbsForm({
+                              wbsNumber: generated.wbsNumber || nextWbsNumber,
+                              title: generated.title || '',
+                              sowReference: generated.sowReference || preLinkedRequirement.source || '',
+                              why: generated.why || '',
+                              what: generated.what || '',
+                              notIncluded: generated.notIncluded || '',
+                              estimateMethod: generated.estimateMethod || 'engineering',
+                              confidence: generated.confidence || 'medium',
+                              laborEstimates: (generated.laborEstimates || []).map((le: any) => ({
+                                roleId: le.roleId || '',
+                                roleName: le.roleName || '',
+                                hoursByPeriod: {
+                                  base: le.hoursByPeriod?.base || 0,
+                                  option1: le.hoursByPeriod?.option1 || 0,
+                                  option2: le.hoursByPeriod?.option2 || 0,
+                                  option3: le.hoursByPeriod?.option3 || 0,
+                                  option4: le.hoursByPeriod?.option4 || 0,
+                                },
+                                rationale: le.rationale || '',
+                                confidence: le.confidence || 'medium',
+                              })),
+                              assumptions: generated.assumptions || [],
+                              risks: (generated.risks || []).map((r: any) => ({
+                                id: `risk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                description: r.description || '',
+                                probability: r.likelihood || r.probability || 'medium',
+                                impact: r.impact || 'medium',
+                                mitigation: r.mitigation || '',
+                              })),
+                              dependencies: generated.suggestedDependencies || generated.dependencies || [],
+                            })
+                          }
+                        })
+                        .catch(err => console.error('AI generation failed:', err))
+                        .finally(() => setWbsFormLoading(false))
+                    }}
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Auto-fill with AI
+                  </Button>
+                )}
+
+                {/* Loading state */}
+                {wbsFormLoading && (
+                  <div className="flex items-center justify-center py-4 bg-emerald-50 rounded-lg mt-3">
+                    <Loader2 className="w-5 h-5 text-emerald-600 animate-spin mr-2" />
+                    <span className="text-sm text-emerald-700">AI is generating WBS details...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Scrollable Content */}
+              <div className={`flex-1 overflow-y-auto p-6 space-y-4 ${wbsFormLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                {/* Show pre-linked requirement */}
+                {preLinkedRequirement && !editingWbs && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Link2 className="w-4 h-4 text-emerald-600" />
+                      <span className="text-sm font-medium text-emerald-800">Linked Requirement</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-emerald-600">{preLinkedRequirement.referenceNumber}</span>
+                      <span className="text-sm text-emerald-700">{preLinkedRequirement.title}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Basic Info - Always visible */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>WBS Number</Label>
+                    <Input
+                      placeholder="1.1"
+                      value={wbsForm.wbsNumber}
+                      onChange={(e) => setWbsForm(prev => ({ ...prev, wbsNumber: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>SOW Reference</Label>
+                    <Input
+                      placeholder="SOO 3.1.1"
+                      value={wbsForm.sowReference}
+                      onChange={(e) => setWbsForm(prev => ({ ...prev, sowReference: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Title</Label>
+                  <Input
+                    placeholder="WBS element title..."
+                    value={wbsForm.title}
+                    onChange={(e) => setWbsForm(prev => ({ ...prev, title: e.target.value }))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Estimate Method</Label>
+                    <Select
+                      value={wbsForm.estimateMethod}
+                      onValueChange={(v: 'engineering' | 'analogous' | 'parametric' | 'expert') =>
+                        setWbsForm(prev => ({ ...prev, estimateMethod: v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="engineering">Engineering</SelectItem>
+                        <SelectItem value="analogous">Analogous</SelectItem>
+                        <SelectItem value="parametric">Parametric</SelectItem>
+                        <SelectItem value="expert">Expert Judgment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Confidence</Label>
+                    <Select
+                      value={wbsForm.confidence}
+                      onValueChange={(v: 'high' | 'medium' | 'low') =>
+                        setWbsForm(prev => ({ ...prev, confidence: v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Collapsible: Task Description */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                    onClick={() => setExpandedSections(prev => ({ ...prev, taskDescription: !prev.taskDescription }))}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <Target className="w-4 h-4 text-emerald-600" />
+                      Task Description
+                    </span>
+                    {expandedSections.taskDescription ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {expandedSections.taskDescription && (
+                    <div className="p-4 space-y-4 border-t border-gray-200">
+                      <div className="space-y-2">
+                        <Label>Why (Purpose)</Label>
+                        <Textarea
+                          placeholder="Why is this work needed?"
+                          rows={2}
+                          value={wbsForm.why}
+                          onChange={(e) => setWbsForm(prev => ({ ...prev, why: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>What (Deliverables)</Label>
+                        <Textarea
+                          placeholder="What will be delivered?"
+                          rows={2}
+                          value={wbsForm.what}
+                          onChange={(e) => setWbsForm(prev => ({ ...prev, what: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Not Included</Label>
+                        <Textarea
+                          placeholder="What is explicitly out of scope?"
+                          rows={2}
+                          value={wbsForm.notIncluded}
+                          onChange={(e) => setWbsForm(prev => ({ ...prev, notIncluded: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Collapsible: Labor Estimates */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                    onClick={() => setExpandedSections(prev => ({ ...prev, laborEstimates: !prev.laborEstimates }))}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <Users className="w-4 h-4 text-blue-600" />
+                      Labor Estimates
+                      {wbsForm.laborEstimates.length > 0 && (
+                        <Badge variant="secondary" className="ml-1 text-xs">
+                          {wbsForm.laborEstimates.length} role{wbsForm.laborEstimates.length !== 1 ? 's' : ''}
+                        </Badge>
+                      )}
+                    </span>
+                    {expandedSections.laborEstimates ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {expandedSections.laborEstimates && (
+                    <div className="p-4 space-y-4 border-t border-gray-200">
+                      {/* Add Role Button */}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        disabled={companyRoles.length === 0}
+                        onClick={() => {
+                          if (companyRoles.length === 0) return
+                          const firstRole = companyRoles[0]
+                          const firstLevel = firstRole.levels[0]
+                          setWbsForm(prev => ({
+                            ...prev,
+                            laborEstimates: [...prev.laborEstimates, {
+                              roleId: `${firstRole.id}-${firstLevel?.level || 'IC3'}`,
+                              roleName: `${firstRole.title} (${firstLevel?.levelName || 'Mid'})`,
+                              hoursByPeriod: { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 },
+                              rationale: '',
+                              confidence: 'medium',
+                            }]
+                          }))
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add Labor Category
+                      </Button>
+
+                      {companyRoles.length === 0 && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <p className="text-sm text-amber-800">
+                            No labor categories defined. Go to Account Center to add Labor Categories.
+                          </p>
+                        </div>
+                      )}
+
+                      {wbsForm.laborEstimates.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic text-center py-4">
+                          No labor estimates added yet. Click "Add Labor Category" above.
+                        </p>
+                      ) : (
+                        <div className="space-y-4">
+                          {wbsForm.laborEstimates.map((le, idx) => {
+                            // Find the role and calculate hourly rate
+                            const roleIdParts = le.roleId.split('-')
+                            const baseRoleId = roleIdParts.slice(0, -1).join('-') || le.roleId
+                            const levelCode = roleIdParts[roleIdParts.length - 1] || 'IC3'
+                            const role = companyRoles.find(r => r.id === baseRoleId) || companyRoles.find(r => le.roleName.includes(r.title))
+                            const level = role?.levels.find(l => l.level === levelCode)
+                            const baseSalary = level?.steps[0]?.salary || 0
+                            const hourlyRate = calculateHourlyRate(baseSalary)
+                            const totalHours = (le.hoursByPeriod.base || 0) +
+                              (le.hoursByPeriod.option1 || 0) +
+                              (le.hoursByPeriod.option2 || 0) +
+                              (le.hoursByPeriod.option3 || 0) +
+                              (le.hoursByPeriod.option4 || 0)
+                            const totalCost = totalHours * hourlyRate
+
+                            return (
+                              <div key={idx} className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm space-y-3">
+                                {/* Role Header */}
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1 space-y-2">
+                                    {/* Role/Level Selection */}
+                                    <Select
+                                      value={le.roleId}
+                                      onValueChange={(v) => {
+                                        const [rId, lvl] = v.split('|')
+                                        const selectedRole = companyRoles.find(r => r.id === rId)
+                                        const selectedLevel = selectedRole?.levels.find(l => l.level === lvl)
+                                        setWbsForm(prev => ({
+                                          ...prev,
+                                          laborEstimates: prev.laborEstimates.map((l, i) =>
+                                            i === idx ? {
+                                              ...l,
+                                              roleId: `${rId}-${lvl}`,
+                                              roleName: `${selectedRole?.title || ''} (${selectedLevel?.levelName || lvl})`
+                                            } : l
+                                          )
+                                        }))
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="Select labor category..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {companyRoles.map(r => (
+                                          <React.Fragment key={r.id}>
+                                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50">
+                                              {r.title}
+                                            </div>
+                                            {r.levels.map(lvl => (
+                                              <SelectItem
+                                                key={`${r.id}|${lvl.level}`}
+                                                value={`${r.id}|${lvl.level}`}
+                                              >
+                                                <span className="flex items-center justify-between gap-4">
+                                                  <span>{lvl.levelName} ({lvl.level})</span>
+                                                  <span className="text-xs text-gray-400">
+                                                    ${(lvl.steps[0]?.salary || 0).toLocaleString()}/yr
+                                                  </span>
+                                                </span>
+                                              </SelectItem>
+                                            ))}
+                                          </React.Fragment>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    {/* Rate Info */}
+                                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                                      <span className="font-medium text-gray-700">
+                                        ${hourlyRate.toFixed(2)}/hr
+                                      </span>
+                                      <span className="text-gray-400">|</span>
+                                      <span>
+                                        {totalHours.toLocaleString()} hrs total
+                                      </span>
+                                      <span className="text-gray-400">|</span>
+                                      <span className="font-medium text-emerald-600">
+                                        ${totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                                    onClick={() => {
+                                      setWbsForm(prev => ({
+                                        ...prev,
+                                        laborEstimates: prev.laborEstimates.filter((_, i) => i !== idx)
+                                      }))
+                                    }}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+
+                                {/* Hours by Period */}
+                                <div className="grid grid-cols-5 gap-2">
+                                  <div className="text-center">
+                                    <Label className="text-[10px] text-gray-500 block mb-1">Base Year</Label>
+                                    <Input
+                                      type="number"
+                                      className="h-8 text-sm text-center"
+                                      value={le.hoursByPeriod.base || ''}
+                                      onChange={(e) => {
+                                        setWbsForm(prev => ({
+                                          ...prev,
+                                          laborEstimates: prev.laborEstimates.map((l, i) =>
+                                            i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, base: parseInt(e.target.value) || 0 } } : l
+                                          )
+                                        }))
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="text-center">
+                                    <Label className="text-[10px] text-gray-500 block mb-1">OY1</Label>
+                                    <Input
+                                      type="number"
+                                      className="h-8 text-sm text-center"
+                                      value={le.hoursByPeriod.option1 || ''}
+                                      onChange={(e) => {
+                                        setWbsForm(prev => ({
+                                          ...prev,
+                                          laborEstimates: prev.laborEstimates.map((l, i) =>
+                                            i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option1: parseInt(e.target.value) || 0 } } : l
+                                          )
+                                        }))
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="text-center">
+                                    <Label className="text-[10px] text-gray-500 block mb-1">OY2</Label>
+                                    <Input
+                                      type="number"
+                                      className="h-8 text-sm text-center"
+                                      value={le.hoursByPeriod.option2 || ''}
+                                      onChange={(e) => {
+                                        setWbsForm(prev => ({
+                                          ...prev,
+                                          laborEstimates: prev.laborEstimates.map((l, i) =>
+                                            i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option2: parseInt(e.target.value) || 0 } } : l
+                                          )
+                                        }))
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="text-center">
+                                    <Label className="text-[10px] text-gray-500 block mb-1">OY3</Label>
+                                    <Input
+                                      type="number"
+                                      className="h-8 text-sm text-center"
+                                      value={le.hoursByPeriod.option3 || ''}
+                                      onChange={(e) => {
+                                        setWbsForm(prev => ({
+                                          ...prev,
+                                          laborEstimates: prev.laborEstimates.map((l, i) =>
+                                            i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option3: parseInt(e.target.value) || 0 } } : l
+                                          )
+                                        }))
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="text-center">
+                                    <Label className="text-[10px] text-gray-500 block mb-1">OY4</Label>
+                                    <Input
+                                      type="number"
+                                      className="h-8 text-sm text-center"
+                                      value={le.hoursByPeriod.option4 || ''}
+                                      onChange={(e) => {
+                                        setWbsForm(prev => ({
+                                          ...prev,
+                                          laborEstimates: prev.laborEstimates.map((l, i) =>
+                                            i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option4: parseInt(e.target.value) || 0 } } : l
+                                          )
+                                        }))
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Rationale */}
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    placeholder="Rationale for this estimate..."
+                                    className="flex-1 h-8 text-sm"
+                                    value={le.rationale}
+                                    onChange={(e) => {
+                                      setWbsForm(prev => ({
+                                        ...prev,
+                                        laborEstimates: prev.laborEstimates.map((l, i) =>
+                                          i === idx ? { ...l, rationale: e.target.value } : l
+                                        )
+                                      }))
+                                    }}
+                                  />
+                                  <Select
+                                    value={le.confidence}
+                                    onValueChange={(v: 'high' | 'medium' | 'low') => {
+                                      setWbsForm(prev => ({
+                                        ...prev,
+                                        laborEstimates: prev.laborEstimates.map((l, i) =>
+                                          i === idx ? { ...l, confidence: v } : l
+                                        )
+                                      }))
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-24 h-8 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="high">High</SelectItem>
+                                      <SelectItem value="medium">Medium</SelectItem>
+                                      <SelectItem value="low">Low</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                            )
+                          })}
+
+                          {/* Running Total */}
+                          {wbsForm.laborEstimates.length > 0 && (
+                            <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-gray-600">Total Labor Cost:</span>
+                                <span className="text-lg font-semibold text-emerald-600">
+                                  ${wbsForm.laborEstimates.reduce((sum, le) => {
+                                    const roleIdParts = le.roleId.split('-')
+                                    const baseRoleId = roleIdParts.slice(0, -1).join('-') || le.roleId
+                                    const levelCode = roleIdParts[roleIdParts.length - 1] || 'IC3'
+                                    const role = companyRoles.find(r => r.id === baseRoleId) || companyRoles.find(r => le.roleName.includes(r.title))
+                                    const level = role?.levels.find(l => l.level === levelCode)
+                                    const baseSalary = level?.steps[0]?.salary || 0
+                                    const hourlyRate = calculateHourlyRate(baseSalary)
+                                    const totalHours = (le.hoursByPeriod.base || 0) +
+                                      (le.hoursByPeriod.option1 || 0) +
+                                      (le.hoursByPeriod.option2 || 0) +
+                                      (le.hoursByPeriod.option3 || 0) +
+                                      (le.hoursByPeriod.option4 || 0)
+                                    return sum + (totalHours * hourlyRate)
+                                  }, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Collapsible: Assumptions */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                    onClick={() => setExpandedSections(prev => ({ ...prev, assumptions: !prev.assumptions }))}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <AlertCircle className="w-4 h-4 text-amber-500" />
+                      Assumptions
+                      {wbsForm.assumptions.length > 0 && (
+                        <Badge variant="secondary" className="ml-1 text-xs">
+                          {wbsForm.assumptions.length}
+                        </Badge>
+                      )}
+                    </span>
+                    {expandedSections.assumptions ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {expandedSections.assumptions && (
+                    <div className="p-4 space-y-3 border-t border-gray-200">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setWbsForm(prev => ({
+                            ...prev,
+                            assumptions: [...prev.assumptions, '']
+                          }))
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add Assumption
+                      </Button>
+                      {wbsForm.assumptions.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic text-center py-2">No assumptions added yet</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {wbsForm.assumptions.map((assumption, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <Input
+                                placeholder="Enter assumption..."
+                                className="h-9 text-sm"
+                                value={assumption}
+                                onChange={(e) => {
+                                  setWbsForm(prev => ({
+                                    ...prev,
+                                    assumptions: prev.assumptions.map((a, i) => i === idx ? e.target.value : a)
+                                  }))
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-9 w-9 p-0 text-gray-400 hover:text-red-600"
+                                onClick={() => {
+                                  setWbsForm(prev => ({
+                                    ...prev,
+                                    assumptions: prev.assumptions.filter((_, i) => i !== idx)
+                                  }))
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Collapsible: Risks */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                    onClick={() => setExpandedSections(prev => ({ ...prev, risks: !prev.risks }))}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <AlertTriangle className="w-4 h-4 text-red-500" />
+                      Risks
+                      {wbsForm.risks.length > 0 && (
+                        <Badge variant="secondary" className="ml-1 text-xs">
+                          {wbsForm.risks.length}
+                        </Badge>
+                      )}
+                    </span>
+                    {expandedSections.risks ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {expandedSections.risks && (
+                    <div className="p-4 space-y-3 border-t border-gray-200">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setWbsForm(prev => ({
+                            ...prev,
+                            risks: [...prev.risks, {
+                              id: `risk-${Date.now()}`,
+                              description: '',
+                              probability: 'medium',
+                              impact: 'medium',
+                              mitigation: '',
+                            }]
+                          }))
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add Risk
+                      </Button>
+                      {wbsForm.risks.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic text-center py-2">No risks identified yet</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {wbsForm.risks.map((risk, idx) => (
+                            <div key={risk.id} className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <Input
+                                  placeholder="Risk description..."
+                                  className="h-9 text-sm"
+                                  value={risk.description}
+                                  onChange={(e) => {
+                                    setWbsForm(prev => ({
+                                      ...prev,
+                                      risks: prev.risks.map((r, i) =>
+                                        i === idx ? { ...r, description: e.target.value } : r
+                                      )
+                                    }))
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-9 w-9 p-0 text-gray-400 hover:text-red-600"
+                                  onClick={() => {
+                                    setWbsForm(prev => ({
+                                      ...prev,
+                                      risks: prev.risks.filter((_, i) => i !== idx)
+                                    }))
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-xs text-gray-500 mb-1 block">Probability</Label>
+                                  <Select
+                                    value={risk.probability}
+                                    onValueChange={(v: 'low' | 'medium' | 'high') => {
+                                      setWbsForm(prev => ({
+                                        ...prev,
+                                        risks: prev.risks.map((r, i) =>
+                                          i === idx ? { ...r, probability: v } : r
+                                        )
+                                      }))
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-8 text-sm">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="low">Low</SelectItem>
+                                      <SelectItem value="medium">Medium</SelectItem>
+                                      <SelectItem value="high">High</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-gray-500 mb-1 block">Impact</Label>
+                                  <Select
+                                    value={risk.impact}
+                                    onValueChange={(v: 'low' | 'medium' | 'high') => {
+                                      setWbsForm(prev => ({
+                                        ...prev,
+                                        risks: prev.risks.map((r, i) =>
+                                          i === idx ? { ...r, impact: v } : r
+                                        )
+                                      }))
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-8 text-sm">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="low">Low</SelectItem>
+                                      <SelectItem value="medium">Medium</SelectItem>
+                                      <SelectItem value="high">High</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                              <Input
+                                placeholder="Mitigation strategy..."
+                                className="h-8 text-sm"
+                                value={risk.mitigation}
+                                onChange={(e) => {
+                                  setWbsForm(prev => ({
+                                    ...prev,
+                                    risks: prev.risks.map((r, i) =>
+                                      i === idx ? { ...r, mitigation: e.target.value } : r
+                                    )
+                                  }))
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Collapsible: Dependencies */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                    onClick={() => setExpandedSections(prev => ({ ...prev, dependencies: !prev.dependencies }))}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <ArrowRight className="w-4 h-4 text-purple-600" />
+                      Dependencies
+                      {wbsForm.dependencies.length > 0 && (
+                        <Badge variant="secondary" className="ml-1 text-xs">
+                          {wbsForm.dependencies.length}
+                        </Badge>
+                      )}
+                    </span>
+                    {expandedSections.dependencies ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {expandedSections.dependencies && (
+                    <div className="p-4 space-y-3 border-t border-gray-200">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setWbsForm(prev => ({
+                            ...prev,
+                            dependencies: [...prev.dependencies, '']
+                          }))
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add Dependency
+                      </Button>
+                      {wbsForm.dependencies.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic text-center py-2">No dependencies specified</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {wbsForm.dependencies.map((dep, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <Input
+                                placeholder="WBS number (e.g., 1.1) or description..."
+                                className="h-9 text-sm"
+                                value={dep}
+                                onChange={(e) => {
+                                  setWbsForm(prev => ({
+                                    ...prev,
+                                    dependencies: prev.dependencies.map((d, i) => i === idx ? e.target.value : d)
+                                  }))
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-9 w-9 p-0 text-gray-400 hover:text-red-600"
+                                onClick={() => {
+                                  setWbsForm(prev => ({
+                                    ...prev,
+                                    dependencies: prev.dependencies.filter((_, i) => i !== idx)
+                                  }))
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex-shrink-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddWbs(false)
+                    setEditingWbs(null)
+                    setPreLinkedRequirement(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  disabled={wbsFormLoading || !wbsForm.title || !wbsForm.wbsNumber}
+                  onClick={handleSaveWbs}
+                >
+                  {wbsFormLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : editingWbs ? 'Save Changes' : 'Add WBS Element'}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </TooltipProvider>
   )
