@@ -810,6 +810,19 @@ export function EstimateTab() {
   const [editingRequirement, setEditingRequirement] = useState<SOORequirement | null>(null)
   const [editingWbs, setEditingWbs] = useState<EnhancedWBSElement | null>(null)
   const [preLinkedRequirement, setPreLinkedRequirement] = useState<SOORequirement | null>(null)
+
+  // WBS form state (for Add/Edit dialog)
+  const [wbsFormLoading, setWbsFormLoading] = useState(false)
+  const [wbsForm, setWbsForm] = useState({
+    wbsNumber: '',
+    title: '',
+    sowReference: '',
+    why: '',
+    what: '',
+    notIncluded: '',
+    estimateMethod: 'engineering' as 'engineering' | 'analogous' | 'parametric' | 'expert',
+    confidence: 'medium' as 'high' | 'medium' | 'low',
+  })
   
   // Bulk generation state
   const [showBulkGenerateDialog, setShowBulkGenerateDialog] = useState(false)
@@ -900,6 +913,114 @@ export function EstimateTab() {
       setWbsElements(currentProposal.wbsElements)
     }
   }, [currentProposal])
+
+  // Auto-generate WBS when a requirement is dropped and dialog opens
+  useEffect(() => {
+    if (preLinkedRequirement && showAddWbs && !editingWbs) {
+      // Reset form and start loading
+      setWbsForm({
+        wbsNumber: '',
+        title: '',
+        sowReference: preLinkedRequirement.source || '',
+        why: '',
+        what: '',
+        notIncluded: '',
+        estimateMethod: 'engineering',
+        confidence: 'medium',
+      })
+      setWbsFormLoading(true)
+
+      // Calculate next WBS number
+      const nextWbsNumber = wbsElements.length === 0
+        ? '1.1'
+        : (() => {
+            const numbers = wbsElements.map(w => {
+              const parts = w.wbsNumber.split('.')
+              return { major: parseInt(parts[0]) || 1, minor: parseInt(parts[1]) || 0 }
+            }).sort((a, b) => a.major === b.major ? b.minor - a.minor : b.major - a.major)
+            const highest = numbers[0]
+            return `${highest.major}.${highest.minor + 1}`
+          })()
+
+      // Call API to generate WBS
+      fetch('/api/generate-wbs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requirements: [{
+            id: preLinkedRequirement.id,
+            referenceNumber: preLinkedRequirement.referenceNumber,
+            title: preLinkedRequirement.title,
+            description: preLinkedRequirement.description,
+            type: preLinkedRequirement.type,
+            category: preLinkedRequirement.category,
+            source: preLinkedRequirement.source,
+          }],
+          availableRoles: [],
+          existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
+          contractContext: {
+            title: currentProposal?.name || 'Untitled',
+            agency: 'Government Agency',
+            contractType: 'tm',
+            periodOfPerformance: { baseYear: true, optionYears: 2 }
+          }
+        })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.wbsElements && data.wbsElements.length > 0) {
+            const generated = data.wbsElements[0]
+            setWbsForm({
+              wbsNumber: generated.wbsNumber || nextWbsNumber,
+              title: generated.title || '',
+              sowReference: generated.sowReference || preLinkedRequirement.source || '',
+              why: generated.why || '',
+              what: generated.what || '',
+              notIncluded: generated.notIncluded || '',
+              estimateMethod: generated.estimateMethod || 'engineering',
+              confidence: generated.confidence || 'medium',
+            })
+          } else {
+            // Fallback to basic defaults if API fails
+            setWbsForm(prev => ({
+              ...prev,
+              wbsNumber: nextWbsNumber,
+              title: `Implement: ${preLinkedRequirement.title}`,
+              sowReference: preLinkedRequirement.source || preLinkedRequirement.referenceNumber,
+            }))
+          }
+        })
+        .catch(() => {
+          // Fallback on error
+          setWbsForm(prev => ({
+            ...prev,
+            wbsNumber: nextWbsNumber,
+            title: `Implement: ${preLinkedRequirement.title}`,
+            sowReference: preLinkedRequirement.source || preLinkedRequirement.referenceNumber,
+          }))
+        })
+        .finally(() => {
+          setWbsFormLoading(false)
+        })
+    }
+  }, [preLinkedRequirement, showAddWbs, editingWbs, wbsElements, currentProposal])
+
+  // Reset form when dialog closes
+  useEffect(() => {
+    if (!showAddWbs && !editingWbs) {
+      setWbsForm({
+        wbsNumber: '',
+        title: '',
+        sowReference: '',
+        why: '',
+        what: '',
+        notIncluded: '',
+        estimateMethod: 'engineering',
+        confidence: 'medium',
+      })
+      setWbsFormLoading(false)
+    }
+  }, [showAddWbs, editingWbs])
 
   // ========== COMPUTED VALUES ==========
   
@@ -1535,37 +1656,82 @@ export function EstimateTab() {
                 </div>
               </div>
             )}
-            <div className="space-y-4 py-4">
+
+            {/* Loading state while AI generates */}
+            {wbsFormLoading && (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-3" />
+                  <p className="text-sm text-gray-600">AI is generating WBS details...</p>
+                  <p className="text-xs text-gray-400 mt-1">This may take a few seconds</p>
+                </div>
+              </div>
+            )}
+
+            {/* Form fields */}
+            <div className={`space-y-4 py-4 ${wbsFormLoading ? 'opacity-50 pointer-events-none' : ''}`}>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>WBS Number</Label>
-                  <Input placeholder="1.1" />
+                  <Input
+                    placeholder="1.1"
+                    value={wbsForm.wbsNumber}
+                    onChange={(e) => setWbsForm(prev => ({ ...prev, wbsNumber: e.target.value }))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>SOW Reference</Label>
-                  <Input placeholder="SOO 3.1.1" />
+                  <Input
+                    placeholder="SOO 3.1.1"
+                    value={wbsForm.sowReference}
+                    onChange={(e) => setWbsForm(prev => ({ ...prev, sowReference: e.target.value }))}
+                  />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label>Title</Label>
-                <Input placeholder="WBS element title..." />
+                <Input
+                  placeholder="WBS element title..."
+                  value={wbsForm.title}
+                  onChange={(e) => setWbsForm(prev => ({ ...prev, title: e.target.value }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Why (Purpose)</Label>
-                <Textarea placeholder="Why is this work needed?" rows={2} />
+                <Textarea
+                  placeholder="Why is this work needed?"
+                  rows={2}
+                  value={wbsForm.why}
+                  onChange={(e) => setWbsForm(prev => ({ ...prev, why: e.target.value }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label>What (Deliverables)</Label>
-                <Textarea placeholder="What will be delivered?" rows={2} />
+                <Textarea
+                  placeholder="What will be delivered?"
+                  rows={2}
+                  value={wbsForm.what}
+                  onChange={(e) => setWbsForm(prev => ({ ...prev, what: e.target.value }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Not Included</Label>
-                <Textarea placeholder="What is explicitly out of scope?" rows={2} />
+                <Textarea
+                  placeholder="What is explicitly out of scope?"
+                  rows={2}
+                  value={wbsForm.notIncluded}
+                  onChange={(e) => setWbsForm(prev => ({ ...prev, notIncluded: e.target.value }))}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Estimate Method</Label>
-                  <Select defaultValue="engineering">
+                  <Select
+                    value={wbsForm.estimateMethod}
+                    onValueChange={(v: 'engineering' | 'analogous' | 'parametric' | 'expert') =>
+                      setWbsForm(prev => ({ ...prev, estimateMethod: v }))
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1579,7 +1745,12 @@ export function EstimateTab() {
                 </div>
                 <div className="space-y-2">
                   <Label>Confidence</Label>
-                  <Select defaultValue="medium">
+                  <Select
+                    value={wbsForm.confidence}
+                    onValueChange={(v: 'high' | 'medium' | 'low') =>
+                      setWbsForm(prev => ({ ...prev, confidence: v }))
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1600,8 +1771,16 @@ export function EstimateTab() {
               }}>
                 Cancel
               </Button>
-              <Button className="bg-emerald-600 hover:bg-emerald-700">
-                {editingWbs ? 'Save Changes' : 'Add WBS Element'}
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700"
+                disabled={wbsFormLoading}
+              >
+                {wbsFormLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : editingWbs ? 'Save Changes' : 'Add WBS Element'}
               </Button>
             </DialogFooter>
           </DialogContent>
