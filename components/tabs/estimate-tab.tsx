@@ -76,6 +76,14 @@ interface LaborEstimate {
   confidence: 'high' | 'medium' | 'low'
 }
 
+interface WBSRisk {
+  id: string
+  description: string
+  probability: 'low' | 'medium' | 'high'
+  impact: 'low' | 'medium' | 'high'
+  mitigation: string
+}
+
 interface EnhancedWBSElement {
   id: string
   wbsNumber: string
@@ -90,6 +98,8 @@ interface EnhancedWBSElement {
   linkedRequirementIds: string[]
   totalHours: number
   confidence: 'high' | 'medium' | 'low'
+  risks?: WBSRisk[]
+  dependencies?: string[]
 }
 
 // ============================================================================
@@ -785,7 +795,7 @@ function WBSEmptyState({ hasRequirements }: { hasRequirements: boolean }) {
 // ============================================================================
 
 export function EstimateTab() {
-  const { currentProposal } = useAppContext()
+  const { currentProposal, companyRoles, selectedRoles } = useAppContext()
   
   // ========== STATE ==========
   
@@ -822,6 +832,10 @@ export function EstimateTab() {
     notIncluded: '',
     estimateMethod: 'engineering' as 'engineering' | 'analogous' | 'parametric' | 'expert',
     confidence: 'medium' as 'high' | 'medium' | 'low',
+    laborEstimates: [] as LaborEstimate[],
+    assumptions: [] as string[],
+    risks: [] as WBSRisk[],
+    dependencies: [] as string[],
   })
   
   // Bulk generation state
@@ -927,6 +941,10 @@ export function EstimateTab() {
         notIncluded: '',
         estimateMethod: 'engineering',
         confidence: 'medium',
+        laborEstimates: [],
+        assumptions: [],
+        risks: [],
+        dependencies: [],
       })
       setWbsFormLoading(true)
 
@@ -942,6 +960,14 @@ export function EstimateTab() {
             return `${highest.major}.${highest.minor + 1}`
           })()
 
+      // Use selected roles from Roles & Pricing, fallback to company roles
+      const availableRolesForApi = (selectedRoles.length > 0 ? selectedRoles : companyRoles).map(r => ({
+        id: r.id,
+        name: r.name,
+        category: 'category' in r ? r.category : 'General',
+        description: r.description,
+      }))
+
       // Call API to generate WBS
       fetch('/api/generate-wbs', {
         method: 'POST',
@@ -956,7 +982,7 @@ export function EstimateTab() {
             category: preLinkedRequirement.category,
             source: preLinkedRequirement.source,
           }],
-          availableRoles: [],
+          availableRoles: availableRolesForApi,
           existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
           contractContext: {
             title: currentProposal?.name || 'Untitled',
@@ -979,6 +1005,28 @@ export function EstimateTab() {
               notIncluded: generated.notIncluded || '',
               estimateMethod: generated.estimateMethod || 'engineering',
               confidence: generated.confidence || 'medium',
+              laborEstimates: (generated.laborEstimates || []).map((le: any) => ({
+                roleId: le.roleId || '',
+                roleName: le.roleName || '',
+                hoursByPeriod: {
+                  base: le.hoursByPeriod?.base || 0,
+                  option1: le.hoursByPeriod?.option1 || 0,
+                  option2: le.hoursByPeriod?.option2 || 0,
+                  option3: le.hoursByPeriod?.option3 || 0,
+                  option4: le.hoursByPeriod?.option4 || 0,
+                },
+                rationale: le.rationale || '',
+                confidence: le.confidence || 'medium',
+              })),
+              assumptions: generated.assumptions || [],
+              risks: (generated.risks || []).map((r: any) => ({
+                id: `risk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                description: r.description || '',
+                probability: r.likelihood || r.probability || 'medium',
+                impact: r.impact || 'medium',
+                mitigation: r.mitigation || '',
+              })),
+              dependencies: generated.suggestedDependencies || generated.dependencies || [],
             })
           } else {
             // Fallback to basic defaults if API fails
@@ -1003,7 +1051,7 @@ export function EstimateTab() {
           setWbsFormLoading(false)
         })
     }
-  }, [preLinkedRequirement, showAddWbs, editingWbs, wbsElements, currentProposal])
+  }, [preLinkedRequirement, showAddWbs, editingWbs, wbsElements, currentProposal, selectedRoles, companyRoles])
 
   // Reset form when dialog closes
   useEffect(() => {
@@ -1017,6 +1065,10 @@ export function EstimateTab() {
         notIncluded: '',
         estimateMethod: 'engineering',
         confidence: 'medium',
+        laborEstimates: [],
+        assumptions: [],
+        risks: [],
+        dependencies: [],
       })
       setWbsFormLoading(false)
     }
@@ -1182,6 +1234,15 @@ export function EstimateTab() {
 
     const newWbsId = `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
+    // Calculate total hours from labor estimates
+    const totalHours = wbsForm.laborEstimates.reduce((sum, le) => {
+      return sum + (le.hoursByPeriod.base || 0) +
+        (le.hoursByPeriod.option1 || 0) +
+        (le.hoursByPeriod.option2 || 0) +
+        (le.hoursByPeriod.option3 || 0) +
+        (le.hoursByPeriod.option4 || 0)
+    }, 0)
+
     const newWbs: EnhancedWBSElement = {
       id: newWbsId,
       wbsNumber: wbsForm.wbsNumber,
@@ -1190,12 +1251,14 @@ export function EstimateTab() {
       why: wbsForm.why,
       what: wbsForm.what,
       notIncluded: wbsForm.notIncluded,
-      assumptions: [],
+      assumptions: wbsForm.assumptions,
       estimateMethod: wbsForm.estimateMethod,
-      laborEstimates: [],
+      laborEstimates: wbsForm.laborEstimates,
       linkedRequirementIds: preLinkedRequirement ? [preLinkedRequirement.id] : [],
-      totalHours: 0,
+      totalHours,
       confidence: wbsForm.confidence,
+      risks: wbsForm.risks,
+      dependencies: wbsForm.dependencies,
     }
 
     // Add the new WBS element
@@ -1223,6 +1286,10 @@ export function EstimateTab() {
       notIncluded: '',
       estimateMethod: 'engineering',
       confidence: 'medium',
+      laborEstimates: [],
+      assumptions: [],
+      risks: [],
+      dependencies: [],
     })
   }, [wbsForm, preLinkedRequirement])
 
@@ -1811,6 +1878,455 @@ export function EstimateTab() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Labor Estimates Section */}
+              <div className="space-y-3 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    Labor Estimates
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const availableRoles = selectedRoles.length > 0 ? selectedRoles : companyRoles
+                      if (availableRoles.length === 0) return
+                      setWbsForm(prev => ({
+                        ...prev,
+                        laborEstimates: [...prev.laborEstimates, {
+                          roleId: availableRoles[0].id,
+                          roleName: availableRoles[0].name,
+                          hoursByPeriod: { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 },
+                          rationale: '',
+                          confidence: 'medium',
+                        }]
+                      }))
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Add Role
+                  </Button>
+                </div>
+                {wbsForm.laborEstimates.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">No labor estimates added yet</p>
+                ) : (
+                  <div className="space-y-3">
+                    {wbsForm.laborEstimates.map((le, idx) => (
+                      <div key={idx} className="p-3 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <Select
+                              value={le.roleId}
+                              onValueChange={(v) => {
+                                const availableRoles = selectedRoles.length > 0 ? selectedRoles : companyRoles
+                                const role = availableRoles.find(r => r.id === v)
+                                setWbsForm(prev => ({
+                                  ...prev,
+                                  laborEstimates: prev.laborEstimates.map((l, i) =>
+                                    i === idx ? { ...l, roleId: v, roleName: role?.name || '' } : l
+                                  )
+                                }))
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Select role..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(selectedRoles.length > 0 ? selectedRoles : companyRoles).map(role => (
+                                  <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                            onClick={() => {
+                              setWbsForm(prev => ({
+                                ...prev,
+                                laborEstimates: prev.laborEstimates.filter((_, i) => i !== idx)
+                              }))
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-5 gap-2">
+                          <div className="text-center">
+                            <Label className="text-[10px] text-gray-500">Base</Label>
+                            <Input
+                              type="number"
+                              className="h-7 text-xs text-center"
+                              value={le.hoursByPeriod.base || ''}
+                              onChange={(e) => {
+                                setWbsForm(prev => ({
+                                  ...prev,
+                                  laborEstimates: prev.laborEstimates.map((l, i) =>
+                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, base: parseInt(e.target.value) || 0 } } : l
+                                  )
+                                }))
+                              }}
+                            />
+                          </div>
+                          <div className="text-center">
+                            <Label className="text-[10px] text-gray-500">OY1</Label>
+                            <Input
+                              type="number"
+                              className="h-7 text-xs text-center"
+                              value={le.hoursByPeriod.option1 || ''}
+                              onChange={(e) => {
+                                setWbsForm(prev => ({
+                                  ...prev,
+                                  laborEstimates: prev.laborEstimates.map((l, i) =>
+                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option1: parseInt(e.target.value) || 0 } } : l
+                                  )
+                                }))
+                              }}
+                            />
+                          </div>
+                          <div className="text-center">
+                            <Label className="text-[10px] text-gray-500">OY2</Label>
+                            <Input
+                              type="number"
+                              className="h-7 text-xs text-center"
+                              value={le.hoursByPeriod.option2 || ''}
+                              onChange={(e) => {
+                                setWbsForm(prev => ({
+                                  ...prev,
+                                  laborEstimates: prev.laborEstimates.map((l, i) =>
+                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option2: parseInt(e.target.value) || 0 } } : l
+                                  )
+                                }))
+                              }}
+                            />
+                          </div>
+                          <div className="text-center">
+                            <Label className="text-[10px] text-gray-500">OY3</Label>
+                            <Input
+                              type="number"
+                              className="h-7 text-xs text-center"
+                              value={le.hoursByPeriod.option3 || ''}
+                              onChange={(e) => {
+                                setWbsForm(prev => ({
+                                  ...prev,
+                                  laborEstimates: prev.laborEstimates.map((l, i) =>
+                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option3: parseInt(e.target.value) || 0 } } : l
+                                  )
+                                }))
+                              }}
+                            />
+                          </div>
+                          <div className="text-center">
+                            <Label className="text-[10px] text-gray-500">OY4</Label>
+                            <Input
+                              type="number"
+                              className="h-7 text-xs text-center"
+                              value={le.hoursByPeriod.option4 || ''}
+                              onChange={(e) => {
+                                setWbsForm(prev => ({
+                                  ...prev,
+                                  laborEstimates: prev.laborEstimates.map((l, i) =>
+                                    i === idx ? { ...l, hoursByPeriod: { ...l.hoursByPeriod, option4: parseInt(e.target.value) || 0 } } : l
+                                  )
+                                }))
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          <div className="col-span-3">
+                            <Input
+                              placeholder="Rationale for this estimate..."
+                              className="h-7 text-xs"
+                              value={le.rationale}
+                              onChange={(e) => {
+                                setWbsForm(prev => ({
+                                  ...prev,
+                                  laborEstimates: prev.laborEstimates.map((l, i) =>
+                                    i === idx ? { ...l, rationale: e.target.value } : l
+                                  )
+                                }))
+                              }}
+                            />
+                          </div>
+                          <Select
+                            value={le.confidence}
+                            onValueChange={(v: 'high' | 'medium' | 'low') => {
+                              setWbsForm(prev => ({
+                                ...prev,
+                                laborEstimates: prev.laborEstimates.map((l, i) =>
+                                  i === idx ? { ...l, confidence: v } : l
+                                )
+                              }))
+                            }}
+                          >
+                            <SelectTrigger className="h-7 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="low">Low</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Assumptions Section */}
+              <div className="space-y-3 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-500" />
+                    Assumptions
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setWbsForm(prev => ({
+                        ...prev,
+                        assumptions: [...prev.assumptions, '']
+                      }))
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Add
+                  </Button>
+                </div>
+                {wbsForm.assumptions.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">No assumptions added yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {wbsForm.assumptions.map((assumption, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <Input
+                          placeholder="Enter assumption..."
+                          className="h-8 text-sm"
+                          value={assumption}
+                          onChange={(e) => {
+                            setWbsForm(prev => ({
+                              ...prev,
+                              assumptions: prev.assumptions.map((a, i) => i === idx ? e.target.value : a)
+                            }))
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                          onClick={() => {
+                            setWbsForm(prev => ({
+                              ...prev,
+                              assumptions: prev.assumptions.filter((_, i) => i !== idx)
+                            }))
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Risks Section */}
+              <div className="space-y-3 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500" />
+                    Risks
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setWbsForm(prev => ({
+                        ...prev,
+                        risks: [...prev.risks, {
+                          id: `risk-${Date.now()}`,
+                          description: '',
+                          probability: 'medium',
+                          impact: 'medium',
+                          mitigation: '',
+                        }]
+                      }))
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Add Risk
+                  </Button>
+                </div>
+                {wbsForm.risks.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">No risks identified yet</p>
+                ) : (
+                  <div className="space-y-3">
+                    {wbsForm.risks.map((risk, idx) => (
+                      <div key={risk.id} className="p-3 border border-gray-200 rounded-lg space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <Input
+                            placeholder="Risk description..."
+                            className="h-8 text-sm"
+                            value={risk.description}
+                            onChange={(e) => {
+                              setWbsForm(prev => ({
+                                ...prev,
+                                risks: prev.risks.map((r, i) =>
+                                  i === idx ? { ...r, description: e.target.value } : r
+                                )
+                              }))
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                            onClick={() => {
+                              setWbsForm(prev => ({
+                                ...prev,
+                                risks: prev.risks.filter((_, i) => i !== idx)
+                              }))
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[10px] text-gray-500">Probability</Label>
+                            <Select
+                              value={risk.probability}
+                              onValueChange={(v: 'low' | 'medium' | 'high') => {
+                                setWbsForm(prev => ({
+                                  ...prev,
+                                  risks: prev.risks.map((r, i) =>
+                                    i === idx ? { ...r, probability: v } : r
+                                  )
+                                }))
+                              }}
+                            >
+                              <SelectTrigger className="h-7 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="low">Low</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-[10px] text-gray-500">Impact</Label>
+                            <Select
+                              value={risk.impact}
+                              onValueChange={(v: 'low' | 'medium' | 'high') => {
+                                setWbsForm(prev => ({
+                                  ...prev,
+                                  risks: prev.risks.map((r, i) =>
+                                    i === idx ? { ...r, impact: v } : r
+                                  )
+                                }))
+                              }}
+                            >
+                              <SelectTrigger className="h-7 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="low">Low</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <Input
+                          placeholder="Mitigation strategy..."
+                          className="h-7 text-xs"
+                          value={risk.mitigation}
+                          onChange={(e) => {
+                            setWbsForm(prev => ({
+                              ...prev,
+                              risks: prev.risks.map((r, i) =>
+                                i === idx ? { ...r, mitigation: e.target.value } : r
+                              )
+                            }))
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Dependencies Section */}
+              <div className="space-y-3 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <ArrowRight className="w-4 h-4 text-gray-500" />
+                    Dependencies
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setWbsForm(prev => ({
+                        ...prev,
+                        dependencies: [...prev.dependencies, '']
+                      }))
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Add
+                  </Button>
+                </div>
+                {wbsForm.dependencies.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">No dependencies specified</p>
+                ) : (
+                  <div className="space-y-2">
+                    {wbsForm.dependencies.map((dep, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <Input
+                          placeholder="WBS number (e.g., 1.1) or description..."
+                          className="h-8 text-sm"
+                          value={dep}
+                          onChange={(e) => {
+                            setWbsForm(prev => ({
+                              ...prev,
+                              dependencies: prev.dependencies.map((d, i) => i === idx ? e.target.value : d)
+                            }))
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                          onClick={() => {
+                            setWbsForm(prev => ({
+                              ...prev,
+                              dependencies: prev.dependencies.filter((_, i) => i !== idx)
+                            }))
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
