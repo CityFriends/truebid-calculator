@@ -143,10 +143,8 @@ interface RequirementCardProps {
   onDelete: () => void
   onViewLinkedWbs: (wbs: EnhancedWBSElement) => void
   onUnlink: (wbsId: string) => void
-  isDragOver?: boolean
-  onDragOver?: (e: React.DragEvent) => void
-  onDragLeave?: () => void
-  onDrop?: (e: React.DragEvent) => void
+  onDragStart?: (e: React.DragEvent) => void
+  onDragEnd?: () => void
 }
 
 function RequirementCard({
@@ -159,29 +157,25 @@ function RequirementCard({
   onDelete,
   onViewLinkedWbs,
   onUnlink,
-  isDragOver,
-  onDragOver,
-  onDragLeave,
-  onDrop,
+  onDragStart,
+  onDragEnd,
 }: RequirementCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
     <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       className={`
-        group rounded-lg border transition-all duration-200
-        ${isDragOver 
-          ? 'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200' 
-          : isSelected 
-            ? 'border-emerald-300 bg-emerald-50/50' 
-            : isMapped
-              ? 'border-gray-200 bg-white hover:border-gray-300'
-              : 'border-gray-200 bg-white hover:border-gray-300'
+        group rounded-lg border transition-all duration-200 cursor-grab active:cursor-grabbing
+        ${isSelected
+          ? 'border-emerald-300 bg-emerald-50/50'
+          : isMapped
+            ? 'border-gray-200 bg-white hover:border-gray-300'
+            : 'border-gray-200 bg-white hover:border-gray-300'
         }
       `}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
     >
       {/* Main Card Content */}
       <div className="p-3">
@@ -328,8 +322,6 @@ interface WBSCardProps {
   onView: () => void
   onEdit: () => void
   onDelete: () => void
-  onDragStart?: (e: React.DragEvent) => void
-  onDragEnd?: () => void
 }
 
 function WBSCard({
@@ -338,23 +330,14 @@ function WBSCard({
   onView,
   onEdit,
   onDelete,
-  onDragStart,
-  onDragEnd,
 }: WBSCardProps) {
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className="group rounded-lg border border-gray-200 bg-white hover:border-gray-300 
-                 hover:shadow-sm transition-all duration-200 cursor-grab active:cursor-grabbing"
+      className="group rounded-lg border border-gray-200 bg-white hover:border-gray-300
+                 hover:shadow-sm transition-all duration-200"
     >
       <div className="p-3">
         <div className="flex items-start gap-3">
-          {/* Drag Handle */}
-          <div className="pt-0.5 text-gray-300 group-hover:text-gray-400">
-            <GripVertical className="w-4 h-4" />
-          </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
@@ -817,15 +800,16 @@ export function EstimateTab() {
   const [wbsSearch, setWbsSearch] = useState('')
   const [selectedWbs, setSelectedWbs] = useState<EnhancedWBSElement | null>(null)
   
-  // Drag and drop state
-  const [draggedWbs, setDraggedWbs] = useState<EnhancedWBSElement | null>(null)
-  const [dragOverReq, setDragOverReq] = useState<string | null>(null)
+  // Drag and drop state (drag requirements to WBS area)
+  const [draggedRequirement, setDraggedRequirement] = useState<SOORequirement | null>(null)
+  const [isDragOverWbsArea, setIsDragOverWbsArea] = useState(false)
   
   // Dialog state
   const [showAddRequirement, setShowAddRequirement] = useState(false)
   const [showAddWbs, setShowAddWbs] = useState(false)
   const [editingRequirement, setEditingRequirement] = useState<SOORequirement | null>(null)
   const [editingWbs, setEditingWbs] = useState<EnhancedWBSElement | null>(null)
+  const [preLinkedRequirement, setPreLinkedRequirement] = useState<SOORequirement | null>(null)
   
   // Bulk generation state
   const [showBulkGenerateDialog, setShowBulkGenerateDialog] = useState(false)
@@ -1032,36 +1016,44 @@ export function EstimateTab() {
     }))
   }, [])
 
-  // Drag and drop handlers
-  const handleWbsDragStart = useCallback((e: React.DragEvent, wbs: EnhancedWBSElement) => {
-    setDraggedWbs(wbs)
-    e.dataTransfer.effectAllowed = 'link'
-    e.dataTransfer.setData('text/plain', wbs.id) // Required for drag to work in some browsers
+  // Drag and drop handlers (drag requirements to WBS area)
+  const handleRequirementDragStart = useCallback((e: React.DragEvent, req: SOORequirement) => {
+    setDraggedRequirement(req)
+    e.dataTransfer.effectAllowed = 'copy'
+    e.dataTransfer.setData('text/plain', req.id)
   }, [])
 
-  const handleWbsDragEnd = useCallback(() => {
-    setDraggedWbs(null)
-    setDragOverReq(null)
+  const handleRequirementDragEnd = useCallback(() => {
+    setDraggedRequirement(null)
+    setIsDragOverWbsArea(false)
   }, [])
 
-  const handleReqDragOver = useCallback((e: React.DragEvent, reqId: string) => {
+  const handleWbsAreaDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    e.dataTransfer.dropEffect = 'link'
-    setDragOverReq(reqId)
+    e.dataTransfer.dropEffect = 'copy'
+    setIsDragOverWbsArea(true)
   }, [])
 
-  const handleReqDragLeave = useCallback(() => {
-    setDragOverReq(null)
-  }, [])
-
-  const handleReqDrop = useCallback((e: React.DragEvent, reqId: string) => {
-    e.preventDefault()
-    if (draggedWbs) {
-      handleLinkWbsToRequirement(reqId, draggedWbs.id)
+  const handleWbsAreaDragLeave = useCallback((e: React.DragEvent) => {
+    // Only set to false if we're leaving the WBS area entirely
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX
+    const y = e.clientY
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setIsDragOverWbsArea(false)
     }
-    setDraggedWbs(null)
-    setDragOverReq(null)
-  }, [draggedWbs, handleLinkWbsToRequirement])
+  }, [])
+
+  const handleWbsAreaDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    if (draggedRequirement) {
+      // Open the Add WBS dialog with this requirement pre-linked
+      setPreLinkedRequirement(draggedRequirement)
+      setShowAddWbs(true)
+    }
+    setDraggedRequirement(null)
+    setIsDragOverWbsArea(false)
+  }, [draggedRequirement])
 
   // Bulk WBS generation
   const handleBulkGenerateWBS = useCallback(async () => {
@@ -1311,10 +1303,8 @@ export function EstimateTab() {
                       onDelete={() => handleDeleteRequirement(req.id)}
                       onViewLinkedWbs={(wbs) => setSelectedWbs(wbs)}
                       onUnlink={(wbsId) => handleUnlinkWbsFromRequirement(req.id, wbsId)}
-                      isDragOver={dragOverReq === req.id}
-                      onDragOver={(e) => handleReqDragOver(e, req.id)}
-                      onDragLeave={handleReqDragLeave}
-                      onDrop={(e) => handleReqDrop(e, req.id)}
+                      onDragStart={(e) => handleRequirementDragStart(e, req)}
+                      onDragEnd={handleRequirementDragEnd}
                     />
                   ))}
                 </div>
@@ -1330,13 +1320,22 @@ export function EstimateTab() {
                   <Circle className="w-3 h-3 inline ml-3 mr-1 text-gray-300" />
                   unmapped
                 </span>
-                <span>{filteredRequirements.length} shown</span>
+                <span className="text-gray-400">Drag to WBS area →</span>
               </div>
             </div>
           </div>
 
-          {/* Right Column - WBS Elements */}
-          <div className="w-1/2 flex flex-col bg-gray-50">
+          {/* Right Column - WBS Elements (Drop Target) */}
+          <div
+            className={`w-1/2 flex flex-col transition-colors duration-200 ${
+              isDragOverWbsArea
+                ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-300'
+                : 'bg-gray-50'
+            }`}
+            onDragOver={handleWbsAreaDragOver}
+            onDragLeave={handleWbsAreaDragLeave}
+            onDrop={handleWbsAreaDrop}
+          >
             {/* WBS Header */}
             <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 bg-white">
               <div className="flex items-center justify-between mb-3">
@@ -1379,8 +1378,6 @@ export function EstimateTab() {
                       onView={() => setSelectedWbs(wbs)}
                       onEdit={() => setEditingWbs(wbs)}
                       onDelete={() => handleDeleteWbs(wbs.id)}
-                      onDragStart={(e) => handleWbsDragStart(e, wbs)}
-                      onDragEnd={handleWbsDragEnd}
                     />
                   ))}
                 </div>
@@ -1388,10 +1385,10 @@ export function EstimateTab() {
             </div>
 
             {/* Drag Hint */}
-            {draggedWbs && (
+            {draggedRequirement && (
               <div className="flex-shrink-0 px-4 py-2 border-t border-emerald-200 bg-emerald-50">
                 <p className="text-xs text-emerald-700 text-center">
-                  Drop on a requirement to link <strong>{draggedWbs.wbsNumber}</strong>
+                  Drop here to create WBS for <strong>{draggedRequirement.referenceNumber}</strong>
                 </p>
               </div>
             )}
@@ -1507,6 +1504,7 @@ export function EstimateTab() {
           if (!open) {
             setShowAddWbs(false)
             setEditingWbs(null)
+            setPreLinkedRequirement(null)
           }
         }}>
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -1515,12 +1513,28 @@ export function EstimateTab() {
                 {editingWbs ? 'Edit WBS Element' : 'Add WBS Element'}
               </DialogTitle>
               <DialogDescription>
-                {editingWbs 
+                {editingWbs
                   ? 'Update the WBS element details below.'
-                  : 'Add a new WBS element to your estimate.'
+                  : preLinkedRequirement
+                    ? `Create a WBS element for requirement ${preLinkedRequirement.referenceNumber}.`
+                    : 'Add a new WBS element to your estimate.'
                 }
               </DialogDescription>
             </DialogHeader>
+
+            {/* Show pre-linked requirement */}
+            {preLinkedRequirement && !editingWbs && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Link2 className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm font-medium text-emerald-800">Linked Requirement</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-emerald-600">{preLinkedRequirement.referenceNumber}</span>
+                  <span className="text-sm text-emerald-700">{preLinkedRequirement.title}</span>
+                </div>
+              </div>
+            )}
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -1582,6 +1596,7 @@ export function EstimateTab() {
               <Button variant="outline" onClick={() => {
                 setShowAddWbs(false)
                 setEditingWbs(null)
+                setPreLinkedRequirement(null)
               }}>
                 Cancel
               </Button>
