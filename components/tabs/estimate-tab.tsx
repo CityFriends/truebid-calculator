@@ -1176,6 +1176,56 @@ export function EstimateTab() {
     setIsDragOverWbsArea(false)
   }, [draggedRequirement])
 
+  // Save WBS element from form
+  const handleSaveWbs = useCallback(() => {
+    if (!wbsForm.title || !wbsForm.wbsNumber) return
+
+    const newWbsId = `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+    const newWbs: EnhancedWBSElement = {
+      id: newWbsId,
+      wbsNumber: wbsForm.wbsNumber,
+      title: wbsForm.title,
+      sowReference: wbsForm.sowReference,
+      why: wbsForm.why,
+      what: wbsForm.what,
+      notIncluded: wbsForm.notIncluded,
+      assumptions: [],
+      estimateMethod: wbsForm.estimateMethod,
+      laborEstimates: [],
+      linkedRequirementIds: preLinkedRequirement ? [preLinkedRequirement.id] : [],
+      totalHours: 0,
+      confidence: wbsForm.confidence,
+    }
+
+    // Add the new WBS element
+    setWbsElements(prev => [...prev, newWbs])
+
+    // Link the requirement to this WBS if there's a pre-linked requirement
+    if (preLinkedRequirement) {
+      setRequirements(prev => prev.map(req => {
+        if (req.id === preLinkedRequirement.id) {
+          return { ...req, linkedWbsIds: [...req.linkedWbsIds, newWbsId] }
+        }
+        return req
+      }))
+    }
+
+    // Close the dialog and reset state
+    setShowAddWbs(false)
+    setPreLinkedRequirement(null)
+    setWbsForm({
+      wbsNumber: '',
+      title: '',
+      sowReference: '',
+      why: '',
+      what: '',
+      notIncluded: '',
+      estimateMethod: 'engineering',
+      confidence: 'medium',
+    })
+  }, [wbsForm, preLinkedRequirement])
+
   // Bulk WBS generation
   const handleBulkGenerateWBS = useCallback(async () => {
     const selectedReqs = requirements.filter(r => 
@@ -1773,7 +1823,8 @@ export function EstimateTab() {
               </Button>
               <Button
                 className="bg-emerald-600 hover:bg-emerald-700"
-                disabled={wbsFormLoading}
+                disabled={wbsFormLoading || !wbsForm.title || !wbsForm.wbsNumber}
+                onClick={handleSaveWbs}
               >
                 {wbsFormLoading ? (
                   <>
