@@ -1460,6 +1460,19 @@ export function EstimateTab() {
             : req
         ))
 
+        // Persist the link to the database
+        const dbRequirement = requirements.find(r => r.id === requirement.id)
+        if (proposalId && dbRequirement) {
+          const updatedLinkedWbsIds = [...(dbRequirement.linkedWbsIds || []), newWbsId]
+          console.log('[DEBUG] Persisting link to DB:', { reqId: dbRequirement.id, linked_wbs_ids: updatedLinkedWbsIds })
+          requirementsApi.update(proposalId, {
+            reqId: dbRequirement.id,
+            linked_wbs_ids: updatedLinkedWbsIds
+          })
+            .then(res => console.log('[DEBUG] Link persisted:', res))
+            .catch(err => console.error('[DEBUG] Failed to persist link:', err))
+        }
+
         // Also sync to context for Roles & Pricing tab
         setEstimateWbsElements(prev => [...(prev || []), newWbs])
 
