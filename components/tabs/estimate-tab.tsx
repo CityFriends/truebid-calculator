@@ -978,6 +978,14 @@ export function EstimateTab() {
   }, [])
 
   useEffect(() => {
+    // Only load requirements if an RFP was uploaded for this proposal
+    // Check solicitation.analyzedFromDocument to verify RFP upload
+    if (!solicitation?.analyzedFromDocument) {
+      // No RFP uploaded - keep requirements empty
+      setRequirements([])
+      return
+    }
+
     // Load requirements from extracted requirements (from Upload tab)
     if (extractedRequirements && extractedRequirements.length > 0) {
       const mappedRequirements: SOORequirement[] = extractedRequirements.map((req, index) => {
@@ -1009,7 +1017,7 @@ export function EstimateTab() {
     if (currentProposal?.wbsElements) {
       setWbsElements(currentProposal.wbsElements)
     }
-  }, [extractedRequirements, currentProposal, mapRequirementType, mapCategory])
+  }, [extractedRequirements, currentProposal, solicitation?.analyzedFromDocument, mapRequirementType, mapCategory])
 
   // Auto-generate WBS when a requirement is dropped and dialog opens
   useEffect(() => {
