@@ -160,7 +160,12 @@ export function UploadTab({ onContinue }: UploadTabProps) {
         const response = await requirementsApi.list(proposalId as string)
         if (response.requirements && response.requirements.length > 0) {
           console.log('[Upload] Requirements data:', response.requirements[0])
-          setExtractedRequirements(response.requirements)
+          // Map DB format (snake_case) to app format (camelCase)
+          const mappedRequirements = response.requirements.map((req: Record<string, unknown>) => ({
+            ...req,
+            linkedWbsIds: req.linked_wbs_ids || [],
+          }))
+          setExtractedRequirements(mappedRequirements)
         }
       } catch (error) {
         console.warn('[UploadTab] Failed to load requirements:', error)

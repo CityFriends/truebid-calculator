@@ -44,6 +44,8 @@ import {
 } from "@/components/ui/tooltip"
 import { useAppContext, type ExtractedRequirement } from '@/contexts/app-context'
 import { Progress } from '@/components/ui/progress'
+import { requirementsApi } from '@/lib/api'
+import { useParams } from 'next/navigation'
 
 // ============================================================================
 // TYPES
@@ -938,6 +940,10 @@ export function EstimateTab() {
     extractedRequirements,
     setExtractedRequirements,
   } = useAppContext()
+
+  // Get proposal ID from URL for API calls
+  const params = useParams()
+  const proposalId = params?.id as string | undefined
   
   // ========== STATE ==========
   
@@ -1645,6 +1651,12 @@ export function EstimateTab() {
   }, [filteredRequirements, selectedRequirements])
 
   const handleLinkWbsToRequirement = useCallback((reqId: string, wbsId: string) => {
+    // Get current linkedWbsIds for the requirement
+    const currentReq = requirements.find(r => r.id === reqId)
+    const newLinkedWbsIds = currentReq && !currentReq.linkedWbsIds.includes(wbsId)
+      ? [...currentReq.linkedWbsIds, wbsId]
+      : currentReq?.linkedWbsIds || [wbsId]
+
     setRequirements(prev => prev.map(req => {
       if (req.id === reqId && !req.linkedWbsIds.includes(wbsId)) {
         return { ...req, linkedWbsIds: [...req.linkedWbsIds, wbsId] }
@@ -1672,9 +1684,21 @@ export function EstimateTab() {
       }
       return req
     }))
-  }, [setEstimateWbsElements, setExtractedRequirements])
+
+    // Sync to API (fire and forget)
+    if (proposalId) {
+      requirementsApi.update(proposalId, { reqId, linked_wbs_ids: newLinkedWbsIds })
+        .catch(err => console.warn('[Estimate] Failed to sync requirement link to API:', err))
+    }
+  }, [setEstimateWbsElements, setExtractedRequirements, requirements, proposalId])
 
   const handleUnlinkWbsFromRequirement = useCallback((reqId: string, wbsId: string) => {
+    // Get current linkedWbsIds for the requirement after unlinking
+    const currentReq = requirements.find(r => r.id === reqId)
+    const newLinkedWbsIds = currentReq
+      ? currentReq.linkedWbsIds.filter(id => id !== wbsId)
+      : []
+
     setRequirements(prev => prev.map(req => {
       if (req.id === reqId) {
         return { ...req, linkedWbsIds: req.linkedWbsIds.filter(id => id !== wbsId) }
@@ -1702,7 +1726,13 @@ export function EstimateTab() {
       }
       return req
     }))
-  }, [setEstimateWbsElements, setExtractedRequirements])
+
+    // Sync to API (fire and forget)
+    if (proposalId) {
+      requirementsApi.update(proposalId, { reqId, linked_wbs_ids: newLinkedWbsIds })
+        .catch(err => console.warn('[Estimate] Failed to sync requirement unlink to API:', err))
+    }
+  }, [setEstimateWbsElements, setExtractedRequirements, requirements, proposalId])
 
   // Drag and drop handlers (drag requirements to WBS area)
   const handleRequirementDragStart = useCallback((e: React.DragEvent, req: SOORequirement) => {

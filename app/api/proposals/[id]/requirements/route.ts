@@ -110,16 +110,24 @@ export async function PUT(
   const { id } = await params
   const body = await request.json()
 
-  // Expect { reqId, linked_wbs_id } in body
-  const { reqId, linked_wbs_id } = body
+  // Support both single linked_wbs_id and array of linked_wbs_ids
+  const { reqId, linked_wbs_id, linked_wbs_ids } = body
 
   if (!reqId) {
     return NextResponse.json({ error: 'reqId is required' }, { status: 400 })
   }
 
+  // Build update object - prefer linked_wbs_ids array if provided
+  const updateData: Record<string, unknown> = {}
+  if (linked_wbs_ids !== undefined) {
+    updateData.linked_wbs_ids = linked_wbs_ids
+  } else if (linked_wbs_id !== undefined) {
+    updateData.linked_wbs_id = linked_wbs_id
+  }
+
   const { data, error } = await supabase
     .from('requirements')
-    .update({ linked_wbs_id })
+    .update(updateData)
     .eq('id', reqId)
     .eq('proposal_id', id)
     .select()
