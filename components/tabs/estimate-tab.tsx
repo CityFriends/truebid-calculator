@@ -1044,25 +1044,13 @@ export function EstimateTab() {
   }, [])
 
   useEffect(() => {
-    // Skip if already initialized (prevents resetting state on dependency changes)
-    if (isInitializedRef.current) {
-      // Only sync WBS from context if it changed (for tab switching persistence)
-      if (estimateWbsElements && estimateWbsElements.length > 0) {
-        setWbsElements(estimateWbsElements)
-      }
-      return
+    // Always sync WBS from context (for persistence across tab/page navigation)
+    if (estimateWbsElements && estimateWbsElements.length > 0) {
+      setWbsElements(estimateWbsElements)
     }
 
-    // Only load requirements if an RFP was uploaded for this proposal
-    // Check solicitation.analyzedFromDocument to verify RFP upload
-    if (!solicitation?.analyzedFromDocument) {
-      // No RFP uploaded - keep requirements empty
-      setRequirements([])
-      isInitializedRef.current = true
-      return
-    }
-
-    // Load requirements from extracted requirements (from Upload tab)
+    // Always sync requirements from extractedRequirements when they exist
+    // This handles both initial load AND navigation back from other pages
     if (extractedRequirements && extractedRequirements.length > 0) {
       const mappedRequirements: SOORequirement[] = extractedRequirements.map((req, index) => {
         // Extract title from text (first sentence or first 100 chars)
@@ -1085,7 +1073,26 @@ export function EstimateTab() {
         }
       })
       setRequirements(mappedRequirements)
-    } else if (currentProposal?.requirements) {
+      isInitializedRef.current = true
+      return
+    }
+
+    // Skip further initialization if already done (prevents clearing on dependency changes)
+    if (isInitializedRef.current) {
+      return
+    }
+
+    // Only clear requirements if no RFP was uploaded
+    // Check solicitation.analyzedFromDocument to verify RFP upload
+    if (!solicitation?.analyzedFromDocument) {
+      // No RFP uploaded - keep requirements empty
+      setRequirements([])
+      isInitializedRef.current = true
+      return
+    }
+
+    // Fallback: load from currentProposal if available
+    if (currentProposal?.requirements) {
       setRequirements(currentProposal.requirements)
     }
     // If no requirements from either source, leave empty (no mock data)
