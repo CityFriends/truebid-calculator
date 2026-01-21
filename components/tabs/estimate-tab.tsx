@@ -147,10 +147,12 @@ interface RequirementCardProps {
   requirement: SOORequirement
   isSelected: boolean
   isMapped: boolean
+  isGenerating: boolean
   linkedWbsElements: EnhancedWBSElement[]
   onToggleSelect: () => void
   onEdit: () => void
   onDelete: () => void
+  onGenerate: () => void
   onViewLinkedWbs: (wbs: EnhancedWBSElement) => void
   onUnlink: (wbsId: string) => void
   onDragStart?: (e: React.DragEvent) => void
@@ -161,10 +163,12 @@ function RequirementCard({
   requirement,
   isSelected,
   isMapped,
+  isGenerating,
   linkedWbsElements,
   onToggleSelect,
   onEdit,
   onDelete,
+  onGenerate,
   onViewLinkedWbs,
   onUnlink,
   onDragStart,
@@ -174,11 +178,15 @@ function RequirementCard({
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
+      draggable={!isGenerating}
+      onDragStart={isGenerating ? undefined : onDragStart}
       onDragEnd={onDragEnd}
       className={`
-        group rounded-lg border transition-all duration-200 cursor-grab active:cursor-grabbing
+        group rounded-lg border transition-all duration-200
+        ${isGenerating
+          ? 'border-blue-300 bg-blue-50/50 cursor-wait'
+          : 'cursor-grab active:cursor-grabbing'
+        }
         ${isSelected
           ? 'border-emerald-300 bg-emerald-50/50'
           : isMapped
@@ -195,10 +203,11 @@ function RequirementCard({
             <Checkbox
               checked={isSelected}
               onCheckedChange={onToggleSelect}
+              disabled={isGenerating}
               className={`
                 w-5 h-5 border-2 transition-colors
-                ${isMapped 
-                  ? 'border-emerald-400 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500' 
+                ${isMapped
+                  ? 'border-emerald-400 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500'
                   : 'border-gray-400 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500'
                 }
               `}
@@ -207,7 +216,16 @@ function RequirementCard({
 
           {/* Mapping Status Indicator */}
           <div className="pt-0.5">
-            {isMapped ? (
+            {isGenerating ? (
+              <Tooltip>
+                <TooltipTrigger>
+                  <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">Generating WBS...</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : isMapped ? (
               <Tooltip>
                 <TooltipTrigger>
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -247,11 +265,33 @@ function RequirementCard({
 
               {/* Actions */}
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Generate WBS button for unmapped requirements */}
+                {!isMapped && !isGenerating && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onGenerate()
+                        }}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Generate WBS with AI</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
                   onClick={onEdit}
+                  disabled={isGenerating}
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </Button>
@@ -260,6 +300,7 @@ function RequirementCard({
                   size="sm"
                   className="h-7 w-7 p-0 text-gray-400 hover:text-red-600"
                   onClick={onDelete}
+                  disabled={isGenerating}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
@@ -270,6 +311,14 @@ function RequirementCard({
             <p className="text-xs text-gray-500 mt-1 line-clamp-2">
               {requirement.description}
             </p>
+
+            {/* Generating status */}
+            {isGenerating && (
+              <div className="flex items-center gap-2 mt-2 text-xs text-blue-600">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Generating WBS element...</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -803,6 +852,7 @@ export function EstimateTab() {
     indirectRates,
     uiBillableHours,
     uiProfitMargin,
+    extractedRequirements,
   } = useAppContext()
   
   // ========== STATE ==========
@@ -860,88 +910,79 @@ export function EstimateTab() {
   const [generatedWbs, setGeneratedWbs] = useState<EnhancedWBSElement[]>([])
   const [generationError, setGenerationError] = useState<string | null>(null)
 
-  // ========== LOAD MOCK DATA ==========
-  
+  // Track which requirements are currently generating WBS
+  const [generatingRequirementIds, setGeneratingRequirementIds] = useState<Set<string>>(new Set())
+
+  // ========== LOAD REQUIREMENTS FROM CONTEXT ==========
+
+  // Map extracted requirement type to SOO requirement type
+  const mapRequirementType = useCallback((type: string): SOORequirement['type'] => {
+    const typeMap: Record<string, SOORequirement['type']> = {
+      'delivery': 'functional',
+      'reporting': 'management',
+      'staffing': 'management',
+      'compliance': 'compliance',
+      'governance': 'management',
+      'transition': 'functional',
+      'other': 'other',
+      // Also handle direct SOORequirement types
+      'functional': 'functional',
+      'technical': 'technical',
+      'management': 'management',
+    }
+    return typeMap[type] || 'other'
+  }, [])
+
+  // Map category from requirement type
+  const mapCategory = useCallback((type: string): string => {
+    const categoryMap: Record<string, string> = {
+      'delivery': 'Deliverables',
+      'reporting': 'Reporting',
+      'staffing': 'Staffing',
+      'compliance': 'Compliance',
+      'governance': 'Governance',
+      'transition': 'Transition',
+      'functional': 'Core Features',
+      'technical': 'Technical',
+      'management': 'Management',
+      'other': 'Other',
+    }
+    return categoryMap[type] || 'Other'
+  }, [])
+
   useEffect(() => {
-    // Load from context or use mock data
-    if (currentProposal?.requirements) {
-      setRequirements(currentProposal.requirements)
-    } else {
-      // Mock requirements for demo
-      setRequirements([
-        {
-          id: 'req-1',
-          referenceNumber: 'REQ-001',
-          title: 'Visa Appointment Scheduling System',
-          description: 'Develop a public-facing visa appointment scheduling system that allows applicants to book, reschedule, and cancel appointments at consular posts worldwide.',
-          type: 'functional',
-          category: 'Core Features',
-          source: 'SOO 3.1.1',
-          priority: 'critical',
-          linkedWbsIds: []
-        },
-        {
-          id: 'req-2',
-          referenceNumber: 'REQ-002',
-          title: 'Account Creation & Management',
-          description: 'Enable applicants to create secure accounts with email verification, password management, and profile updates.',
-          type: 'functional',
-          category: 'User Management',
-          source: 'SOO 3.1.2',
-          priority: 'high',
-          linkedWbsIds: []
-        },
-        {
-          id: 'req-3',
-          referenceNumber: 'REQ-003',
-          title: 'OKTA Integration',
-          description: 'Integrate with Department of State OKTA identity provider for single sign-on authentication and authorization.',
-          type: 'technical',
-          category: 'Security',
-          source: 'SOO 3.2.1',
-          priority: 'critical',
-          linkedWbsIds: []
-        },
-        {
-          id: 'req-4',
-          referenceNumber: 'REQ-004',
-          title: 'Section 508 Compliance',
-          description: 'Ensure all user interfaces meet Section 508 accessibility standards and WCAG 2.1 AA guidelines.',
-          type: 'compliance',
-          category: 'Accessibility',
-          source: 'SOO 4.1',
-          priority: 'high',
-          linkedWbsIds: []
-        },
-        {
-          id: 'req-5',
-          referenceNumber: 'REQ-005',
-          title: 'Crisis Management Integration',
-          description: 'Integrate with State Department crisis management systems to handle emergency situations at posts.',
-          type: 'functional',
-          category: 'Core Features',
-          source: 'SOO 3.3.1',
-          priority: 'medium',
-          linkedWbsIds: []
-        },
-        {
-          id: 'req-6',
-          referenceNumber: 'REQ-006',
-          title: 'Monthly Status Reporting',
-          description: 'Provide monthly status reports including sprint velocity, defect metrics, and stakeholder updates.',
-          type: 'management',
-          category: 'Reporting',
-          source: 'SOO 5.1',
-          priority: 'medium',
+    // Load requirements from extracted requirements (from Upload tab)
+    if (extractedRequirements && extractedRequirements.length > 0) {
+      const mappedRequirements: SOORequirement[] = extractedRequirements.map((req, index) => {
+        // Extract title from text (first sentence or first 100 chars)
+        const text = req.text || ''
+        const firstSentenceMatch = text.match(/^[^.!?]+[.!?]/)
+        const title = firstSentenceMatch
+          ? firstSentenceMatch[0].trim()
+          : text.slice(0, 100) + (text.length > 100 ? '...' : '')
+
+        return {
+          id: req.id || `req-${index + 1}`,
+          referenceNumber: `REQ-${String(index + 1).padStart(3, '0')}`,
+          title: title,
+          description: text,
+          type: mapRequirementType(req.type),
+          category: mapCategory(req.type),
+          source: req.sourceSection || 'RFP',
+          priority: 'medium' as const,
           linkedWbsIds: []
         }
-      ])
+      })
+      setRequirements(mappedRequirements)
+    } else if (currentProposal?.requirements) {
+      setRequirements(currentProposal.requirements)
     }
-    
+    // If no requirements from either source, leave empty (no mock data)
+
     if (currentProposal?.wbsElements) {
       setWbsElements(currentProposal.wbsElements)
     }
-  }, [currentProposal])
+  }, [extractedRequirements, currentProposal, mapRequirementType, mapCategory])
 
   // Auto-generate WBS when a requirement is dropped and dialog opens
   useEffect(() => {
@@ -1096,6 +1137,182 @@ export function EstimateTab() {
     }
   }, [showAddWbs, editingWbs])
 
+  // ========== SHARED WBS GENERATION FUNCTION ==========
+
+  // Calculate hourly rate from base salary using indirect rates
+  const calculateHourlyRate = useCallback((baseSalary: number) => {
+    const standardHours = 2080
+    const baseRate = baseSalary / standardHours
+    const afterFringe = baseRate * (1 + indirectRates.fringe)
+    const afterOverhead = afterFringe * (1 + indirectRates.overhead)
+    const afterGA = afterOverhead * (1 + indirectRates.ga)
+    const withProfit = afterGA * (1 + uiProfitMargin / 100)
+    return withProfit
+  }, [indirectRates, uiProfitMargin])
+
+  // Shared function to generate WBS for a requirement (used by drag-drop, per-card button, bulk)
+  const generateWbsForRequirement = useCallback(async (requirement: SOORequirement) => {
+    // Mark as generating
+    setGeneratingRequirementIds(prev => new Set(prev).add(requirement.id))
+
+    try {
+      // Calculate next WBS number
+      const nextWbsNumber = wbsElements.length === 0
+        ? '1.1'
+        : (() => {
+            const numbers = wbsElements.map(w => {
+              const parts = w.wbsNumber.split('.')
+              return { major: parseInt(parts[0]) || 1, minor: parseInt(parts[1]) || 0 }
+            }).sort((a, b) => a.major === b.major ? b.minor - a.minor : b.major - a.major)
+            const highest = numbers[0]
+            return `${highest.major}.${highest.minor + 1}`
+          })()
+
+      // Prepare roles for API
+      const availableRolesForApi = companyRoles.map(r => ({
+        id: r.id,
+        name: r.title,
+        laborCategory: r.laborCategory,
+        description: r.description,
+        levels: r.levels.map(l => ({
+          level: l.level,
+          levelName: l.levelName,
+          yearsExperience: l.yearsExperience,
+          baseSalary: l.steps[0]?.salary || 0,
+        })),
+      }))
+
+      // Call API to generate WBS
+      const response = await fetch('/api/generate-wbs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requirements: [{
+            id: requirement.id,
+            referenceNumber: requirement.referenceNumber,
+            title: requirement.title,
+            description: requirement.description,
+            type: requirement.type,
+            category: requirement.category,
+            source: requirement.source,
+          }],
+          availableRoles: availableRolesForApi,
+          existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
+          contractContext: {
+            title: currentProposal?.name || solicitation?.title || 'Untitled',
+            agency: solicitation?.clientAgency || 'Government Agency',
+            contractType: solicitation?.contractType?.toLowerCase() || 'tm',
+            periodOfPerformance: solicitation?.periodOfPerformance || { baseYear: true, optionYears: 2 }
+          }
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.wbsElements && data.wbsElements.length > 0) {
+        const generated = data.wbsElements[0]
+        const newWbsId = `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+        // Create the new WBS element
+        const newWbs: EnhancedWBSElement = {
+          id: newWbsId,
+          wbsNumber: generated.wbsNumber || nextWbsNumber,
+          title: generated.title || `Implement: ${requirement.title}`,
+          sowReference: generated.sowReference || requirement.source || '',
+          why: generated.why || '',
+          what: generated.what || '',
+          notIncluded: generated.notIncluded || '',
+          assumptions: generated.assumptions || [],
+          estimateMethod: generated.estimateMethod || 'engineering',
+          laborEstimates: (generated.laborEstimates || []).map((le: any) => ({
+            roleId: le.roleId || '',
+            roleName: le.roleName || '',
+            hoursByPeriod: {
+              base: le.hoursByPeriod?.base || 0,
+              option1: le.hoursByPeriod?.option1 || 0,
+              option2: le.hoursByPeriod?.option2 || 0,
+              option3: le.hoursByPeriod?.option3 || 0,
+              option4: le.hoursByPeriod?.option4 || 0,
+            },
+            rationale: le.rationale || '',
+            confidence: le.confidence || 'medium',
+          })),
+          linkedRequirementIds: [requirement.id],
+          totalHours: (generated.laborEstimates || []).reduce((sum: number, le: any) => {
+            const hours = le.hoursByPeriod || {}
+            return sum + (hours.base || 0) + (hours.option1 || 0) + (hours.option2 || 0) + (hours.option3 || 0) + (hours.option4 || 0)
+          }, 0),
+          confidence: generated.confidence || 'medium',
+          risks: (generated.risks || []).map((r: any) => ({
+            id: `risk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            description: r.description || '',
+            probability: r.likelihood || r.probability || 'medium',
+            impact: r.impact || 'medium',
+            mitigation: r.mitigation || '',
+          })),
+          dependencies: generated.suggestedDependencies || generated.dependencies || [],
+        }
+
+        // Add WBS to state
+        setWbsElements(prev => [...prev, newWbs])
+
+        // Link requirement to WBS
+        setRequirements(prev => prev.map(req =>
+          req.id === requirement.id
+            ? { ...req, linkedWbsIds: [...req.linkedWbsIds, newWbsId] }
+            : req
+        ))
+
+        // Also sync to context for Roles & Pricing tab
+        setEstimateWbsElements(prev => [...(prev || []), newWbs])
+
+        return newWbs
+      } else {
+        throw new Error('No WBS generated')
+      }
+    } catch (error) {
+      console.error('WBS generation failed:', error)
+      // Create a fallback WBS with basic info
+      const nextWbsNumber = wbsElements.length === 0 ? '1.1' : `1.${wbsElements.length + 1}`
+      const newWbsId = `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+      const fallbackWbs: EnhancedWBSElement = {
+        id: newWbsId,
+        wbsNumber: nextWbsNumber,
+        title: `Implement: ${requirement.title}`,
+        sowReference: requirement.source || requirement.referenceNumber,
+        why: '',
+        what: requirement.description,
+        notIncluded: '',
+        assumptions: [],
+        estimateMethod: 'engineering',
+        laborEstimates: [],
+        linkedRequirementIds: [requirement.id],
+        totalHours: 0,
+        confidence: 'low',
+        risks: [],
+        dependencies: [],
+      }
+
+      setWbsElements(prev => [...prev, fallbackWbs])
+      setRequirements(prev => prev.map(req =>
+        req.id === requirement.id
+          ? { ...req, linkedWbsIds: [...req.linkedWbsIds, newWbsId] }
+          : req
+      ))
+      setEstimateWbsElements(prev => [...(prev || []), fallbackWbs])
+
+      return fallbackWbs
+    } finally {
+      // Remove from generating state
+      setGeneratingRequirementIds(prev => {
+        const next = new Set(prev)
+        next.delete(requirement.id)
+        return next
+      })
+    }
+  }, [wbsElements, companyRoles, currentProposal, solicitation, setEstimateWbsElements])
+
   // ========== COMPUTED VALUES ==========
   
   const filteredRequirements = useMemo(() => {
@@ -1242,24 +1459,12 @@ export function EstimateTab() {
   const handleWbsAreaDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     if (draggedRequirement) {
-      // Open the Add WBS dialog with this requirement pre-linked
-      setPreLinkedRequirement(draggedRequirement)
-      setShowAddWbs(true)
+      // Directly generate WBS for the dropped requirement
+      generateWbsForRequirement(draggedRequirement)
     }
     setDraggedRequirement(null)
     setIsDragOverWbsArea(false)
-  }, [draggedRequirement])
-
-  // Helper: calculate hourly rate for a labor category
-  const calculateHourlyRate = useCallback((baseSalary: number) => {
-    const standardHours = 2080
-    const baseRate = baseSalary / standardHours
-    const afterFringe = baseRate * (1 + indirectRates.fringe)
-    const afterOverhead = afterFringe * (1 + indirectRates.overhead)
-    const afterGA = afterOverhead * (1 + indirectRates.ga)
-    const withProfit = afterGA * (1 + uiProfitMargin / 100)
-    return withProfit
-  }, [indirectRates, uiProfitMargin])
+  }, [draggedRequirement, generateWbsForRequirement])
 
   // Save WBS element from form
   const handleSaveWbs = useCallback(() => {
@@ -1356,18 +1561,32 @@ export function EstimateTab() {
 
   // Bulk WBS generation
   const handleBulkGenerateWBS = useCallback(async () => {
-    const selectedReqs = requirements.filter(r => 
+    const selectedReqs = requirements.filter(r =>
       selectedRequirements.has(r.id) && r.linkedWbsIds.length === 0
     )
-    
+
     if (selectedReqs.length === 0) return
-    
+
     setShowBulkGenerateDialog(true)
     setIsGenerating(true)
     setGenerationProgress(0)
     setGenerationError(null)
     setGeneratedWbs([])
-    
+
+    // Prepare roles from companyRoles (Labor Categories)
+    const availableRolesForApi = companyRoles.map(r => ({
+      id: r.id,
+      name: r.title,
+      laborCategory: r.laborCategory,
+      description: r.description,
+      levels: r.levels.map(l => ({
+        level: l.level,
+        levelName: l.levelName,
+        yearsExperience: l.yearsExperience,
+        baseSalary: l.steps[0]?.salary || 0,
+      })),
+    }))
+
     try {
       // Simulate progress
       const progressInterval = setInterval(() => {
@@ -1379,13 +1598,13 @@ export function EstimateTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           requirements: selectedReqs,
-          availableRoles: [], // Would come from context
+          availableRoles: availableRolesForApi,
           existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
           contractContext: {
-            title: currentProposal?.name || 'Untitled',
-            agency: 'Department of State',
-            contractType: 'tm',
-            periodOfPerformance: { baseYear: true, optionYears: 2 }
+            title: currentProposal?.name || solicitation?.title || 'Untitled',
+            agency: solicitation?.clientAgency || 'Government Agency',
+            contractType: solicitation?.contractType?.toLowerCase() || 'tm',
+            periodOfPerformance: solicitation?.periodOfPerformance || { baseYear: true, optionYears: 2 }
           }
         })
       })
@@ -1404,7 +1623,7 @@ export function EstimateTab() {
     } finally {
       setIsGenerating(false)
     }
-  }, [requirements, selectedRequirements, wbsElements, currentProposal])
+  }, [requirements, selectedRequirements, wbsElements, currentProposal, companyRoles, solicitation])
 
   const handleAcceptGeneratedWbs = useCallback(() => {
     // Add generated WBS and auto-link
@@ -1412,9 +1631,12 @@ export function EstimateTab() {
       ...wbs,
       id: `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     }))
-    
+
     setWbsElements(prev => [...prev, ...newWbs])
-    
+
+    // Also sync to context for Roles & Pricing tab
+    setEstimateWbsElements(prev => [...(prev || []), ...newWbs])
+
     // Auto-link to requirements
     newWbs.forEach(wbs => {
       if (wbs.linkedRequirementIds) {
@@ -1423,11 +1645,11 @@ export function EstimateTab() {
         })
       }
     })
-    
+
     setShowBulkGenerateDialog(false)
     setGeneratedWbs([])
     setSelectedRequirements(new Set())
-  }, [generatedWbs, handleLinkWbsToRequirement])
+  }, [generatedWbs, handleLinkWbsToRequirement, setEstimateWbsElements])
 
   const handleDiscardGeneratedWbs = useCallback(() => {
     setShowBulkGenerateDialog(false)
@@ -1596,10 +1818,12 @@ export function EstimateTab() {
                       requirement={req}
                       isSelected={selectedRequirements.has(req.id)}
                       isMapped={req.linkedWbsIds.length > 0}
+                      isGenerating={generatingRequirementIds.has(req.id)}
                       linkedWbsElements={getLinkedWbsElements(req)}
                       onToggleSelect={() => handleToggleRequirementSelection(req.id)}
                       onEdit={() => setEditingRequirement(req)}
                       onDelete={() => handleDeleteRequirement(req.id)}
+                      onGenerate={() => generateWbsForRequirement(req)}
                       onViewLinkedWbs={(wbs) => setSelectedWbs(wbs)}
                       onUnlink={(wbsId) => handleUnlinkWbsFromRequirement(req.id, wbsId)}
                       onDragStart={(e) => handleRequirementDragStart(e, req)}
