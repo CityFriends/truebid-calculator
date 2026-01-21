@@ -1745,7 +1745,7 @@ export function EstimateTab() {
       }
       return req
     }))
-
+    
     // Sync to API (fire and forget)
     if (proposalId) {
       console.log('[Estimate] Unlinking requirement from WBS - API call:', {
