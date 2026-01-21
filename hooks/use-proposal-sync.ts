@@ -49,6 +49,7 @@ export function useProposalSync(proposalId: string) {
     rateJustifications,
     odcs,
     perDiem,
+    extractedRequirements,
     setSolicitation,
     updateSolicitation,
     setSelectedRoles,
@@ -58,6 +59,7 @@ export function useProposalSync(proposalId: string) {
     setRateJustifications,
     setODCs,
     setPerDiem,
+    setExtractedRequirements,
     resetSolicitation,
   } = useAppContext()
 
@@ -106,6 +108,7 @@ export function useProposalSync(proposalId: string) {
               if (data.rateJustifications) setRateJustifications(data.rateJustifications)
               if (data.odcs) setODCs(data.odcs)
               if (data.perDiem) setPerDiem(data.perDiem)
+              if (data.extractedRequirements) setExtractedRequirements(data.extractedRequirements)
               console.log('[ProposalSync] Loaded extended data from localStorage')
             } catch (e) {
               console.error('[ProposalSync] Failed to parse localStorage data:', e)
@@ -147,6 +150,7 @@ export function useProposalSync(proposalId: string) {
             if (data.rateJustifications) setRateJustifications(data.rateJustifications)
             if (data.odcs) setODCs(data.odcs)
             if (data.perDiem) setPerDiem(data.perDiem)
+            if (data.extractedRequirements) setExtractedRequirements(data.extractedRequirements)
 
             console.log('[ProposalSync] Loaded proposal from localStorage:', proposalId)
           } catch (e) {
@@ -161,6 +165,7 @@ export function useProposalSync(proposalId: string) {
           setRateJustifications({})
           setODCs([])
           setPerDiem([])
+          setExtractedRequirements([])
           console.log('[ProposalSync] New proposal, reset to defaults:', proposalId)
         }
       }
@@ -196,6 +201,7 @@ export function useProposalSync(proposalId: string) {
       rateJustifications,
       odcs,
       perDiem,
+      extractedRequirements,
       lastSaved: new Date().toISOString(),
     }
 
@@ -244,6 +250,7 @@ export function useProposalSync(proposalId: string) {
     rateJustifications,
     odcs,
     perDiem,
+    extractedRequirements,
   ])
 }
 

@@ -1229,6 +1229,26 @@ export function EstimateTab() {
     }
   }, [showAddWbs, editingWbs])
 
+  // Populate form when editing an existing WBS
+  useEffect(() => {
+    if (editingWbs) {
+      setWbsForm({
+        wbsNumber: editingWbs.wbsNumber || '',
+        title: editingWbs.title || '',
+        sowReference: editingWbs.sowReference || '',
+        why: editingWbs.why || '',
+        what: editingWbs.what || '',
+        notIncluded: editingWbs.notIncluded || '',
+        estimateMethod: editingWbs.estimateMethod || 'engineering',
+        confidence: editingWbs.confidence || 'medium',
+        laborEstimates: editingWbs.laborEstimates || [],
+        assumptions: editingWbs.assumptions || [],
+        risks: editingWbs.risks || [],
+        dependencies: editingWbs.dependencies || [],
+      })
+    }
+  }, [editingWbs])
+
   // ========== SHARED WBS GENERATION FUNCTION ==========
 
   // Calculate hourly rate from base salary using indirect rates
@@ -1623,11 +1643,9 @@ export function EstimateTab() {
     setIsDragOverWbsArea(false)
   }, [draggedRequirement, generateWbsForRequirement])
 
-  // Save WBS element from form
+  // Save WBS element from form (handles both add and edit)
   const handleSaveWbs = useCallback(() => {
     if (!wbsForm.title || !wbsForm.wbsNumber) return
-
-    const newWbsId = `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
     // Calculate total hours from labor estimates
     const totalHours = wbsForm.laborEstimates.reduce((sum, le) => {
@@ -1638,77 +1656,132 @@ export function EstimateTab() {
         (le.hoursByPeriod.option4 || 0)
     }, 0)
 
-    const newWbs: EnhancedWBSElement = {
-      id: newWbsId,
-      wbsNumber: wbsForm.wbsNumber,
-      title: wbsForm.title,
-      sowReference: wbsForm.sowReference,
-      why: wbsForm.why,
-      what: wbsForm.what,
-      notIncluded: wbsForm.notIncluded,
-      assumptions: wbsForm.assumptions,
-      estimateMethod: wbsForm.estimateMethod,
-      laborEstimates: wbsForm.laborEstimates,
-      linkedRequirementIds: preLinkedRequirement ? [preLinkedRequirement.id] : [],
-      totalHours,
-      confidence: wbsForm.confidence,
-      risks: wbsForm.risks,
-      dependencies: wbsForm.dependencies,
-    }
+    if (editingWbs) {
+      // UPDATE existing WBS
+      const updatedWbs: EnhancedWBSElement = {
+        ...editingWbs,
+        wbsNumber: wbsForm.wbsNumber,
+        title: wbsForm.title,
+        sowReference: wbsForm.sowReference,
+        why: wbsForm.why,
+        what: wbsForm.what,
+        notIncluded: wbsForm.notIncluded,
+        assumptions: wbsForm.assumptions,
+        estimateMethod: wbsForm.estimateMethod,
+        laborEstimates: wbsForm.laborEstimates,
+        totalHours,
+        confidence: wbsForm.confidence,
+        risks: wbsForm.risks,
+        dependencies: wbsForm.dependencies,
+      }
 
-    // Add the new WBS element to local state
-    setWbsElements(prev => [...prev, newWbs])
+      // Update in local state
+      setWbsElements(prev => prev.map(wbs =>
+        wbs.id === editingWbs.id ? updatedWbs : wbs
+      ))
 
-    // Add to newly created for highlight animation
-    setNewlyCreatedWbsIds(prev => new Set(prev).add(newWbsId))
-    setTimeout(() => {
-      setNewlyCreatedWbsIds(prev => {
-        const next = new Set(prev)
-        next.delete(newWbsId)
-        return next
-      })
-    }, 3000)
+      // Sync to context for persistence
+      setEstimateWbsElements(prev => (prev || []).map(wbs =>
+        wbs.id === editingWbs.id ? {
+          ...wbs,
+          wbsNumber: wbsForm.wbsNumber,
+          title: wbsForm.title,
+          description: wbsForm.what,
+          laborEstimates: wbsForm.laborEstimates.map((le, idx) => ({
+            id: `${editingWbs.id}-labor-${idx}`,
+            roleId: le.roleId,
+            roleName: le.roleName,
+            hoursByPeriod: {
+              base: le.hoursByPeriod.base || 0,
+              option1: le.hoursByPeriod.option1 || 0,
+              option2: le.hoursByPeriod.option2 || 0,
+              option3: le.hoursByPeriod.option3 || 0,
+              option4: le.hoursByPeriod.option4 || 0,
+            },
+            rationale: le.rationale,
+            confidence: le.confidence,
+            isAISuggested: false,
+          })),
+          totalHours,
+          updatedAt: new Date().toISOString(),
+        } : wbs
+      ))
+    } else {
+      // CREATE new WBS
+      const newWbsId = `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-    // Also sync to context estimateWbsElements for Roles & Pricing tab
-    // Convert to EstimateWBSElement format
-    setEstimateWbsElements(prev => [...prev, {
-      id: newWbsId,
-      wbsNumber: wbsForm.wbsNumber,
-      title: wbsForm.title,
-      description: wbsForm.what,
-      laborEstimates: wbsForm.laborEstimates.map((le, idx) => ({
-        id: `${newWbsId}-labor-${idx}`,
-        roleId: le.roleId,
-        roleName: le.roleName,
-        hoursByPeriod: {
-          base: le.hoursByPeriod.base || 0,
-          option1: le.hoursByPeriod.option1 || 0,
-          option2: le.hoursByPeriod.option2 || 0,
-          option3: le.hoursByPeriod.option3 || 0,
-          option4: le.hoursByPeriod.option4 || 0,
-        },
-        rationale: le.rationale,
-        confidence: le.confidence,
-        isAISuggested: true,
-      })),
-      status: 'draft',
-      totalHours,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }])
+      const newWbs: EnhancedWBSElement = {
+        id: newWbsId,
+        wbsNumber: wbsForm.wbsNumber,
+        title: wbsForm.title,
+        sowReference: wbsForm.sowReference,
+        why: wbsForm.why,
+        what: wbsForm.what,
+        notIncluded: wbsForm.notIncluded,
+        assumptions: wbsForm.assumptions,
+        estimateMethod: wbsForm.estimateMethod,
+        laborEstimates: wbsForm.laborEstimates,
+        linkedRequirementIds: preLinkedRequirement ? [preLinkedRequirement.id] : [],
+        totalHours,
+        confidence: wbsForm.confidence,
+        risks: wbsForm.risks,
+        dependencies: wbsForm.dependencies,
+      }
 
-    // Link the requirement to this WBS if there's a pre-linked requirement
-    if (preLinkedRequirement) {
-      setRequirements(prev => prev.map(req => {
-        if (req.id === preLinkedRequirement.id) {
-          return { ...req, linkedWbsIds: [...req.linkedWbsIds, newWbsId] }
-        }
-        return req
-      }))
+      // Add the new WBS element to local state
+      setWbsElements(prev => [...prev, newWbs])
+
+      // Add to newly created for highlight animation
+      setNewlyCreatedWbsIds(prev => new Set(prev).add(newWbsId))
+      setTimeout(() => {
+        setNewlyCreatedWbsIds(prev => {
+          const next = new Set(prev)
+          next.delete(newWbsId)
+          return next
+        })
+      }, 3000)
+
+      // Also sync to context estimateWbsElements for Roles & Pricing tab
+      setEstimateWbsElements(prev => [...prev, {
+        id: newWbsId,
+        wbsNumber: wbsForm.wbsNumber,
+        title: wbsForm.title,
+        description: wbsForm.what,
+        laborEstimates: wbsForm.laborEstimates.map((le, idx) => ({
+          id: `${newWbsId}-labor-${idx}`,
+          roleId: le.roleId,
+          roleName: le.roleName,
+          hoursByPeriod: {
+            base: le.hoursByPeriod.base || 0,
+            option1: le.hoursByPeriod.option1 || 0,
+            option2: le.hoursByPeriod.option2 || 0,
+            option3: le.hoursByPeriod.option3 || 0,
+            option4: le.hoursByPeriod.option4 || 0,
+          },
+          rationale: le.rationale,
+          confidence: le.confidence,
+          isAISuggested: true,
+        })),
+        status: 'draft',
+        totalHours,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }])
+
+      // Link the requirement to this WBS if there's a pre-linked requirement
+      if (preLinkedRequirement) {
+        setRequirements(prev => prev.map(req => {
+          if (req.id === preLinkedRequirement.id) {
+            return { ...req, linkedWbsIds: [...req.linkedWbsIds, newWbsId] }
+          }
+          return req
+        }))
+      }
     }
 
     // Close the slideout and reset state
     setShowAddWbs(false)
+    setEditingWbs(null)
     setPreLinkedRequirement(null)
     setWbsForm({
       wbsNumber: '',
@@ -1724,7 +1797,7 @@ export function EstimateTab() {
       risks: [],
       dependencies: [],
     })
-  }, [wbsForm, preLinkedRequirement, setEstimateWbsElements])
+  }, [wbsForm, editingWbs, preLinkedRequirement, setEstimateWbsElements])
 
   // Bulk WBS generation
   const handleBulkGenerateWBS = useCallback(async () => {
@@ -1857,11 +1930,11 @@ export function EstimateTab() {
     <TooltipProvider>
       <div className="absolute inset-0 flex flex-col bg-gray-50 overflow-hidden">
         {/* Header */}
-        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-5">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">Estimate</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <h1 className="text-2xl font-semibold text-gray-900">Estimate</h1>
+              <p className="text-sm text-gray-500 mt-1">
                 {stats.total} requirements → {wbsElements.length} WBS elements
               </p>
             </div>
