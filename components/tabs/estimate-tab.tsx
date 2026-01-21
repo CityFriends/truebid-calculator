@@ -1687,7 +1687,13 @@ export function EstimateTab() {
 
     // Sync to API (fire and forget)
     if (proposalId) {
+      console.log('[Estimate] Linking requirement to WBS - API call:', {
+        proposalId,
+        reqId,
+        newLinkedWbsIds
+      })
       requirementsApi.update(proposalId, { reqId, linked_wbs_ids: newLinkedWbsIds })
+        .then(response => console.log('[Estimate] Link API response:', response))
         .catch(err => console.warn('[Estimate] Failed to sync requirement link to API:', err))
     }
   }, [setEstimateWbsElements, setExtractedRequirements, requirements, proposalId])
@@ -1729,7 +1735,13 @@ export function EstimateTab() {
 
     // Sync to API (fire and forget)
     if (proposalId) {
+      console.log('[Estimate] Unlinking requirement from WBS - API call:', {
+        proposalId,
+        reqId,
+        newLinkedWbsIds
+      })
       requirementsApi.update(proposalId, { reqId, linked_wbs_ids: newLinkedWbsIds })
+        .then(response => console.log('[Estimate] Unlink API response:', response))
         .catch(err => console.warn('[Estimate] Failed to sync requirement unlink to API:', err))
     }
   }, [setEstimateWbsElements, setExtractedRequirements, requirements, proposalId])
