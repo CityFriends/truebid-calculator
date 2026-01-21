@@ -307,12 +307,17 @@ export function UploadTab({ onContinue }: UploadTabProps) {
 
       // Store extracted requirements for Estimate tab
       if (setExtractedRequirements && requirements.length > 0) {
-        setExtractedRequirements(requirements)
+        // Assign stable reference numbers to requirements
+        const requirementsWithRefNumbers = requirements.map((req, index) => ({
+          ...req,
+          reference_number: req.reference_number || `REQ-${String(index + 1).padStart(3, '0')}`
+        }))
+        setExtractedRequirements(requirementsWithRefNumbers)
 
         // Also save to API if we have a proposal ID
         if (proposalId) {
           try {
-            await requirementsApi.create(proposalId as string, requirements)
+            await requirementsApi.create(proposalId as string, requirementsWithRefNumbers)
             console.log('[Upload] Saved requirements to API')
           } catch (error) {
             console.warn('[Upload] Failed to save requirements to API:', error)
