@@ -378,6 +378,7 @@ function RequirementCard({
 interface WBSCardProps {
   wbs: EnhancedWBSElement
   linkedRequirements: SOORequirement[]
+  isNew?: boolean
   onView: () => void
   onEdit: () => void
   onDelete: () => void
@@ -386,14 +387,20 @@ interface WBSCardProps {
 function WBSCard({
   wbs,
   linkedRequirements,
+  isNew = false,
   onView,
   onEdit,
   onDelete,
 }: WBSCardProps) {
   return (
     <div
-      className="group rounded-lg border border-gray-200 bg-white hover:border-gray-300
-                 hover:shadow-sm transition-all duration-200"
+      className={`
+        group rounded-lg border bg-white transition-all duration-300
+        ${isNew
+          ? 'border-emerald-400 ring-2 ring-emerald-200 shadow-lg shadow-emerald-100 animate-in fade-in slide-in-from-top-2'
+          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+        }
+      `}
     >
       <div className="p-3">
         <div className="flex items-start gap-3">
@@ -850,7 +857,7 @@ function WBSEmptyState({ hasRequirements }: { hasRequirements: boolean }) {
       </div>
       <p className="text-sm text-gray-600 mb-2">No WBS elements yet</p>
       <p className="text-xs text-gray-500 max-w-[240px]">
-        {hasRequirements 
+        {hasRequirements
           ? 'Select requirements and click "Generate WBS" to create work breakdown structure elements using AI'
           : 'Add requirements first, then generate WBS elements'
         }
@@ -866,6 +873,33 @@ function WBSEmptyState({ hasRequirements }: { hasRequirements: boolean }) {
   )
 }
 
+// Placeholder card shown while WBS is being generated
+function WBSGeneratingPlaceholder({ referenceNumber }: { referenceNumber: string }) {
+  return (
+    <div className="rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 p-4 animate-pulse">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+          <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+            <span className="text-sm font-medium text-blue-700">Generating WBS...</span>
+          </div>
+          <p className="text-xs text-blue-600">
+            Creating work breakdown structure for <span className="font-mono font-medium">{referenceNumber}</span>
+          </p>
+        </div>
+      </div>
+      {/* Shimmer effect skeleton */}
+      <div className="mt-3 space-y-2">
+        <div className="h-3 bg-blue-200/50 rounded w-3/4 animate-pulse" />
+        <div className="h-3 bg-blue-200/50 rounded w-1/2 animate-pulse" />
+      </div>
+    </div>
+  )
+}
+
 // ============================================================================
 // MAIN ESTIMATE TAB COMPONENT
 // ============================================================================
@@ -875,6 +909,7 @@ export function EstimateTab() {
     currentProposal,
     companyRoles,
     solicitation,
+    estimateWbsElements,
     setEstimateWbsElements,
     indirectRates,
     uiBillableHours,
@@ -939,6 +974,9 @@ export function EstimateTab() {
 
   // Track which requirements are currently generating WBS
   const [generatingRequirementIds, setGeneratingRequirementIds] = useState<Set<string>>(new Set())
+
+  // Track newly created WBS for highlight animation (auto-clears after 3s)
+  const [newlyCreatedWbsIds, setNewlyCreatedWbsIds] = useState<Set<string>>(new Set())
 
   // ========== LOAD REQUIREMENTS FROM CONTEXT ==========
 
@@ -1014,10 +1052,13 @@ export function EstimateTab() {
     }
     // If no requirements from either source, leave empty (no mock data)
 
-    if (currentProposal?.wbsElements) {
+    // Load WBS elements from context (persists across tab switches)
+    if (estimateWbsElements && estimateWbsElements.length > 0) {
+      setWbsElements(estimateWbsElements)
+    } else if (currentProposal?.wbsElements) {
       setWbsElements(currentProposal.wbsElements)
     }
-  }, [extractedRequirements, currentProposal, solicitation?.analyzedFromDocument, mapRequirementType, mapCategory])
+  }, [extractedRequirements, currentProposal, solicitation?.analyzedFromDocument, mapRequirementType, mapCategory, estimateWbsElements])
 
   // Auto-generate WBS when a requirement is dropped and dialog opens
   useEffect(() => {
@@ -1301,6 +1342,17 @@ export function EstimateTab() {
         // Also sync to context for Roles & Pricing tab
         setEstimateWbsElements(prev => [...(prev || []), newWbs])
 
+        // Add to newly created for highlight animation
+        setNewlyCreatedWbsIds(prev => new Set(prev).add(newWbsId))
+        // Auto-remove highlight after 3 seconds
+        setTimeout(() => {
+          setNewlyCreatedWbsIds(prev => {
+            const next = new Set(prev)
+            next.delete(newWbsId)
+            return next
+          })
+        }, 3000)
+
         return newWbs
       } else {
         throw new Error('No WBS generated')
@@ -1336,6 +1388,16 @@ export function EstimateTab() {
           : req
       ))
       setEstimateWbsElements(prev => [...(prev || []), fallbackWbs])
+
+      // Add to newly created for highlight animation
+      setNewlyCreatedWbsIds(prev => new Set(prev).add(newWbsId))
+      setTimeout(() => {
+        setNewlyCreatedWbsIds(prev => {
+          const next = new Set(prev)
+          next.delete(newWbsId)
+          return next
+        })
+      }, 3000)
 
       return fallbackWbs
     } finally {
@@ -1475,7 +1537,14 @@ export function EstimateTab() {
       }
       return wbs
     }))
-  }, [])
+    // Sync to context for persistence
+    setEstimateWbsElements(prev => (prev || []).map(wbs => {
+      if (wbs.id === wbsId && !wbs.linkedRequirementIds?.includes(reqId)) {
+        return { ...wbs, linkedRequirementIds: [...(wbs.linkedRequirementIds || []), reqId] }
+      }
+      return wbs
+    }))
+  }, [setEstimateWbsElements])
 
   const handleUnlinkWbsFromRequirement = useCallback((reqId: string, wbsId: string) => {
     setRequirements(prev => prev.map(req => {
@@ -1491,7 +1560,14 @@ export function EstimateTab() {
       }
       return wbs
     }))
-  }, [])
+    // Sync to context for persistence
+    setEstimateWbsElements(prev => (prev || []).map(wbs => {
+      if (wbs.id === wbsId) {
+        return { ...wbs, linkedRequirementIds: (wbs.linkedRequirementIds || []).filter(id => id !== reqId) }
+      }
+      return wbs
+    }))
+  }, [setEstimateWbsElements])
 
   // Drag and drop handlers (drag requirements to WBS area)
   const handleRequirementDragStart = useCallback((e: React.DragEvent, req: SOORequirement) => {
@@ -1566,6 +1642,16 @@ export function EstimateTab() {
 
     // Add the new WBS element to local state
     setWbsElements(prev => [...prev, newWbs])
+
+    // Add to newly created for highlight animation
+    setNewlyCreatedWbsIds(prev => new Set(prev).add(newWbsId))
+    setTimeout(() => {
+      setNewlyCreatedWbsIds(prev => {
+        const next = new Set(prev)
+        next.delete(newWbsId)
+        return next
+      })
+    }, 3000)
 
     // Also sync to context estimateWbsElements for Roles & Pricing tab
     // Convert to EstimateWBSElement format
@@ -1722,7 +1808,15 @@ export function EstimateTab() {
   }, [])
 
   const handleDeleteRequirement = useCallback((reqId: string) => {
-    setRequirements(prev => prev.filter(r => r.id !== reqId))
+    setRequirements(prev => {
+      // Filter out the deleted requirement
+      const remaining = prev.filter(r => r.id !== reqId)
+      // Renumber the remaining requirements sequentially
+      return remaining.map((req, index) => ({
+        ...req,
+        referenceNumber: `REQ-${String(index + 1).padStart(3, '0')}`
+      }))
+    })
     setSelectedRequirements(prev => {
       const next = new Set(prev)
       next.delete(reqId)
@@ -1732,12 +1826,14 @@ export function EstimateTab() {
 
   const handleDeleteWbs = useCallback((wbsId: string) => {
     setWbsElements(prev => prev.filter(w => w.id !== wbsId))
+    // Sync to context for persistence
+    setEstimateWbsElements(prev => (prev || []).filter(w => w.id !== wbsId))
     // Unlink from all requirements
     setRequirements(prev => prev.map(req => ({
       ...req,
       linkedWbsIds: req.linkedWbsIds.filter(id => id !== wbsId)
     })))
-  }, [])
+  }, [setEstimateWbsElements])
 
   // ========== RENDER ==========
 
@@ -1830,7 +1926,7 @@ export function EstimateTab() {
         {/* Two-Column Layout */}
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Left Column - Requirements */}
-          <div className="w-1/2 border-r border-gray-200 flex flex-col bg-white overflow-hidden">
+          <div className="w-1/2 border-r border-gray-200 flex flex-col bg-white overflow-hidden min-h-0">
             {/* Requirements Header */}
             <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200">
               <div className="flex items-center justify-between mb-3">
@@ -1898,7 +1994,7 @@ export function EstimateTab() {
             </div>
 
             {/* Requirements List */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
               {filteredRequirements.length === 0 ? (
                 <RequirementsEmptyState
                   onAdd={() => setShowAddRequirement(true)}
@@ -1945,7 +2041,7 @@ export function EstimateTab() {
 
           {/* Right Column - WBS Elements (Drop Target) */}
           <div
-            className={`w-1/2 flex flex-col overflow-hidden transition-colors duration-200 ${
+            className={`w-1/2 flex flex-col overflow-hidden min-h-0 transition-colors duration-200 ${
               isDragOverWbsArea
                 ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-300'
                 : 'bg-gray-50'
@@ -1983,23 +2079,41 @@ export function EstimateTab() {
             </div>
 
             {/* WBS List */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {filteredWbs.length === 0 ? (
-                <WBSEmptyState hasRequirements={requirements.length > 0} />
-              ) : (
-                <div className="space-y-2">
-                  {filteredWbs.map(wbs => (
-                    <WBSCard
-                      key={wbs.id}
-                      wbs={wbs}
-                      linkedRequirements={getLinkedRequirements(wbs)}
-                      onView={() => setSelectedWbs(wbs)}
-                      onEdit={() => setEditingWbs(wbs)}
-                      onDelete={() => handleDeleteWbs(wbs.id)}
-                    />
-                  ))}
-                </div>
-              )}
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+              {/* Get generating requirements for placeholders */}
+              {(() => {
+                const generatingReqs = requirements.filter(r => generatingRequirementIds.has(r.id))
+                const hasGenerating = generatingReqs.length > 0
+                const hasWbs = filteredWbs.length > 0
+
+                if (!hasGenerating && !hasWbs) {
+                  return <WBSEmptyState hasRequirements={requirements.length > 0} />
+                }
+
+                return (
+                  <div className="space-y-2">
+                    {/* Show generating placeholders at top */}
+                    {generatingReqs.map(req => (
+                      <WBSGeneratingPlaceholder
+                        key={`generating-${req.id}`}
+                        referenceNumber={req.referenceNumber}
+                      />
+                    ))}
+                    {/* Show existing WBS cards */}
+                    {filteredWbs.map(wbs => (
+                      <WBSCard
+                        key={wbs.id}
+                        wbs={wbs}
+                        linkedRequirements={getLinkedRequirements(wbs)}
+                        isNew={newlyCreatedWbsIds.has(wbs.id)}
+                        onView={() => setSelectedWbs(wbs)}
+                        onEdit={() => setEditingWbs(wbs)}
+                        onDelete={() => handleDeleteWbs(wbs.id)}
+                      />
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Drag Hint */}
