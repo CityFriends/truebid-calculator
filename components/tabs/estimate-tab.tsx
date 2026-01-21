@@ -935,6 +935,7 @@ export function EstimateTab() {
     uiBillableHours,
     uiProfitMargin,
     extractedRequirements,
+    setExtractedRequirements,
   } = useAppContext()
   
   // ========== STATE ==========
