@@ -57,7 +57,23 @@ The Supabase `proposals` table has these columns:
 
 ## Review Council
 
-When asked to review code, UI, or features, evaluate from these perspectives:
+When asked to "consult the council" or "ask the review council", convene all relevant perspectives below to evaluate the topic. Present a brief summary from each applicable role, then synthesize into a **Council Recommendation** with clear action items.
+
+Format:
+```
+🎯 Product Manager: [brief take]
+🎨 UI Designer: [brief take]
+💻 Frontend Developer: [brief take]
+...
+
+📋 COUNCIL RECOMMENDATION:
+- [Action item 1]
+- [Action item 2]
+```
+
+Not every role needs to weigh in on every question - use judgment on which perspectives are relevant.
+
+### Perspectives
 
 ### 🎯 Product Manager
 - Does this meet the stated requirements?
