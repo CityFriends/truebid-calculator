@@ -876,25 +876,25 @@ function WBSEmptyState({ hasRequirements }: { hasRequirements: boolean }) {
 // Placeholder card shown while WBS is being generated
 function WBSGeneratingPlaceholder({ referenceNumber }: { referenceNumber: string }) {
   return (
-    <div className="rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 p-4 animate-pulse">
+    <div className="rounded-lg border-2 border-dashed border-emerald-300 bg-emerald-50 p-4 animate-pulse">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-          <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+        <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+          <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-            <span className="text-sm font-medium text-blue-700">Generating WBS...</span>
+            <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="text-sm font-medium text-emerald-700">Generating WBS...</span>
           </div>
-          <p className="text-xs text-blue-600">
+          <p className="text-xs text-emerald-600">
             Creating work breakdown structure for <span className="font-mono font-medium">{referenceNumber}</span>
           </p>
         </div>
       </div>
       {/* Shimmer effect skeleton */}
       <div className="mt-3 space-y-2">
-        <div className="h-3 bg-blue-200/50 rounded w-3/4 animate-pulse" />
-        <div className="h-3 bg-blue-200/50 rounded w-1/2 animate-pulse" />
+        <div className="h-3 bg-emerald-200/50 rounded w-3/4 animate-pulse" />
+        <div className="h-3 bg-emerald-200/50 rounded w-1/2 animate-pulse" />
       </div>
     </div>
   )
@@ -978,6 +978,9 @@ export function EstimateTab() {
   // Track newly created WBS for highlight animation (auto-clears after 3s)
   const [newlyCreatedWbsIds, setNewlyCreatedWbsIds] = useState<Set<string>>(new Set())
 
+  // Track if we've done initial data load (to prevent useEffect from resetting state)
+  const isInitializedRef = React.useRef(false)
+
   // ========== LOAD REQUIREMENTS FROM CONTEXT ==========
 
   // Map extracted requirement type to SOO requirement type
@@ -1016,11 +1019,21 @@ export function EstimateTab() {
   }, [])
 
   useEffect(() => {
+    // Skip if already initialized (prevents resetting state on dependency changes)
+    if (isInitializedRef.current) {
+      // Only sync WBS from context if it changed (for tab switching persistence)
+      if (estimateWbsElements && estimateWbsElements.length > 0) {
+        setWbsElements(estimateWbsElements)
+      }
+      return
+    }
+
     // Only load requirements if an RFP was uploaded for this proposal
     // Check solicitation.analyzedFromDocument to verify RFP upload
     if (!solicitation?.analyzedFromDocument) {
       // No RFP uploaded - keep requirements empty
       setRequirements([])
+      isInitializedRef.current = true
       return
     }
 
@@ -1058,6 +1071,9 @@ export function EstimateTab() {
     } else if (currentProposal?.wbsElements) {
       setWbsElements(currentProposal.wbsElements)
     }
+
+    // Mark as initialized
+    isInitializedRef.current = true
   }, [extractedRequirements, currentProposal, solicitation?.analyzedFromDocument, mapRequirementType, mapCategory, estimateWbsElements])
 
   // Auto-generate WBS when a requirement is dropped and dialog opens
@@ -1839,7 +1855,7 @@ export function EstimateTab() {
 
   return (
     <TooltipProvider>
-      <div className="h-full flex flex-col bg-gray-50 overflow-hidden">
+      <div className="absolute inset-0 flex flex-col bg-gray-50 overflow-hidden">
         {/* Header */}
         <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
@@ -2023,19 +2039,6 @@ export function EstimateTab() {
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Requirements Footer */}
-            <div className="flex-shrink-0 px-4 py-2 border-t border-gray-100 bg-gray-50">
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <span>
-                  <CheckCircle2 className="w-3 h-3 inline mr-1 text-emerald-500" />
-                  mapped
-                  <Circle className="w-3 h-3 inline ml-3 mr-1 text-gray-300" />
-                  unmapped
-                </span>
-                <span className="text-gray-400">Drag to WBS area →</span>
-              </div>
             </div>
           </div>
 
