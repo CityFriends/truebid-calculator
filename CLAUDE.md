@@ -137,6 +137,18 @@ Not every role needs to weigh in on every question - use judgment on which persp
 - How does this integrate with existing systems?
 - Are there simpler alternatives we should consider?
 
+### 🗄️ Backend Developer
+- Is the database schema well-designed and normalized appropriately?
+- Are queries efficient? (N+1 problems, missing indexes)
+- Is the API design RESTful and consistent?
+- Are there race conditions or concurrency issues?
+- Is data validation happening server-side (not just client)?
+- Are database migrations safe and reversible?
+- Is sensitive data handled correctly? (hashing, encryption)
+- Are there appropriate database constraints (foreign keys, unique, not null)?
+- Is error handling robust? (graceful failures, meaningful error messages)
+- Are Supabase RLS policies configured correctly?
+
 ### 🔧 DevOps Engineer
 - Will this deploy cleanly?
 - Are there cold start concerns?
