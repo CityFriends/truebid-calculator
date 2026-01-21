@@ -2,12 +2,12 @@
 "use client"
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
-import { 
+import {
   Search, Plus, ChevronRight, Sparkles, Trash2, Pencil, Link2, Unlink,
   FileText, Clock, CheckCircle2, Circle, ArrowRight, GripVertical,
   AlertCircle, ChevronDown, ChevronUp, X, Users, Info, Building2,
   Target, ClipboardList, Layers, Filter, MoreHorizontal, ExternalLink,
-  RefreshCw, Check, AlertTriangle, Loader2
+  RefreshCw, Check, AlertTriangle, Loader2, Upload
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -799,13 +799,40 @@ function BulkGenerateDialog({
 // EMPTY STATES
 // ============================================================================
 
-function RequirementsEmptyState({ onAdd }: { onAdd: () => void }) {
+function RequirementsEmptyState({ onAdd, hasUploadedRfp, isFiltered }: { onAdd: () => void; hasUploadedRfp: boolean; isFiltered: boolean }) {
+  if (isFiltered) {
+    // No results due to search/filter
+    return (
+      <div className="text-center py-12">
+        <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+        <p className="text-sm text-gray-600 mb-2">No matching requirements</p>
+        <p className="text-xs text-gray-500">
+          Try adjusting your search or filter
+        </p>
+      </div>
+    )
+  }
+
+  if (!hasUploadedRfp) {
+    // No RFP uploaded yet
+    return (
+      <div className="text-center py-12">
+        <Upload className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+        <p className="text-sm text-gray-600 mb-2">No requirements yet</p>
+        <p className="text-xs text-gray-500 mb-4">
+          Go to the <span className="font-medium">Upload</span> tab to extract requirements from an RFP
+        </p>
+      </div>
+    )
+  }
+
+  // RFP uploaded but no requirements (shouldn't happen often)
   return (
     <div className="text-center py-12">
       <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-      <p className="text-sm text-gray-600 mb-2">No requirements yet</p>
+      <p className="text-sm text-gray-600 mb-2">No requirements extracted</p>
       <p className="text-xs text-gray-500 mb-4">
-        Upload an RFP to extract requirements or add them manually
+        Add requirements manually or re-upload the RFP
       </p>
       <Button variant="outline" size="sm" onClick={onAdd}>
         <Plus className="w-4 h-4 mr-2" />
@@ -1396,6 +1423,36 @@ export function EstimateTab() {
     setSelectedRequirements(new Set())
   }, [])
 
+  // Select all visible (filtered) requirements
+  const handleSelectAllFiltered = useCallback(() => {
+    const filteredIds = filteredRequirements.map(r => r.id)
+    const allSelected = filteredIds.every(id => selectedRequirements.has(id))
+    if (allSelected) {
+      // Deselect all filtered
+      setSelectedRequirements(prev => {
+        const next = new Set(prev)
+        filteredIds.forEach(id => next.delete(id))
+        return next
+      })
+    } else {
+      // Select all filtered
+      setSelectedRequirements(prev => new Set([...prev, ...filteredIds]))
+    }
+  }, [filteredRequirements, selectedRequirements])
+
+  // Check if all filtered requirements are selected
+  const allFilteredSelected = useMemo(() => {
+    if (filteredRequirements.length === 0) return false
+    return filteredRequirements.every(r => selectedRequirements.has(r.id))
+  }, [filteredRequirements, selectedRequirements])
+
+  // Check if some (but not all) filtered requirements are selected
+  const someFilteredSelected = useMemo(() => {
+    if (filteredRequirements.length === 0) return false
+    const selectedCount = filteredRequirements.filter(r => selectedRequirements.has(r.id)).length
+    return selectedCount > 0 && selectedCount < filteredRequirements.length
+  }, [filteredRequirements, selectedRequirements])
+
   const handleLinkWbsToRequirement = useCallback((reqId: string, wbsId: string) => {
     setRequirements(prev => prev.map(req => {
       if (req.id === reqId && !req.linkedWbsIds.includes(wbsId)) {
@@ -1678,7 +1735,7 @@ export function EstimateTab() {
 
   return (
     <TooltipProvider>
-      <div className="h-full flex flex-col bg-gray-50">
+      <div className="h-full flex flex-col bg-gray-50 overflow-hidden">
         {/* Header */}
         <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
@@ -1763,15 +1820,41 @@ export function EstimateTab() {
         </div>
 
         {/* Two-Column Layout */}
-        <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Left Column - Requirements */}
-          <div className="w-1/2 border-r border-gray-200 flex flex-col bg-white">
+          <div className="w-1/2 border-r border-gray-200 flex flex-col bg-white overflow-hidden">
             {/* Requirements Header */}
             <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
-                  Requirements
-                </h2>
+                <div className="flex items-center gap-3">
+                  {/* Select All Checkbox */}
+                  {filteredRequirements.length > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <Checkbox
+                            checked={allFilteredSelected}
+                            onCheckedChange={handleSelectAllFiltered}
+                            className={`
+                              w-5 h-5 border-2
+                              ${someFilteredSelected ? 'data-[state=checked]:bg-emerald-500' : ''}
+                              ${allFilteredSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-400'}
+                            `}
+                            {...(someFilteredSelected && !allFilteredSelected ? { 'data-state': 'indeterminate' } : {})}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          {allFilteredSelected ? 'Deselect all' : `Select all ${filteredRequirements.length}`}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
+                    Requirements
+                  </h2>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1782,7 +1865,7 @@ export function EstimateTab() {
                   Add
                 </Button>
               </div>
-              
+
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -1794,7 +1877,7 @@ export function EstimateTab() {
                   />
                 </div>
                 <Select value={requirementFilter} onValueChange={(v: any) => setRequirementFilter(v)}>
-                  <SelectTrigger className="w-[120px] h-8 text-sm">
+                  <SelectTrigger className="w-[100px] h-8 text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1809,7 +1892,11 @@ export function EstimateTab() {
             {/* Requirements List */}
             <div className="flex-1 overflow-y-auto p-4">
               {filteredRequirements.length === 0 ? (
-                <RequirementsEmptyState onAdd={() => setShowAddRequirement(true)} />
+                <RequirementsEmptyState
+                  onAdd={() => setShowAddRequirement(true)}
+                  hasUploadedRfp={!!solicitation?.analyzedFromDocument}
+                  isFiltered={requirements.length > 0 && (!!requirementSearch || requirementFilter !== 'all')}
+                />
               ) : (
                 <div className="space-y-2">
                   {filteredRequirements.map(req => (
@@ -1850,7 +1937,7 @@ export function EstimateTab() {
 
           {/* Right Column - WBS Elements (Drop Target) */}
           <div
-            className={`w-1/2 flex flex-col transition-colors duration-200 ${
+            className={`w-1/2 flex flex-col overflow-hidden transition-colors duration-200 ${
               isDragOverWbsArea
                 ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-300'
                 : 'bg-gray-50'
