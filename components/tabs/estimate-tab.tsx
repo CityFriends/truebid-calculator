@@ -1053,21 +1053,24 @@ export function EstimateTab() {
     // This handles both initial load AND navigation back from other pages
     if (extractedRequirements && extractedRequirements.length > 0) {
       const mappedRequirements: SOORequirement[] = extractedRequirements.map((req, index) => {
-        // Extract title from text (first sentence or first 100 chars)
-        const text = req.text || ''
-        const firstSentenceMatch = text.match(/^[^.!?]+[.!?]/)
-        const title = firstSentenceMatch
-          ? firstSentenceMatch[0].trim()
-          : text.slice(0, 100) + (text.length > 100 ? '...' : '')
+        // Use existing title, or extract from text as fallback
+        const text = req.text || req.description || ''
+        let title = req.title
+        if (!title && text) {
+          const firstSentenceMatch = text.match(/^[^.!?]+[.!?]/)
+          title = firstSentenceMatch
+            ? firstSentenceMatch[0].trim()
+            : text.slice(0, 100) + (text.length > 100 ? '...' : '')
+        }
 
         return {
           id: req.id || `req-${index + 1}`,
           referenceNumber: `REQ-${String(index + 1).padStart(3, '0')}`,
-          title: title,
+          title: title || `Requirement ${index + 1}`,
           description: text,
           type: mapRequirementType(req.type),
           category: mapCategory(req.type),
-          source: req.sourceSection || 'RFP',
+          source: req.sourceSection || req.source || 'RFP',
           priority: 'medium' as const,
           linkedWbsIds: req.linkedWbsIds || []
         }
