@@ -1052,6 +1052,18 @@ export function EstimateTab() {
     // Always sync requirements from extractedRequirements when they exist
     // This handles both initial load AND navigation back from other pages
     if (extractedRequirements && extractedRequirements.length > 0) {
+      // Check if any requirements need reference numbers assigned
+      const needsRefNumbers = extractedRequirements.some(req => !req.reference_number)
+
+      // If reference numbers are missing, assign them and sync to context
+      if (needsRefNumbers) {
+        const updatedExtracted = extractedRequirements.map((req, index) => ({
+          ...req,
+          reference_number: req.reference_number || `REQ-${String(index + 1).padStart(3, '0')}`
+        }))
+        setExtractedRequirements(updatedExtracted)
+      }
+
       const mappedRequirements: SOORequirement[] = extractedRequirements.map((req, index) => {
         // Use existing title, or extract from text as fallback
         const text = req.text || req.description || ''
@@ -1063,9 +1075,12 @@ export function EstimateTab() {
             : text.slice(0, 100) + (text.length > 100 ? '...' : '')
         }
 
+        // Use stable reference number from context (assigned above or from previous save)
+        const referenceNumber = req.reference_number || `REQ-${String(index + 1).padStart(3, '0')}`
+
         return {
           id: req.id || `req-${index + 1}`,
-          referenceNumber: `REQ-${String(index + 1).padStart(3, '0')}`,
+          referenceNumber,
           title: title || `Requirement ${index + 1}`,
           description: text,
           type: mapRequirementType(req.type),
