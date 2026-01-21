@@ -1944,8 +1944,8 @@ export function EstimateTab() {
           {/* Left Column - Requirements */}
           <div className="w-1/2 border-r border-gray-200 flex flex-col bg-white overflow-hidden min-h-0">
             {/* Requirements Header */}
-            <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200">
-              <div className="flex items-center justify-between mb-3">
+            <div className="flex-shrink-0 px-5 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   {/* Select All Checkbox */}
                   {filteredRequirements.length > 0 && (
@@ -2054,8 +2054,8 @@ export function EstimateTab() {
             onDrop={handleWbsAreaDrop}
           >
             {/* WBS Header */}
-            <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 bg-white">
-              <div className="flex items-center justify-between mb-3">
+            <div className="flex-shrink-0 px-5 py-4 border-b border-gray-200 bg-white">
+              <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
                   WBS Elements
                 </h2>
