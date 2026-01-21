@@ -148,6 +148,7 @@ interface RequirementCardProps {
   isSelected: boolean
   isMapped: boolean
   isGenerating: boolean
+  isHighlighted: boolean
   linkedWbsElements: EnhancedWBSElement[]
   onToggleSelect: () => void
   onEdit: () => void
@@ -157,6 +158,8 @@ interface RequirementCardProps {
   onUnlink: (wbsId: string) => void
   onDragStart?: (e: React.DragEvent) => void
   onDragEnd?: () => void
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
 }
 
 function RequirementCard({
@@ -164,6 +167,7 @@ function RequirementCard({
   isSelected,
   isMapped,
   isGenerating,
+  isHighlighted,
   linkedWbsElements,
   onToggleSelect,
   onEdit,
@@ -173,6 +177,8 @@ function RequirementCard({
   onUnlink,
   onDragStart,
   onDragEnd,
+  onMouseEnter,
+  onMouseLeave,
 }: RequirementCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -181,17 +187,21 @@ function RequirementCard({
       draggable={!isGenerating}
       onDragStart={isGenerating ? undefined : onDragStart}
       onDragEnd={onDragEnd}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={`
         group rounded-lg border transition-all duration-200
         ${isGenerating
           ? 'border-blue-300 bg-blue-50/50 cursor-wait'
           : 'cursor-grab active:cursor-grabbing'
         }
-        ${isSelected
-          ? 'border-emerald-300 bg-emerald-50/50'
-          : isMapped
-            ? 'border-gray-200 bg-white hover:border-gray-300'
-            : 'border-gray-200 bg-white hover:border-gray-300'
+        ${isHighlighted
+          ? 'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200 shadow-md'
+          : isSelected
+            ? 'border-emerald-300 bg-emerald-50/50'
+            : isMapped
+              ? 'border-gray-200 bg-white hover:border-gray-300'
+              : 'border-gray-200 bg-white hover:border-gray-300'
         }
       `}
     >
@@ -379,26 +389,36 @@ interface WBSCardProps {
   wbs: EnhancedWBSElement
   linkedRequirements: SOORequirement[]
   isNew?: boolean
+  isHighlighted?: boolean
   onView: () => void
   onEdit: () => void
   onDelete: () => void
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
 }
 
 function WBSCard({
   wbs,
   linkedRequirements,
   isNew = false,
+  isHighlighted = false,
   onView,
   onEdit,
   onDelete,
+  onMouseEnter,
+  onMouseLeave,
 }: WBSCardProps) {
   return (
     <div
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={`
         group rounded-lg border bg-white transition-all duration-300
         ${isNew
           ? 'border-emerald-400 ring-2 ring-emerald-200 shadow-lg shadow-emerald-100 animate-in fade-in slide-in-from-top-2'
-          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+          : isHighlighted
+            ? 'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200 shadow-md'
+            : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
         }
       `}
     >
@@ -924,7 +944,11 @@ export function EstimateTab() {
   const [requirementSearch, setRequirementSearch] = useState('')
   const [requirementFilter, setRequirementFilter] = useState<'all' | 'unmapped' | 'mapped'>('all')
   const [selectedRequirements, setSelectedRequirements] = useState<Set<string>>(new Set())
-  
+
+  // Hover state for cross-column highlighting
+  const [hoveredRequirementId, setHoveredRequirementId] = useState<string | null>(null)
+  const [hoveredWbsId, setHoveredWbsId] = useState<string | null>(null)
+
   // WBS state
   const [wbsElements, setWbsElements] = useState<EnhancedWBSElement[]>([])
   const [wbsSearch, setWbsSearch] = useState('')
@@ -1056,7 +1080,7 @@ export function EstimateTab() {
           category: mapCategory(req.type),
           source: req.sourceSection || 'RFP',
           priority: 'medium' as const,
-          linkedWbsIds: []
+          linkedWbsIds: req.linkedWbsIds || []
         }
       })
       setRequirements(mappedRequirements)
@@ -1374,6 +1398,12 @@ export function EstimateTab() {
             ? { ...req, linkedWbsIds: [...req.linkedWbsIds, newWbsId] }
             : req
         ))
+        // Sync requirement linking to context for persistence
+        setExtractedRequirements(prev => (prev || []).map(req =>
+          req.id === requirement.id
+            ? { ...req, linkedWbsIds: [...(req.linkedWbsIds || []), newWbsId] }
+            : req
+        ))
 
         // Also sync to context for Roles & Pricing tab
         setEstimateWbsElements(prev => [...(prev || []), newWbs])
@@ -1423,6 +1453,12 @@ export function EstimateTab() {
           ? { ...req, linkedWbsIds: [...req.linkedWbsIds, newWbsId] }
           : req
       ))
+      // Sync requirement linking to context for persistence
+      setExtractedRequirements(prev => (prev || []).map(req =>
+        req.id === requirement.id
+          ? { ...req, linkedWbsIds: [...(req.linkedWbsIds || []), newWbsId] }
+          : req
+      ))
       setEstimateWbsElements(prev => [...(prev || []), fallbackWbs])
 
       // Add to newly created for highlight animation
@@ -1444,7 +1480,7 @@ export function EstimateTab() {
         return next
       })
     }
-  }, [wbsElements, companyRoles, currentProposal, solicitation, setEstimateWbsElements])
+  }, [wbsElements, companyRoles, currentProposal, solicitation, setEstimateWbsElements, setExtractedRequirements])
 
   // ========== COMPUTED VALUES ==========
   
@@ -1566,7 +1602,7 @@ export function EstimateTab() {
       }
       return req
     }))
-    
+
     setWbsElements(prev => prev.map(wbs => {
       if (wbs.id === wbsId && !wbs.linkedRequirementIds.includes(reqId)) {
         return { ...wbs, linkedRequirementIds: [...wbs.linkedRequirementIds, reqId] }
@@ -1580,7 +1616,14 @@ export function EstimateTab() {
       }
       return wbs
     }))
-  }, [setEstimateWbsElements])
+    // Sync requirement linking to context for persistence
+    setExtractedRequirements(prev => (prev || []).map(req => {
+      if (req.id === reqId && !req.linkedWbsIds?.includes(wbsId)) {
+        return { ...req, linkedWbsIds: [...(req.linkedWbsIds || []), wbsId] }
+      }
+      return req
+    }))
+  }, [setEstimateWbsElements, setExtractedRequirements])
 
   const handleUnlinkWbsFromRequirement = useCallback((reqId: string, wbsId: string) => {
     setRequirements(prev => prev.map(req => {
@@ -1589,7 +1632,7 @@ export function EstimateTab() {
       }
       return req
     }))
-    
+
     setWbsElements(prev => prev.map(wbs => {
       if (wbs.id === wbsId) {
         return { ...wbs, linkedRequirementIds: wbs.linkedRequirementIds.filter(id => id !== reqId) }
@@ -1603,7 +1646,14 @@ export function EstimateTab() {
       }
       return wbs
     }))
-  }, [setEstimateWbsElements])
+    // Sync requirement unlinking to context for persistence
+    setExtractedRequirements(prev => (prev || []).map(req => {
+      if (req.id === reqId) {
+        return { ...req, linkedWbsIds: (req.linkedWbsIds || []).filter(id => id !== wbsId) }
+      }
+      return req
+    }))
+  }, [setEstimateWbsElements, setExtractedRequirements])
 
   // Drag and drop handlers (drag requirements to WBS area)
   const handleRequirementDragStart = useCallback((e: React.DragEvent, req: SOORequirement) => {
@@ -1776,6 +1826,13 @@ export function EstimateTab() {
           }
           return req
         }))
+        // Sync requirement linking to context for persistence
+        setExtractedRequirements(prev => (prev || []).map(req => {
+          if (req.id === preLinkedRequirement.id) {
+            return { ...req, linkedWbsIds: [...(req.linkedWbsIds || []), newWbsId] }
+          }
+          return req
+        }))
       }
     }
 
@@ -1797,7 +1854,7 @@ export function EstimateTab() {
       risks: [],
       dependencies: [],
     })
-  }, [wbsForm, editingWbs, preLinkedRequirement, setEstimateWbsElements])
+  }, [wbsForm, editingWbs, preLinkedRequirement, setEstimateWbsElements, setExtractedRequirements])
 
   // Bulk WBS generation
   const handleBulkGenerateWBS = useCallback(async () => {
@@ -2099,6 +2156,7 @@ export function EstimateTab() {
                       isSelected={selectedRequirements.has(req.id)}
                       isMapped={req.linkedWbsIds.length > 0}
                       isGenerating={generatingRequirementIds.has(req.id)}
+                      isHighlighted={hoveredWbsId !== null && req.linkedWbsIds.includes(hoveredWbsId)}
                       linkedWbsElements={getLinkedWbsElements(req)}
                       onToggleSelect={() => handleToggleRequirementSelection(req.id)}
                       onEdit={() => setEditingRequirement(req)}
@@ -2108,6 +2166,8 @@ export function EstimateTab() {
                       onUnlink={(wbsId) => handleUnlinkWbsFromRequirement(req.id, wbsId)}
                       onDragStart={(e) => handleRequirementDragStart(e, req)}
                       onDragEnd={handleRequirementDragEnd}
+                      onMouseEnter={() => setHoveredRequirementId(req.id)}
+                      onMouseLeave={() => setHoveredRequirementId(null)}
                     />
                   ))}
                 </div>
@@ -2182,9 +2242,12 @@ export function EstimateTab() {
                         wbs={wbs}
                         linkedRequirements={getLinkedRequirements(wbs)}
                         isNew={newlyCreatedWbsIds.has(wbs.id)}
+                        isHighlighted={hoveredRequirementId !== null && (wbs.linkedRequirementIds || []).includes(hoveredRequirementId)}
                         onView={() => setSelectedWbs(wbs)}
                         onEdit={() => setEditingWbs(wbs)}
                         onDelete={() => handleDeleteWbs(wbs.id)}
+                        onMouseEnter={() => setHoveredWbsId(wbs.id)}
+                        onMouseLeave={() => setHoveredWbsId(null)}
                       />
                     ))}
                   </div>

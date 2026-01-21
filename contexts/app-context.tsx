@@ -67,6 +67,7 @@ export interface ExtractedRequirement {
   reference_number?: string  // Optional: from API
   description?: string       // Optional: from API
   source?: string            // Optional: from API
+  linkedWbsIds?: string[]    // WBS elements linked to this requirement (persisted)
 }
 
 // ==================== ESTIMATE TAB TYPES (BOE Support) ====================
