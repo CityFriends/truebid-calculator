@@ -199,6 +199,9 @@ export interface EstimateWBSElement {
     isOrphaned?: boolean;
   }>;
   
+  // Requirement linking
+  linkedRequirementIds?: string[];
+
   // Status tracking
   status?: 'draft' | 'review' | 'approved';
   storyPoints?: number;
@@ -1123,9 +1126,9 @@ interface AppContextType {
   // Bid-Specific Roles
   recommendedRoles: Role[];
   setRecommendedRoles: (roles: Role[]) => void;
-   // Extracted Requirements (from AI analysis)
+  // Extracted Requirements (from AI analysis)
   extractedRequirements: ExtractedRequirement[];
-  setExtractedRequirements: (requirements: ExtractedRequirement[]) => void;
+  setExtractedRequirements: React.Dispatch<React.SetStateAction<ExtractedRequirement[]>>;
   selectedRoles: Role[];
   setSelectedRoles: (roles: Role[]) => void;
   addRole: (role: Role) => void;
@@ -1205,7 +1208,7 @@ interface AppContextType {
   // Enhanced WBS elements shared between Estimate tab and Roles & Pricing tab
   // This is the primary data source for role hours in the Roles & Pricing tab
   estimateWbsElements: EstimateWBSElement[];
-  setEstimateWbsElements: (elements: EstimateWBSElement[]) => void;
+  setEstimateWbsElements: React.Dispatch<React.SetStateAction<EstimateWBSElement[]>>;
   
   // ODCs
   odcs: ODCItem[];

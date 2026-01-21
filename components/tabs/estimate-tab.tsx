@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client"
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
@@ -43,7 +42,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useAppContext } from '@/contexts/app-context'
+import { useAppContext, type ExtractedRequirement } from '@/contexts/app-context'
 import { Progress } from '@/components/ui/progress'
 
 // ============================================================================
@@ -63,17 +62,20 @@ interface SOORequirement {
 }
 
 interface LaborEstimate {
+  id: string
   roleId: string
   roleName: string
   hoursByPeriod: {
     base: number
-    option1?: number
-    option2?: number
-    option3?: number
-    option4?: number
+    option1: number
+    option2: number
+    option3: number
+    option4: number
   }
   rationale: string
   confidence: 'high' | 'medium' | 'low'
+  isAISuggested?: boolean
+  isOrphaned?: boolean
 }
 
 interface WBSRisk {
@@ -926,7 +928,6 @@ function WBSGeneratingPlaceholder({ referenceNumber }: { referenceNumber: string
 
 export function EstimateTab() {
   const {
-    currentProposal,
     companyRoles,
     solicitation,
     estimateWbsElements,
@@ -1045,8 +1046,43 @@ export function EstimateTab() {
 
   useEffect(() => {
     // Always sync WBS from context (for persistence across tab/page navigation)
+    // Transform EstimateWBSElement to EnhancedWBSElement with defaults for missing fields
     if (estimateWbsElements && estimateWbsElements.length > 0) {
-      setWbsElements(estimateWbsElements)
+      const enhancedWbs: EnhancedWBSElement[] = estimateWbsElements.map(wbs => {
+        // Cast through unknown to access potentially existing enhanced fields
+        const enhanced = wbs as unknown as Partial<EnhancedWBSElement>
+        return {
+          id: wbs.id,
+          wbsNumber: wbs.wbsNumber,
+          title: wbs.title,
+          sowReference: enhanced.sowReference || '',
+          why: enhanced.why || '',
+          what: enhanced.what || wbs.description || '',
+          notIncluded: enhanced.notIncluded || '',
+          assumptions: enhanced.assumptions || [],
+          estimateMethod: enhanced.estimateMethod || 'engineering',
+          laborEstimates: wbs.laborEstimates.map((le, idx) => ({
+            id: le.id || `${wbs.id}-labor-${idx}`,
+            roleId: le.roleId,
+            roleName: le.roleName,
+            hoursByPeriod: {
+              base: le.hoursByPeriod.base || 0,
+              option1: le.hoursByPeriod.option1 || 0,
+              option2: le.hoursByPeriod.option2 || 0,
+              option3: le.hoursByPeriod.option3 || 0,
+              option4: le.hoursByPeriod.option4 || 0,
+            },
+            rationale: le.rationale,
+            confidence: le.confidence,
+          })),
+          linkedRequirementIds: enhanced.linkedRequirementIds || [],
+          totalHours: wbs.totalHours || 0,
+          confidence: enhanced.confidence || 'medium',
+          risks: enhanced.risks || [],
+          dependencies: enhanced.dependencies || [],
+        }
+      })
+      setWbsElements(enhancedWbs)
     }
 
     // Always sync requirements from extractedRequirements when they exist
@@ -1109,22 +1145,9 @@ export function EstimateTab() {
       return
     }
 
-    // Fallback: load from currentProposal if available
-    if (currentProposal?.requirements) {
-      setRequirements(currentProposal.requirements)
-    }
-    // If no requirements from either source, leave empty (no mock data)
-
-    // Load WBS elements from context (persists across tab switches)
-    if (estimateWbsElements && estimateWbsElements.length > 0) {
-      setWbsElements(estimateWbsElements)
-    } else if (currentProposal?.wbsElements) {
-      setWbsElements(currentProposal.wbsElements)
-    }
-
     // Mark as initialized
     isInitializedRef.current = true
-  }, [extractedRequirements, currentProposal, solicitation?.analyzedFromDocument, mapRequirementType, mapCategory, estimateWbsElements])
+  }, [extractedRequirements, solicitation?.analyzedFromDocument, mapRequirementType, mapCategory, estimateWbsElements, setExtractedRequirements])
 
   // Auto-generate WBS when a requirement is dropped and dialog opens
   useEffect(() => {
@@ -1190,7 +1213,7 @@ export function EstimateTab() {
           availableRoles: availableRolesForApi,
           existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
           contractContext: {
-            title: currentProposal?.name || 'Untitled',
+            title: solicitation?.title || 'Untitled',
             agency: 'Government Agency',
             contractType: 'tm',
             periodOfPerformance: { baseYear: true, optionYears: 2 }
@@ -1256,7 +1279,7 @@ export function EstimateTab() {
           setWbsFormLoading(false)
         })
     }
-  }, [preLinkedRequirement, showAddWbs, editingWbs, wbsElements, currentProposal, companyRoles])
+  }, [preLinkedRequirement, showAddWbs, editingWbs, wbsElements, companyRoles])
 
   // Reset form when dialog closes
   useEffect(() => {
@@ -1361,7 +1384,7 @@ export function EstimateTab() {
           availableRoles: availableRolesForApi,
           existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
           contractContext: {
-            title: currentProposal?.name || solicitation?.title || 'Untitled',
+            title: solicitation?.title || 'Untitled',
             agency: solicitation?.clientAgency || 'Government Agency',
             contractType: solicitation?.contractType?.toLowerCase() || 'tm',
             periodOfPerformance: solicitation?.periodOfPerformance || { baseYear: true, optionYears: 2 }
@@ -1425,7 +1448,7 @@ export function EstimateTab() {
             : req
         ))
         // Sync requirement linking to context for persistence
-        setExtractedRequirements(prev => (prev || []).map(req =>
+        setExtractedRequirements((prev: ExtractedRequirement[]) => (prev || []).map(req =>
           req.id === requirement.id
             ? { ...req, linkedWbsIds: [...(req.linkedWbsIds || []), newWbsId] }
             : req
@@ -1480,7 +1503,7 @@ export function EstimateTab() {
           : req
       ))
       // Sync requirement linking to context for persistence
-      setExtractedRequirements(prev => (prev || []).map(req =>
+      setExtractedRequirements((prev: ExtractedRequirement[]) => (prev || []).map(req =>
         req.id === requirement.id
           ? { ...req, linkedWbsIds: [...(req.linkedWbsIds || []), newWbsId] }
           : req
@@ -1506,7 +1529,7 @@ export function EstimateTab() {
         return next
       })
     }
-  }, [wbsElements, companyRoles, currentProposal, solicitation, setEstimateWbsElements, setExtractedRequirements])
+  }, [wbsElements, companyRoles, solicitation, setEstimateWbsElements, setExtractedRequirements])
 
   // ========== COMPUTED VALUES ==========
   
@@ -1643,7 +1666,7 @@ export function EstimateTab() {
       return wbs
     }))
     // Sync requirement linking to context for persistence
-    setExtractedRequirements(prev => (prev || []).map(req => {
+    setExtractedRequirements((prev: ExtractedRequirement[]) => (prev || []).map(req => {
       if (req.id === reqId && !req.linkedWbsIds?.includes(wbsId)) {
         return { ...req, linkedWbsIds: [...(req.linkedWbsIds || []), wbsId] }
       }
@@ -1673,7 +1696,7 @@ export function EstimateTab() {
       return wbs
     }))
     // Sync requirement unlinking to context for persistence
-    setExtractedRequirements(prev => (prev || []).map(req => {
+    setExtractedRequirements((prev: ExtractedRequirement[]) => (prev || []).map(req => {
       if (req.id === reqId) {
         return { ...req, linkedWbsIds: (req.linkedWbsIds || []).filter(id => id !== wbsId) }
       }
@@ -1853,7 +1876,7 @@ export function EstimateTab() {
           return req
         }))
         // Sync requirement linking to context for persistence
-        setExtractedRequirements(prev => (prev || []).map(req => {
+        setExtractedRequirements((prev: ExtractedRequirement[]) => (prev || []).map(req => {
           if (req.id === preLinkedRequirement.id) {
             return { ...req, linkedWbsIds: [...(req.linkedWbsIds || []), newWbsId] }
           }
@@ -1924,7 +1947,7 @@ export function EstimateTab() {
           availableRoles: availableRolesForApi,
           existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
           contractContext: {
-            title: currentProposal?.name || solicitation?.title || 'Untitled',
+            title: solicitation?.title || 'Untitled',
             agency: solicitation?.clientAgency || 'Government Agency',
             contractType: solicitation?.contractType?.toLowerCase() || 'tm',
             periodOfPerformance: solicitation?.periodOfPerformance || { baseYear: true, optionYears: 2 }
@@ -1946,7 +1969,7 @@ export function EstimateTab() {
     } finally {
       setIsGenerating(false)
     }
-  }, [requirements, selectedRequirements, wbsElements, currentProposal, companyRoles, solicitation])
+  }, [requirements, selectedRequirements, wbsElements, companyRoles, solicitation])
 
   const handleAcceptGeneratedWbs = useCallback(() => {
     // Add generated WBS and auto-link
@@ -2506,7 +2529,7 @@ export function EstimateTab() {
                           availableRoles: availableRolesForApi,
                           existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
                           contractContext: {
-                            title: currentProposal?.name || solicitation?.title || 'Untitled',
+                            title: solicitation?.title || 'Untitled',
                             agency: solicitation?.clientAgency || 'Government Agency',
                             contractType: solicitation?.contractType || 'T&M',
                             periodOfPerformance: {
@@ -2737,6 +2760,7 @@ export function EstimateTab() {
                           setWbsForm(prev => ({
                             ...prev,
                             laborEstimates: [...prev.laborEstimates, {
+                              id: `labor-${Date.now()}-${prev.laborEstimates.length}`,
                               roleId: `${firstRole.id}-${firstLevel?.level || 'IC3'}`,
                               roleName: `${firstRole.title} (${firstLevel?.levelName || 'Mid'})`,
                               hoursByPeriod: { base: 0, option1: 0, option2: 0, option3: 0, option4: 0 },
