@@ -48,14 +48,21 @@ export async function POST(
   // Handle both single and bulk inserts
   const elements = Array.isArray(body) ? body : [body]
 
-  // DB schema: id, proposal_id, wbs_number, title, description, hours, labor_cost
+  // Map to database columns (snake_case)
   const insertData = elements.map(el => ({
     proposal_id: id,
     wbs_number: el.wbs_number || el.wbsNumber || '',
     title: el.title || '',
-    description: el.description || el.what || '',
-    hours: el.hours || el.labor_hours || 0,
-    labor_cost: el.labor_cost || el.laborCost || 0,
+    what: el.what || el.description || '',
+    why: el.why || '',
+    sow_reference: el.sow_reference || el.sowReference || '',
+    not_included: el.not_included || el.notIncluded || '',
+    assumptions: el.assumptions || [],
+    estimate_method: el.estimate_method || el.estimateMethod || 'engineering',
+    labor_estimates: el.labor_estimates || el.laborEstimates || [],
+    linked_requirement_ids: el.linked_requirement_ids || el.linkedRequirementIds || [],
+    total_hours: el.total_hours || el.totalHours || el.hours || 0,
+    confidence: el.confidence || 'medium',
   }))
 
   const { data, error } = await supabase
@@ -95,9 +102,16 @@ export async function PUT(
     .update({
       wbs_number: body.wbs_number || body.wbsNumber,
       title: body.title,
-      description: body.description || body.what,
-      hours: body.hours || body.labor_hours,
-      labor_cost: body.labor_cost || body.laborCost,
+      what: body.what || body.description,
+      why: body.why,
+      sow_reference: body.sow_reference || body.sowReference,
+      not_included: body.not_included || body.notIncluded,
+      assumptions: body.assumptions,
+      estimate_method: body.estimate_method || body.estimateMethod,
+      labor_estimates: body.labor_estimates || body.laborEstimates,
+      linked_requirement_ids: body.linked_requirement_ids || body.linkedRequirementIds,
+      total_hours: body.total_hours || body.totalHours || body.hours,
+      confidence: body.confidence,
       updated_at: new Date().toISOString(),
     })
     .eq('id', body.id)

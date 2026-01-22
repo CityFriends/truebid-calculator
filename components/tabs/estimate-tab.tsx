@@ -1409,13 +1409,32 @@ export function EstimateTab() {
           return sum + (hours.base || 0) + (hours.option1 || 0) + (hours.option2 || 0) + (hours.option3 || 0) + (hours.option4 || 0)
         }, 0)
 
-        // Build WBS data for database (matching current API schema)
+        // Build WBS data for database (snake_case column names)
         const wbsData = {
           wbs_number: generated.wbsNumber || nextWbsNumber,
           title: generated.title || `Implement: ${requirement.title}`,
-          description: generated.what || '', // 'what' maps to 'description' column
-          hours: calculatedTotalHours,
-          labor_cost: 0, // Will be calculated later based on rates
+          what: generated.what || '',
+          why: generated.why || '',
+          sow_reference: generated.sowReference || requirement.source || '',
+          not_included: generated.notIncluded || '',
+          assumptions: generated.assumptions || [],
+          estimate_method: generated.estimateMethod || 'engineering',
+          labor_estimates: (generated.laborEstimates || []).map((le: any) => ({
+            roleId: le.roleId || '',
+            roleName: le.roleName || '',
+            hoursByPeriod: {
+              base: le.hoursByPeriod?.base || 0,
+              option1: le.hoursByPeriod?.option1 || 0,
+              option2: le.hoursByPeriod?.option2 || 0,
+              option3: le.hoursByPeriod?.option3 || 0,
+              option4: le.hoursByPeriod?.option4 || 0,
+            },
+            rationale: le.rationale || '',
+            confidence: le.confidence || 'medium',
+          })),
+          linked_requirement_ids: [requirement.id],
+          total_hours: calculatedTotalHours,
+          confidence: generated.confidence || 'medium',
         }
 
         // Save to database FIRST to get real UUID
