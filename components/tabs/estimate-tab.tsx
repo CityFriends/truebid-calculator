@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/tooltip"
 import { useAppContext, type ExtractedRequirement } from '@/contexts/app-context'
 import { Progress } from '@/components/ui/progress'
-import { requirementsApi } from '@/lib/api'
+import { requirementsApi, wbsApi } from '@/lib/api'
 import { useParams } from 'next/navigation'
 
 // ============================================================================
@@ -1402,9 +1402,57 @@ export function EstimateTab() {
 
       if (data.wbsElements && data.wbsElements.length > 0) {
         const generated = data.wbsElements[0]
-        const newWbsId = `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-        // Create the new WBS element
+        // Build WBS data for database
+        const wbsData = {
+          wbs_number: generated.wbsNumber || nextWbsNumber,
+          title: generated.title || `Implement: ${requirement.title}`,
+          description: generated.what || '',
+          sow_reference: generated.sowReference || requirement.source || '',
+          why: generated.why || '',
+          what: generated.what || '',
+          not_included: generated.notIncluded || '',
+          assumptions: generated.assumptions || [],
+          estimate_method: generated.estimateMethod || 'engineering',
+          labor_estimates: (generated.laborEstimates || []).map((le: any) => ({
+            roleId: le.roleId || '',
+            roleName: le.roleName || '',
+            hoursByPeriod: {
+              base: le.hoursByPeriod?.base || 0,
+              option1: le.hoursByPeriod?.option1 || 0,
+              option2: le.hoursByPeriod?.option2 || 0,
+              option3: le.hoursByPeriod?.option3 || 0,
+              option4: le.hoursByPeriod?.option4 || 0,
+            },
+            rationale: le.rationale || '',
+            confidence: le.confidence || 'medium',
+          })),
+          linked_requirement_ids: [requirement.id],
+          total_hours: (generated.laborEstimates || []).reduce((sum: number, le: any) => {
+            const hours = le.hoursByPeriod || {}
+            return sum + (hours.base || 0) + (hours.option1 || 0) + (hours.option2 || 0) + (hours.option3 || 0) + (hours.option4 || 0)
+          }, 0),
+          confidence: generated.confidence || 'medium',
+        }
+
+        // Save to database FIRST to get real UUID
+        let newWbsId = `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // fallback local ID
+
+        if (proposalId) {
+          try {
+            console.log('[DEBUG] Saving WBS to database:', wbsData)
+            const dbResponse = await wbsApi.create(proposalId, wbsData) as { wbs?: { id: string } }
+            console.log('[DEBUG] WBS saved to database:', dbResponse)
+            if (dbResponse?.wbs?.id) {
+              newWbsId = dbResponse.wbs.id // Use real UUID from database
+              console.log('[DEBUG] Using real UUID from database:', newWbsId)
+            }
+          } catch (err) {
+            console.warn('[DEBUG] Failed to save WBS to database, using local ID:', err)
+          }
+        }
+
+        // Create the new WBS element with the real (or fallback) ID
         const newWbs: EnhancedWBSElement = {
           id: newWbsId,
           wbsNumber: generated.wbsNumber || nextWbsNumber,
@@ -1447,7 +1495,7 @@ export function EstimateTab() {
         // Add WBS to state
         setWbsElements(prev => [...prev, newWbs])
 
-        // Link requirement to WBS
+        // Link requirement to WBS using real UUID
         setRequirements(prev => prev.map(req =>
           req.id === requirement.id
             ? { ...req, linkedWbsIds: [...req.linkedWbsIds, newWbsId] }
@@ -1460,17 +1508,17 @@ export function EstimateTab() {
             : req
         ))
 
-        // Persist the link to the database
+        // Persist the requirement link to the database
         const dbRequirement = requirements.find(r => r.id === requirement.id)
         if (proposalId && dbRequirement) {
           const updatedLinkedWbsIds = [...(dbRequirement.linkedWbsIds || []), newWbsId]
-          console.log('[DEBUG] Persisting link to DB:', { reqId: dbRequirement.id, linked_wbs_ids: updatedLinkedWbsIds })
+          console.log('[DEBUG] Persisting requirement link to DB:', { reqId: dbRequirement.id, linked_wbs_ids: updatedLinkedWbsIds })
           requirementsApi.update(proposalId, {
             reqId: dbRequirement.id,
             linked_wbs_ids: updatedLinkedWbsIds
           })
-            .then(res => console.log('[DEBUG] Link persisted:', res))
-            .catch(err => console.error('[DEBUG] Failed to persist link:', err))
+            .then(res => console.log('[DEBUG] Requirement link persisted:', res))
+            .catch(err => console.error('[DEBUG] Failed to persist requirement link:', err))
         }
 
         // Also sync to context for Roles & Pricing tab
