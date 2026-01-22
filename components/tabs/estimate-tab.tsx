@@ -1403,36 +1403,19 @@ export function EstimateTab() {
       if (data.wbsElements && data.wbsElements.length > 0) {
         const generated = data.wbsElements[0]
 
-        // Build WBS data for database
+        // Calculate total hours for database
+        const calculatedTotalHours = (generated.laborEstimates || []).reduce((sum: number, le: any) => {
+          const hours = le.hoursByPeriod || {}
+          return sum + (hours.base || 0) + (hours.option1 || 0) + (hours.option2 || 0) + (hours.option3 || 0) + (hours.option4 || 0)
+        }, 0)
+
+        // Build WBS data for database (matching current API schema)
         const wbsData = {
           wbs_number: generated.wbsNumber || nextWbsNumber,
           title: generated.title || `Implement: ${requirement.title}`,
-          description: generated.what || '',
-          sow_reference: generated.sowReference || requirement.source || '',
-          why: generated.why || '',
-          what: generated.what || '',
-          not_included: generated.notIncluded || '',
-          assumptions: generated.assumptions || [],
-          estimate_method: generated.estimateMethod || 'engineering',
-          labor_estimates: (generated.laborEstimates || []).map((le: any) => ({
-            roleId: le.roleId || '',
-            roleName: le.roleName || '',
-            hoursByPeriod: {
-              base: le.hoursByPeriod?.base || 0,
-              option1: le.hoursByPeriod?.option1 || 0,
-              option2: le.hoursByPeriod?.option2 || 0,
-              option3: le.hoursByPeriod?.option3 || 0,
-              option4: le.hoursByPeriod?.option4 || 0,
-            },
-            rationale: le.rationale || '',
-            confidence: le.confidence || 'medium',
-          })),
-          linked_requirement_ids: [requirement.id],
-          total_hours: (generated.laborEstimates || []).reduce((sum: number, le: any) => {
-            const hours = le.hoursByPeriod || {}
-            return sum + (hours.base || 0) + (hours.option1 || 0) + (hours.option2 || 0) + (hours.option3 || 0) + (hours.option4 || 0)
-          }, 0),
-          confidence: generated.confidence || 'medium',
+          description: generated.what || '', // 'what' maps to 'description' column
+          hours: calculatedTotalHours,
+          labor_cost: 0, // Will be calculated later based on rates
         }
 
         // Save to database FIRST to get real UUID
@@ -1441,10 +1424,10 @@ export function EstimateTab() {
         if (proposalId) {
           try {
             console.log('[DEBUG] Saving WBS to database:', wbsData)
-            const dbResponse = await wbsApi.create(proposalId, wbsData) as { wbs?: { id: string } }
+            const dbResponse = await wbsApi.create(proposalId, wbsData) as { wbsElements?: Array<{ id: string }> }
             console.log('[DEBUG] WBS saved to database:', dbResponse)
-            if (dbResponse?.wbs?.id) {
-              newWbsId = dbResponse.wbs.id // Use real UUID from database
+            if (dbResponse?.wbsElements?.[0]?.id) {
+              newWbsId = dbResponse.wbsElements[0].id // Use real UUID from database
               console.log('[DEBUG] Using real UUID from database:', newWbsId)
             }
           } catch (err) {
