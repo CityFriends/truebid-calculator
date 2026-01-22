@@ -60,7 +60,7 @@ export async function POST(
     assumptions: el.assumptions || [],
     estimate_method: el.estimate_method || el.estimateMethod || 'engineering',
     labor_estimates: el.labor_estimates || el.laborEstimates || [],
-    linked_requirement_ids: el.linked_requirement_ids || el.linkedRequirementIds || [],
+    linked_requirement_id: el.linked_requirement_id || el.linked_requirement_ids || el.linkedRequirementIds || [],
     total_hours: el.total_hours || el.totalHours || el.hours || 0,
     confidence: el.confidence || 'medium',
   }))
@@ -109,7 +109,7 @@ export async function PUT(
       assumptions: body.assumptions,
       estimate_method: body.estimate_method || body.estimateMethod,
       labor_estimates: body.labor_estimates || body.laborEstimates,
-      linked_requirement_ids: body.linked_requirement_ids || body.linkedRequirementIds,
+      linked_requirement_id: body.linked_requirement_id || body.linked_requirement_ids || body.linkedRequirementIds,
       total_hours: body.total_hours || body.totalHours || body.hours,
       confidence: body.confidence,
       updated_at: new Date().toISOString(),

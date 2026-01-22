@@ -1432,7 +1432,7 @@ export function EstimateTab() {
             rationale: le.rationale || '',
             confidence: le.confidence || 'medium',
           })),
-          linked_requirement_ids: [requirement.id],
+          linked_requirement_id: [requirement.id],
           total_hours: calculatedTotalHours,
           confidence: generated.confidence || 'medium',
         }
