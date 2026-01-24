@@ -133,6 +133,7 @@ export function UploadTab({ onContinue }: UploadTabProps) {
     solicitation,
     openSolicitationEditor,
     resetSolicitation,
+    extractedRequirements,
     setExtractedRequirements,
   } = useAppContext()
 
@@ -155,6 +156,11 @@ export function UploadTab({ onContinue }: UploadTabProps) {
     console.log('[Upload] useEffect running, proposalId:', proposalId)
     async function loadRequirements() {
       if (!proposalId) return
+      // Skip API reload if requirements already exist in context (preserves linked WBS IDs)
+      if (extractedRequirements && extractedRequirements.length > 0) {
+        console.log('[Upload] Requirements already in context, skipping API reload')
+        return
+      }
       console.log('[Upload] Loading requirements for', proposalId)
       try {
         const response = await requirementsApi.list(proposalId as string)
