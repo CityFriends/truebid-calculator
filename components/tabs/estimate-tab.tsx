@@ -1510,9 +1510,10 @@ export function EstimateTab() {
             : req
         ))
 
-        // Persist the requirement link to the database
+        // Persist the requirement link to the database (only if we have a real UUID, not a local fallback)
+        const isRealUuid = !newWbsId.startsWith('wbs-')
         const dbRequirement = requirements.find(r => r.id === requirement.id)
-        if (proposalId && dbRequirement) {
+        if (proposalId && dbRequirement && isRealUuid) {
           const updatedLinkedWbsIds = [...(dbRequirement.linkedWbsIds || []), newWbsId]
           console.log('[DEBUG] Persisting requirement link to DB:', { reqId: dbRequirement.id, linked_wbs_ids: updatedLinkedWbsIds })
           requirementsApi.update(proposalId, {
@@ -1521,6 +1522,8 @@ export function EstimateTab() {
           })
             .then(res => console.log('[DEBUG] Requirement link persisted:', res))
             .catch(err => console.error('[DEBUG] Failed to persist requirement link:', err))
+        } else if (!isRealUuid) {
+          console.warn('[DEBUG] Skipping requirement link persist - WBS has local ID, not a real UUID:', newWbsId)
         }
 
         // Also sync to context for Roles & Pricing tab
@@ -1748,12 +1751,17 @@ export function EstimateTab() {
       return req
     }))
 
-    // Sync to API (fire and forget)
+    // Sync to API (fire and forget) - only persist real UUIDs, not local IDs
     if (proposalId) {
-      console.log('[DEBUG] Linking - API call:', { proposalId, reqId, newLinkedWbsIds })
-      requirementsApi.update(proposalId, { reqId, linked_wbs_ids: newLinkedWbsIds })
-        .then(res => console.log('[DEBUG] Link persisted:', res))
-        .catch(err => console.warn('[Estimate] Failed to sync requirement link to API:', err))
+      const uuidOnly = newLinkedWbsIds.filter((id: string) => !id.startsWith('wbs-'))
+      if (uuidOnly.length > 0) {
+        console.log('[DEBUG] Linking - API call:', { proposalId, reqId, linked_wbs_ids: uuidOnly })
+        requirementsApi.update(proposalId, { reqId, linked_wbs_ids: uuidOnly })
+          .then(res => console.log('[DEBUG] Link persisted:', res))
+          .catch(err => console.warn('[Estimate] Failed to sync requirement link to API:', err))
+      } else {
+        console.warn('[DEBUG] Skipping link persist - no real UUIDs in:', newLinkedWbsIds)
+      }
     }
   }, [setEstimateWbsElements, setExtractedRequirements, requirements, proposalId])
 
@@ -1794,8 +1802,9 @@ export function EstimateTab() {
 
     // Sync to API (fire and forget)
     if (proposalId) {
-      console.log('[DEBUG] Unlinking - API call:', { proposalId, reqId, newLinkedWbsIds })
-      requirementsApi.update(proposalId, { reqId, linked_wbs_ids: newLinkedWbsIds })
+      const uuidOnly = newLinkedWbsIds.filter((id: string) => !id.startsWith('wbs-'))
+      console.log('[DEBUG] Unlinking - API call:', { proposalId, reqId, linked_wbs_ids: uuidOnly })
+      requirementsApi.update(proposalId, { reqId, linked_wbs_ids: uuidOnly })
         .then(res => console.log('[DEBUG] Unlink persisted:', res))
         .catch(err => console.warn('[Estimate] Failed to sync requirement unlink to API:', err))
     }
