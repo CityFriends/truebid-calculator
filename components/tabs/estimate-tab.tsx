@@ -1,25 +1,16 @@
 "use client"
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import {
-  ClipboardList, Grid3X3, Calendar, Sparkles, ChevronDown, CheckCircle2, X, Clock, Loader2
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { ClipboardList, Grid3X3, Calendar } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { useAppContext, type ExtractedRequirement } from '@/contexts/app-context'
-import { requirementsApi, wbsApi } from '@/lib/api'
+import { requirementsApi } from '@/lib/api'
 import { useParams } from 'next/navigation'
 
-// Import new components
+// Import estimate components
 import {
+  StatsBar,
   RequirementsView,
   LaborMatrixView,
   TimelineView,
@@ -27,13 +18,10 @@ import {
   type SOORequirement,
   type EnhancedWBSElement,
   type LaborEstimate,
-  type EstimateViewType,
   type PeriodConfig,
   DEFAULT_PERIODS,
-  formatHours,
   mapToSOOType,
   mapTypeToCategory,
-  generateNextWbsNumber,
 } from '@/components/estimate'
 
 export function EstimateTab() {
@@ -51,13 +39,11 @@ export function EstimateTab() {
   const proposalId = params?.id as string | undefined
 
   // View state
-  const [activeView, setActiveView] = useState<EstimateViewType>('requirements')
+  const [activeView, setActiveView] = useState<string>('requirements')
   const [activePeriod, setActivePeriod] = useState<string>('base')
 
   // Requirements state
   const [requirements, setRequirements] = useState<SOORequirement[]>([])
-  const [requirementSearch, setRequirementSearch] = useState('')
-  const [requirementFilter, setRequirementFilter] = useState<'all' | 'unmapped' | 'mapped'>('all')
   const [selectedRequirements, setSelectedRequirements] = useState<Set<string>>(new Set())
 
   // WBS state
@@ -77,9 +63,9 @@ export function EstimateTab() {
   // Periods configuration
   const periods: PeriodConfig[] = useMemo(() => {
     const pop = solicitation?.periodOfPerformance
-    if (!pop) return DEFAULT_PERIODS.slice(0, 3) // Default: Base + 2 option years
+    if (!pop) return DEFAULT_PERIODS.slice(0, 3)
 
-    const activePeriods: PeriodConfig[] = [DEFAULT_PERIODS[0]] // Always include base
+    const activePeriods: PeriodConfig[] = [DEFAULT_PERIODS[0]]
     const optionCount = typeof pop.optionYears === 'number' ? pop.optionYears : 2
     for (let i = 1; i <= Math.min(optionCount, 4); i++) {
       activePeriods.push(DEFAULT_PERIODS[i])
@@ -153,6 +139,8 @@ export function EstimateTab() {
         }
       })
       setRequirements(mappedRequirements)
+      // Select all by default
+      setSelectedRequirements(new Set(mappedRequirements.map(r => r.id)))
       isInitializedRef.current = true
       return
     }
@@ -165,53 +153,22 @@ export function EstimateTab() {
   }, [extractedRequirements, solicitation?.analyzedFromDocument, estimateWbsElements])
 
   // Computed values
-  const filteredRequirements = useMemo(() => {
-    let filtered = requirements
-
-    if (requirementSearch) {
-      const search = requirementSearch.toLowerCase()
-      filtered = filtered.filter(req =>
-        req.title.toLowerCase().includes(search) ||
-        req.referenceNumber.toLowerCase().includes(search) ||
-        req.description.toLowerCase().includes(search)
-      )
-    }
-
-    if (requirementFilter === 'unmapped') {
-      filtered = filtered.filter(req => req.linkedWbsIds.length === 0)
-    } else if (requirementFilter === 'mapped') {
-      filtered = filtered.filter(req => req.linkedWbsIds.length > 0)
-    }
-
-    return filtered
-  }, [requirements, requirementSearch, requirementFilter])
-
   const stats = useMemo(() => {
     const total = requirements.length
-    const mapped = requirements.filter(r => r.linkedWbsIds.length > 0).length
-    const unmapped = total - mapped
+    const selected = selectedRequirements.size
+    const wbsCount = wbsElements.length
     const totalHours = wbsElements.reduce((sum, w) => sum + w.totalHours, 0)
+    // Estimated cost: simplified calculation (hours * avg rate)
+    const avgRate = 150 // placeholder
+    const estimatedCost = totalHours * avgRate
 
-    return { total, mapped, unmapped, totalHours }
-  }, [requirements, wbsElements])
+    return { total, selected, wbsCount, totalHours, estimatedCost }
+  }, [requirements, selectedRequirements, wbsElements])
 
-  const selectedUnmappedCount = useMemo(() => {
-    return Array.from(selectedRequirements).filter(id => {
-      const req = requirements.find(r => r.id === id)
-      return req && req.linkedWbsIds.length === 0
-    }).length
-  }, [selectedRequirements, requirements])
-
-  const allFilteredSelected = useMemo(() => {
-    if (filteredRequirements.length === 0) return false
-    return filteredRequirements.every(r => selectedRequirements.has(r.id))
-  }, [filteredRequirements, selectedRequirements])
-
-  const someFilteredSelected = useMemo(() => {
-    if (filteredRequirements.length === 0) return false
-    const selectedCount = filteredRequirements.filter(r => selectedRequirements.has(r.id)).length
-    return selectedCount > 0 && selectedCount < filteredRequirements.length
-  }, [filteredRequirements, selectedRequirements])
+  const allSelected = useMemo(() => {
+    if (requirements.length === 0) return false
+    return requirements.every(r => selectedRequirements.has(r.id))
+  }, [requirements, selectedRequirements])
 
   // Handlers
   const handleToggleRequirementSelection = useCallback((reqId: string) => {
@@ -226,30 +183,13 @@ export function EstimateTab() {
     })
   }, [])
 
-  const handleSelectAllFiltered = useCallback(() => {
-    const filteredIds = filteredRequirements.map(r => r.id)
-    const allSelected = filteredIds.every(id => selectedRequirements.has(id))
+  const handleSelectAllRequirements = useCallback(() => {
     if (allSelected) {
-      setSelectedRequirements(prev => {
-        const next = new Set(prev)
-        filteredIds.forEach(id => next.delete(id))
-        return next
-      })
+      setSelectedRequirements(new Set())
     } else {
-      setSelectedRequirements(prev => new Set([...prev, ...filteredIds]))
+      setSelectedRequirements(new Set(requirements.map(r => r.id)))
     }
-  }, [filteredRequirements, selectedRequirements])
-
-  const handleSelectAllUnmapped = useCallback(() => {
-    const unmappedIds = requirements
-      .filter(r => r.linkedWbsIds.length === 0)
-      .map(r => r.id)
-    setSelectedRequirements(new Set(unmappedIds))
-  }, [requirements])
-
-  const handleClearSelection = useCallback(() => {
-    setSelectedRequirements(new Set())
-  }, [])
+  }, [allSelected, requirements])
 
   const handleLinkWbsToRequirement = useCallback((reqId: string, wbsId: string) => {
     const currentReq = requirements.find(r => r.id === reqId)
@@ -295,48 +235,6 @@ export function EstimateTab() {
     }
   }, [setEstimateWbsElements, setExtractedRequirements, requirements, proposalId])
 
-  const handleUnlinkWbsFromRequirement = useCallback((reqId: string, wbsId: string) => {
-    const currentReq = requirements.find(r => r.id === reqId)
-    const newLinkedWbsIds = currentReq
-      ? currentReq.linkedWbsIds.filter(id => id !== wbsId)
-      : []
-
-    setRequirements(prev => prev.map(req => {
-      if (req.id === reqId) {
-        return { ...req, linkedWbsIds: req.linkedWbsIds.filter(id => id !== wbsId) }
-      }
-      return req
-    }))
-
-    setWbsElements(prev => prev.map(wbs => {
-      if (wbs.id === wbsId) {
-        return { ...wbs, linkedRequirementIds: wbs.linkedRequirementIds.filter(id => id !== reqId) }
-      }
-      return wbs
-    }))
-
-    // Sync to context
-    setEstimateWbsElements(prev => (prev || []).map(wbs => {
-      if (wbs.id === wbsId) {
-        return { ...wbs, linkedRequirementIds: (wbs.linkedRequirementIds || []).filter(id => id !== reqId) }
-      }
-      return wbs
-    }))
-    setExtractedRequirements((prev: ExtractedRequirement[]) => (prev || []).map(req => {
-      if (req.id === reqId) {
-        return { ...req, linkedWbsIds: (req.linkedWbsIds || []).filter(id => id !== wbsId) }
-      }
-      return req
-    }))
-
-    // Sync to API
-    if (proposalId) {
-      const uuidOnly = newLinkedWbsIds.filter((id: string) => !id.startsWith('wbs-'))
-      requirementsApi.update(proposalId, { reqId, linked_wbs_ids: uuidOnly })
-        .catch(err => console.warn('[Estimate] Failed to sync requirement unlink to API:', err))
-    }
-  }, [setEstimateWbsElements, setExtractedRequirements, requirements, proposalId])
-
   const handleViewWbs = useCallback((wbs: EnhancedWBSElement) => {
     setSelectedWbs(wbs)
     setShowWbsSlideout(true)
@@ -353,7 +251,6 @@ export function EstimateTab() {
 
   const handleSaveWbs = useCallback((wbs: EnhancedWBSElement) => {
     if (isNewWbs) {
-      // Create new WBS
       const newWbsId = wbs.id.startsWith('wbs-') ? wbs.id : `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       const newWbs = { ...wbs, id: newWbsId }
 
@@ -370,7 +267,6 @@ export function EstimateTab() {
         updatedAt: new Date().toISOString(),
       }])
     } else {
-      // Update existing WBS
       setWbsElements(prev => prev.map(w => w.id === wbs.id ? wbs : w))
       setEstimateWbsElements(prev => (prev || []).map(w =>
         w.id === wbs.id ? {
@@ -443,7 +339,6 @@ export function EstimateTab() {
       return { ...wbs, laborEstimates: updatedEstimates, totalHours }
     }))
 
-    // Sync to context (debounced in production)
     setEstimateWbsElements(prev => (prev || []).map(wbs => {
       if (wbs.id !== wbsId) return wbs
       const existingIndex = wbs.laborEstimates.findIndex(le => le.roleId === roleId)
@@ -462,11 +357,8 @@ export function EstimateTab() {
   }, [companyRoles, setEstimateWbsElements])
 
   // Generate WBS for selected requirements
-  const handleBulkGenerateWBS = useCallback(async () => {
-    const selectedReqs = requirements.filter(r =>
-      selectedRequirements.has(r.id) && r.linkedWbsIds.length === 0
-    )
-
+  const handleGenerateWbs = useCallback(async () => {
+    const selectedReqs = requirements.filter(r => selectedRequirements.has(r.id))
     if (selectedReqs.length === 0) return
 
     setIsGenerating(true)
@@ -507,7 +399,6 @@ export function EstimateTab() {
       const data = await response.json()
       const generatedWbs = data.wbsElements || []
 
-      // Add generated WBS and auto-link
       const newWbs = generatedWbs.map((wbs: EnhancedWBSElement) => ({
         ...wbs,
         id: `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -516,7 +407,6 @@ export function EstimateTab() {
       setWbsElements(prev => [...prev, ...newWbs])
       setEstimateWbsElements(prev => [...(prev || []), ...newWbs])
 
-      // Auto-link to requirements
       newWbs.forEach((wbs: EnhancedWBSElement) => {
         if (wbs.linkedRequirementIds) {
           wbs.linkedRequirementIds.forEach(reqId => {
@@ -524,8 +414,6 @@ export function EstimateTab() {
           })
         }
       })
-
-      setSelectedRequirements(new Set())
     } catch (err) {
       console.error('[EstimateTab] WBS generation failed:', err)
     } finally {
@@ -540,171 +428,86 @@ export function EstimateTab() {
     return requirements.filter(req => req.linkedWbsIds.includes(wbs.id))
   }, [requirements])
 
-  // View tabs
-  const viewTabs = [
-    { id: 'requirements' as const, label: 'Requirements', icon: ClipboardList },
-    { id: 'labor-matrix' as const, label: 'Labor Matrix', icon: Grid3X3 },
-    { id: 'timeline' as const, label: 'Timeline', icon: Calendar },
-  ]
-
   return (
     <TooltipProvider>
-      <div className="absolute inset-0 flex flex-col bg-gray-50 overflow-hidden">
-        {/* Header */}
-        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Estimate</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                {stats.total} requirements → {wbsElements.length} WBS elements
-              </p>
-            </div>
+      <div className="absolute inset-0 flex flex-col bg-white overflow-hidden">
+        {/* Stats Bar */}
+        <StatsBar
+          totalRequirements={stats.total}
+          selectedRequirements={stats.selected}
+          wbsCount={stats.wbsCount}
+          totalHours={stats.totalHours}
+          estimatedCost={stats.estimatedCost}
+          periods={periods}
+          activePeriod={activePeriod}
+          onPeriodChange={setActivePeriod}
+        />
 
-            {/* Actions */}
-            <div className="flex items-center gap-3">
-              {selectedRequirements.size > 0 && (
-                <div className="flex items-center gap-2 mr-2">
-                  <span className="text-sm text-gray-600">
-                    {selectedRequirements.size} selected
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearSelection}
-                    className="h-7 w-7 p-0"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    className="bg-emerald-600 hover:bg-emerald-700"
-                    disabled={selectedUnmappedCount === 0 || isGenerating}
-                  >
-                    {isGenerating ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4 mr-2" />
-                    )}
-                    Generate WBS
-                    {selectedUnmappedCount > 0 && (
-                      <Badge variant="secondary" className="ml-2 bg-emerald-500 text-white">
-                        {selectedUnmappedCount}
-                      </Badge>
-                    )}
-                    <ChevronDown className="w-4 h-4 ml-2" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleBulkGenerateWBS} disabled={isGenerating}>
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Generate for {selectedUnmappedCount} selected
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSelectAllUnmapped}>
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    Select all unmapped ({stats.unmapped})
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-
-          {/* Stats Bar */}
-          <div className="flex items-center gap-6 mt-4 pt-4 border-t border-gray-100">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-sm text-gray-600">
-                <span className="font-medium text-gray-900">{stats.mapped}</span> mapped
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-gray-300" />
-              <span className="text-sm text-gray-600">
-                <span className="font-medium text-gray-900">{stats.unmapped}</span> unmapped
-              </span>
-            </div>
-            <div className="h-4 w-px bg-gray-200" />
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-gray-400" />
-              <span className="text-sm text-gray-600">
-                Total: <span className="font-medium text-gray-900">{formatHours(stats.totalHours)} hours</span>
-              </span>
-            </div>
-          </div>
-
-          {/* View Tabs */}
-          <div className="flex gap-1 mt-4 -mb-4 -mx-6 px-6 border-t border-gray-100 pt-4 bg-gray-50">
-            {viewTabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveView(tab.id)}
-                className={`
-                  flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
-                  ${activeView === tab.id
-                    ? 'bg-white text-emerald-600 border border-gray-200 border-b-white -mb-px'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }
-                `}
+        {/* Tabs */}
+        <Tabs value={activeView} onValueChange={setActiveView} className="flex-1 flex flex-col min-h-0">
+          <div className="flex-shrink-0 border-b border-gray-200 px-4">
+            <TabsList className="h-12 bg-transparent p-0 gap-4">
+              <TabsTrigger
+                value="requirements"
+                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-600 rounded-none px-1 pb-3 pt-3"
               >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
+                <ClipboardList className="w-4 h-4 mr-2" />
+                Requirements
+              </TabsTrigger>
+              <TabsTrigger
+                value="labor-matrix"
+                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-600 rounded-none px-1 pb-3 pt-3"
+              >
+                <Grid3X3 className="w-4 h-4 mr-2" />
+                Labor Matrix
+              </TabsTrigger>
+              <TabsTrigger
+                value="timeline"
+                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-600 rounded-none px-1 pb-3 pt-3"
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Timeline
+              </TabsTrigger>
+            </TabsList>
           </div>
-        </div>
 
-        {/* Main Content */}
-        <div className="flex-1 overflow-hidden bg-white">
-          {activeView === 'requirements' && (
+          <TabsContent value="requirements" className="flex-1 m-0 overflow-hidden">
             <RequirementsView
-              requirements={filteredRequirements}
+              requirements={requirements}
               wbsElements={wbsElements}
-              stats={stats}
-              searchQuery={requirementSearch}
-              onSearchChange={setRequirementSearch}
-              filterStatus={requirementFilter}
-              onFilterChange={setRequirementFilter}
               selectedIds={selectedRequirements}
               onToggleSelection={handleToggleRequirementSelection}
-              onSelectAll={handleSelectAllFiltered}
-              onClearSelection={handleClearSelection}
-              onGenerateWbs={handleBulkGenerateWBS}
+              onSelectAll={handleSelectAllRequirements}
+              onGenerateWbs={handleGenerateWbs}
               isGenerating={isGenerating}
               generatingIds={generatingRequirementIds}
               onViewWbs={handleViewWbs}
-              onUnlinkWbs={handleUnlinkWbsFromRequirement}
               hasUploadedRfp={!!solicitation?.analyzedFromDocument}
-              allSelected={allFilteredSelected}
-              someSelected={someFilteredSelected}
+              allSelected={allSelected}
             />
-          )}
+          </TabsContent>
 
-          {activeView === 'labor-matrix' && (
+          <TabsContent value="labor-matrix" className="flex-1 m-0 overflow-hidden">
             <LaborMatrixView
               wbsElements={wbsElements}
               periods={periods}
               activePeriod={activePeriod}
-              onPeriodChange={setActivePeriod}
               companyRoles={companyRoles.map(r => ({ id: r.id, title: r.title }))}
               onUpdateHours={handleUpdateHours}
               onViewWbs={handleViewWbs}
               onAddWbs={handleAddWbs}
             />
-          )}
+          </TabsContent>
 
-          {activeView === 'timeline' && (
+          <TabsContent value="timeline" className="flex-1 m-0 overflow-hidden">
             <TimelineView
               wbsElements={wbsElements}
               periods={periods}
               companyRoles={companyRoles.map(r => ({ id: r.id, title: r.title }))}
               billableHoursPerMonth={uiBillableHours || 160}
             />
-          )}
-        </div>
+          </TabsContent>
+        </Tabs>
 
         {/* WBS Slideout */}
         <WBSSlideout

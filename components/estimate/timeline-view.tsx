@@ -1,9 +1,11 @@
 "use client"
 
-import React, { useMemo } from 'react'
-import { Calendar, Users, TrendingUp } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
+import { Calendar, TrendingUp, Clock, Users } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import type { EnhancedWBSElement, PeriodConfig } from './types'
-import { formatHours, formatFTE } from './utils'
+import { formatHours } from './utils'
 
 interface TimelineViewProps {
   wbsElements: EnhancedWBSElement[]
@@ -18,64 +20,82 @@ export function TimelineView({
   companyRoles,
   billableHoursPerMonth = 160,
 }: TimelineViewProps) {
-  // Calculate hours and FTE by period and role
-  const periodData = useMemo(() => {
-    return periods.map(period => {
-      const roleData: Record<string, { hours: number; fte: number }> = {}
-      let totalHours = 0
+  const [activePeriodId, setActivePeriodId] = useState(periods[0]?.id || 'base')
 
-      // Initialize all roles
-      companyRoles.forEach(role => {
-        roleData[role.id] = { hours: 0, fte: 0 }
-      })
+  const activePeriod = periods.find(p => p.id === activePeriodId) || periods[0]
+  const monthCount = activePeriod?.monthsCount || 12
 
-      // Sum hours from all WBS elements
-      wbsElements.forEach(wbs => {
-        wbs.laborEstimates.forEach(le => {
-          const hours = le.hoursByPeriod[period.id as keyof typeof le.hoursByPeriod] || 0
-          if (roleData[le.roleId]) {
-            roleData[le.roleId].hours += hours
-          }
-          totalHours += hours
-        })
-      })
+  // Calculate FTE data by role for active period
+  const roleData = useMemo(() => {
+    const data: Record<string, { hours: number; fte: number; monthlyFte: number[] }> = {}
 
-      // Calculate FTE for each role (hours / (months * hours per month))
-      const totalMonthlyHours = period.monthsCount * billableHoursPerMonth
-      Object.keys(roleData).forEach(roleId => {
-        roleData[roleId].fte = roleData[roleId].hours / totalMonthlyHours
-      })
-
-      const totalFte = totalHours / totalMonthlyHours
-
-      return {
-        period,
-        roleData,
-        totalHours,
-        totalFte,
+    // Initialize all roles
+    companyRoles.forEach(role => {
+      data[role.id] = {
+        hours: 0,
+        fte: 0,
+        monthlyFte: Array(monthCount).fill(0)
       }
     })
-  }, [wbsElements, periods, companyRoles, billableHoursPerMonth])
 
-  // Get max FTE for scale
-  const maxFte = useMemo(() => {
-    let max = 0
-    periodData.forEach(p => {
-      if (p.totalFte > max) max = p.totalFte
-    })
-    return Math.max(max, 1) // At least 1 for scale
-  }, [periodData])
-
-  // Get roles that have hours in any period
-  const activeRoles = useMemo(() => {
-    const roleSet = new Set<string>()
-    periodData.forEach(p => {
-      Object.entries(p.roleData).forEach(([roleId, data]) => {
-        if (data.hours > 0) roleSet.add(roleId)
+    // Sum hours from all WBS elements for active period
+    wbsElements.forEach(wbs => {
+      wbs.laborEstimates.forEach(le => {
+        const hours = le.hoursByPeriod[activePeriodId as keyof typeof le.hoursByPeriod] || 0
+        if (data[le.roleId]) {
+          data[le.roleId].hours += hours
+          // Distribute hours evenly across months (simplified)
+          const monthlyHours = hours / monthCount
+          const monthlyFte = monthlyHours / billableHoursPerMonth
+          for (let i = 0; i < monthCount; i++) {
+            data[le.roleId].monthlyFte[i] += monthlyFte
+          }
+        }
       })
     })
-    return companyRoles.filter(r => roleSet.has(r.id))
-  }, [periodData, companyRoles])
+
+    // Calculate total FTE
+    Object.keys(data).forEach(roleId => {
+      data[roleId].fte = data[roleId].hours / (monthCount * billableHoursPerMonth)
+    })
+
+    return data
+  }, [wbsElements, companyRoles, activePeriodId, monthCount, billableHoursPerMonth])
+
+  // Get roles that have hours
+  const activeRoles = companyRoles.filter(r => roleData[r.id]?.hours > 0)
+
+  // Calculate summary stats
+  const stats = useMemo(() => {
+    let peakFte = 0
+    let totalFte = 0
+    let totalHours = 0
+
+    activeRoles.forEach(role => {
+      const rd = roleData[role.id]
+      totalHours += rd.hours
+      totalFte += rd.fte
+      const maxMonthlyFte = Math.max(...rd.monthlyFte)
+      if (maxMonthlyFte > peakFte) peakFte = maxMonthlyFte
+    })
+
+    // Peak FTE is sum of all roles at their peak
+    peakFte = 0
+    for (let i = 0; i < monthCount; i++) {
+      let monthTotal = 0
+      activeRoles.forEach(role => {
+        monthTotal += roleData[role.id].monthlyFte[i]
+      })
+      if (monthTotal > peakFte) peakFte = monthTotal
+    }
+
+    const avgFte = totalFte
+
+    return { peakFte, avgFte, totalHours }
+  }, [activeRoles, roleData, monthCount])
+
+  // Max FTE for scale
+  const maxFte = Math.max(stats.peakFte, 1)
 
   // Color palette for roles
   const roleColors = [
@@ -88,13 +108,12 @@ export function TimelineView({
     'bg-orange-500',
     'bg-indigo-500',
   ]
-
   const getRoleColor = (index: number) => roleColors[index % roleColors.length]
 
   // Empty state
-  if (wbsElements.length === 0) {
+  if (wbsElements.length === 0 || activeRoles.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16">
+      <div className="flex flex-col items-center justify-center h-full py-16">
         <Calendar className="w-16 h-16 text-gray-300 mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">No staffing data yet</h3>
         <p className="text-sm text-gray-500 text-center max-w-sm">
@@ -105,162 +124,184 @@ export function TimelineView({
   }
 
   return (
-    <div className="h-full flex flex-col p-6">
-      {/* Summary cards */}
-      <div className="flex-shrink-0 grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-            <Users className="w-4 h-4" />
-            Total Roles
-          </div>
-          <div className="text-2xl font-bold text-gray-900">{activeRoles.length}</div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-            <TrendingUp className="w-4 h-4" />
-            Peak FTE
-          </div>
-          <div className="text-2xl font-bold text-emerald-600">{formatFTE(maxFte * billableHoursPerMonth * 12, billableHoursPerMonth * 12)}</div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-            <Calendar className="w-4 h-4" />
-            Total Hours
-          </div>
-          <div className="text-2xl font-bold text-gray-900">
-            {formatHours(periodData.reduce((sum, p) => sum + p.totalHours, 0))}
-          </div>
-        </div>
-      </div>
-
-      {/* Timeline chart */}
-      <div className="flex-1 bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">FTE Distribution by Period</h3>
-
-        {/* Chart area */}
-        <div className="flex gap-4 items-end h-64">
-          {periodData.map((pd, periodIndex) => (
-            <div key={pd.period.id} className="flex-1 flex flex-col">
-              {/* Stacked bar */}
-              <div className="flex-1 flex flex-col justify-end">
-                <div
-                  className="w-full rounded-t-md overflow-hidden flex flex-col-reverse"
-                  style={{ height: `${Math.min((pd.totalFte / maxFte) * 100, 100)}%`, minHeight: pd.totalFte > 0 ? '4px' : '0' }}
-                >
-                  {activeRoles.map((role, roleIndex) => {
-                    const roleHours = pd.roleData[role.id]?.hours || 0
-                    const percentage = pd.totalHours > 0 ? (roleHours / pd.totalHours) * 100 : 0
-                    return (
-                      <div
-                        key={role.id}
-                        className={`${getRoleColor(roleIndex)} transition-all`}
-                        style={{ height: `${percentage}%` }}
-                        title={`${role.title}: ${formatHours(roleHours)}h (${formatFTE(roleHours, pd.period.monthsCount * billableHoursPerMonth)} FTE)`}
-                      />
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* FTE label */}
-              <div className="text-center mt-2">
-                <div className="text-sm font-semibold text-gray-900">
-                  {formatFTE(pd.totalHours, pd.period.monthsCount * billableHoursPerMonth)}
-                </div>
-                <div className="text-xs text-gray-500">FTE</div>
-              </div>
-
-              {/* Period label */}
-              <div className="text-center mt-1 pt-2 border-t border-gray-200">
-                <div className="text-xs font-medium text-gray-700">{pd.period.shortLabel}</div>
-                <div className="text-[10px] text-gray-400">{formatHours(pd.totalHours)}h</div>
-              </div>
-            </div>
+    <div className="h-full flex flex-col p-4 bg-gray-50">
+      {/* Period Tabs */}
+      <div className="flex-shrink-0 mb-4">
+        <div className="flex gap-2">
+          {periods.map(period => (
+            <Badge
+              key={period.id}
+              variant={activePeriodId === period.id ? 'default' : 'outline'}
+              className={`cursor-pointer px-4 py-2 text-sm ${
+                activePeriodId === period.id
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-white hover:bg-gray-100'
+              }`}
+              onClick={() => setActivePeriodId(period.id)}
+            >
+              {period.label}
+            </Badge>
           ))}
         </div>
+      </div>
 
-        {/* Legend */}
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <div className="flex flex-wrap gap-4">
-            {activeRoles.map((role, index) => (
-              <div key={role.id} className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded ${getRoleColor(index)}`} />
-                <span className="text-xs text-gray-600">{role.title}</span>
+      {/* Summary Cards */}
+      <div className="flex-shrink-0 grid grid-cols-3 gap-4 mb-6">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-50">
+                <TrendingUp className="w-5 h-5 text-emerald-600" />
               </div>
-            ))}
-          </div>
-        </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Peak FTEs</p>
+                <p className="text-2xl font-bold font-mono text-gray-900">{stats.peakFte.toFixed(1)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-50">
+                <Users className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Average FTEs</p>
+                <p className="text-2xl font-bold font-mono text-gray-900">{stats.avgFte.toFixed(1)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-50">
+                <Clock className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Total Hours</p>
+                <p className="text-2xl font-bold font-mono text-gray-900">{formatHours(stats.totalHours)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Detailed table */}
-      <div className="flex-shrink-0 mt-6 bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">
-                Role
-              </th>
-              {periods.map(period => (
-                <th key={period.id} className="text-center text-xs font-semibold text-gray-600 uppercase px-3 py-3">
-                  {period.shortLabel}
-                </th>
-              ))}
-              <th className="text-center text-xs font-semibold text-gray-600 uppercase px-3 py-3 bg-emerald-50">
-                Total
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {activeRoles.map((role, index) => {
-              const roleTotal = periodData.reduce((sum, pd) => sum + (pd.roleData[role.id]?.hours || 0), 0)
-              return (
-                <tr key={role.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded ${getRoleColor(index)}`} />
-                      <span className="text-sm text-gray-900">{role.title}</span>
-                    </div>
-                  </td>
-                  {periodData.map(pd => (
-                    <td key={pd.period.id} className="text-center px-3 py-3">
-                      <div className="text-sm text-gray-700">
-                        {formatHours(pd.roleData[role.id]?.hours || 0)}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {formatFTE(pd.roleData[role.id]?.hours || 0, pd.period.monthsCount * billableHoursPerMonth)} FTE
-                      </div>
-                    </td>
-                  ))}
-                  <td className="text-center px-3 py-3 bg-emerald-50/50">
-                    <div className="text-sm font-medium text-emerald-700">
-                      {formatHours(roleTotal)}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-            {/* Totals row */}
-            <tr className="bg-emerald-100 font-semibold">
-              <td className="px-4 py-3">
-                <span className="text-sm text-emerald-800">Total</span>
-              </td>
-              {periodData.map(pd => (
-                <td key={pd.period.id} className="text-center px-3 py-3">
-                  <div className="text-sm text-emerald-700">{formatHours(pd.totalHours)}</div>
-                  <div className="text-xs text-emerald-600">
-                    {formatFTE(pd.totalHours, pd.period.monthsCount * billableHoursPerMonth)} FTE
-                  </div>
-                </td>
-              ))}
-              <td className="text-center px-3 py-3 bg-emerald-200/50">
-                <div className="text-sm font-bold text-emerald-800">
-                  {formatHours(periodData.reduce((sum, p) => sum + p.totalHours, 0))}
+      {/* Timeline Chart */}
+      <Card className="flex-1 overflow-hidden">
+        <CardContent className="p-4 h-full flex flex-col">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            FTE by Month — {activePeriod.label}
+          </h3>
+
+          {/* Chart */}
+          <div className="flex-1 overflow-auto">
+            {/* Month Headers */}
+            <div className="flex mb-2 pl-32">
+              {Array.from({ length: monthCount }, (_, i) => (
+                <div key={i} className="flex-1 text-center text-xs font-medium text-gray-500 min-w-[40px]">
+                  M{i + 1}
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              ))}
+              <div className="w-20 text-center text-xs font-medium text-gray-500">Total</div>
+            </div>
+
+            {/* Role Rows */}
+            <div className="space-y-3">
+              {activeRoles.map((role, index) => {
+                const rd = roleData[role.id]
+                return (
+                  <div key={role.id} className="flex items-center gap-2">
+                    {/* Role Label */}
+                    <div className="w-32 flex-shrink-0 flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded ${getRoleColor(index)}`} />
+                      <span className="text-sm text-gray-700 truncate">{role.title}</span>
+                    </div>
+
+                    {/* Monthly Bars */}
+                    <div className="flex flex-1 gap-1">
+                      {rd.monthlyFte.map((fte, monthIdx) => {
+                        const barHeight = Math.max((fte / maxFte) * 100, fte > 0 ? 10 : 0)
+                        return (
+                          <div
+                            key={monthIdx}
+                            className="flex-1 min-w-[40px] flex items-end justify-center h-12"
+                          >
+                            <div
+                              className={`w-full max-w-[32px] ${getRoleColor(index)} rounded-t transition-all`}
+                              style={{ height: `${barHeight}%` }}
+                              title={`M${monthIdx + 1}: ${fte.toFixed(2)} FTE`}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Total */}
+                    <div className="w-20 text-center">
+                      <span className="text-sm font-mono font-medium text-gray-900">
+                        {rd.fte.toFixed(1)} FTE
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Total Row */}
+            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-200">
+              <div className="w-32 flex-shrink-0">
+                <span className="text-sm font-semibold text-gray-900">Total</span>
+              </div>
+              <div className="flex flex-1 gap-1">
+                {Array.from({ length: monthCount }, (_, monthIdx) => {
+                  let monthTotal = 0
+                  activeRoles.forEach(role => {
+                    monthTotal += roleData[role.id].monthlyFte[monthIdx]
+                  })
+                  const barHeight = Math.max((monthTotal / maxFte) * 100, monthTotal > 0 ? 10 : 0)
+                  return (
+                    <div
+                      key={monthIdx}
+                      className="flex-1 min-w-[40px] flex items-end justify-center h-12"
+                    >
+                      <div
+                        className="w-full max-w-[32px] bg-emerald-600 rounded-t transition-all"
+                        style={{ height: `${barHeight}%` }}
+                        title={`M${monthIdx + 1}: ${monthTotal.toFixed(2)} FTE`}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="w-20 text-center">
+                <span className="text-sm font-mono font-bold text-emerald-700">
+                  {stats.avgFte.toFixed(1)} FTE
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="flex-shrink-0 pt-4 mt-4 border-t border-gray-200">
+            <div className="flex flex-wrap gap-4">
+              {activeRoles.map((role, index) => (
+                <div key={role.id} className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded ${getRoleColor(index)}`} />
+                  <span className="text-xs text-gray-600">{role.title}</span>
+                  <span className="text-xs font-mono text-gray-400">
+                    ({formatHours(roleData[role.id].hours)}h)
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

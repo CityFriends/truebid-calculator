@@ -1,43 +1,72 @@
 "use client"
 
 import React, { useState, useCallback, useMemo } from 'react'
-import {
-  ChevronDown, ChevronRight, Clock, Users, Plus
-} from 'lucide-react'
+import { Clock, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import type { EnhancedWBSElement, LaborEstimate, PeriodConfig } from './types'
-import { formatHours, getConfidenceColor } from './utils'
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import type { EnhancedWBSElement, PeriodConfig } from './types'
+import { formatHours } from './utils'
 
 interface LaborMatrixViewProps {
   wbsElements: EnhancedWBSElement[]
   periods: PeriodConfig[]
   activePeriod: string
-  onPeriodChange: (periodId: string) => void
   companyRoles: Array<{ id: string; title: string }>
   onUpdateHours: (wbsId: string, roleId: string, periodKey: string, hours: number) => void
   onViewWbs: (wbs: EnhancedWBSElement) => void
   onAddWbs: () => void
 }
 
+// Method badge colors
+const getMethodColor = (method: string) => {
+  switch (method) {
+    case 'engineering': return 'bg-blue-100 text-blue-700 border-blue-200'
+    case 'analogous': return 'bg-purple-100 text-purple-700 border-purple-200'
+    case 'parametric': return 'bg-amber-100 text-amber-700 border-amber-200'
+    case 'expert': return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    default: return 'bg-gray-100 text-gray-700 border-gray-200'
+  }
+}
+
+// Confidence dots component
+function ConfidenceDots({ level }: { level: 'high' | 'medium' | 'low' }) {
+  const filled = level === 'high' ? 4 : level === 'medium' ? 3 : 2
+  return (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4].map(i => (
+        <div
+          key={i}
+          className={`w-2 h-2 rounded-full ${
+            i <= filled
+              ? level === 'high' ? 'bg-emerald-500' :
+                level === 'medium' ? 'bg-amber-500' : 'bg-red-500'
+              : 'bg-gray-200'
+          }`}
+        />
+      ))}
+    </div>
+  )
+}
+
 export function LaborMatrixView({
   wbsElements,
   periods,
   activePeriod,
-  onPeriodChange,
   companyRoles,
   onUpdateHours,
   onViewWbs,
   onAddWbs,
 }: LaborMatrixViewProps) {
-  const [expandedWbs, setExpandedWbs] = useState<Set<string>>(new Set())
-  const [editingCell, setEditingCell] = useState<{ wbsId: string; roleId: string; periodKey: string } | null>(null)
+  const [editingCell, setEditingCell] = useState<{ wbsId: string; roleId: string } | null>(null)
   const [editValue, setEditValue] = useState('')
 
   // Get all unique roles used across all WBS elements
@@ -83,27 +112,16 @@ export function LaborMatrixView({
     return labor.hoursByPeriod[activePeriod as keyof typeof labor.hoursByPeriod] || 0
   }, [activePeriod])
 
-  const toggleExpanded = (wbsId: string) => {
-    setExpandedWbs(prev => {
-      const next = new Set(prev)
-      if (next.has(wbsId)) {
-        next.delete(wbsId)
-      } else {
-        next.add(wbsId)
-      }
-      return next
-    })
-  }
-
-  const handleCellClick = (wbsId: string, roleId: string, currentValue: number) => {
-    setEditingCell({ wbsId, roleId, periodKey: activePeriod })
-    setEditValue(String(currentValue))
+  const handleCellClick = (e: React.MouseEvent, wbsId: string, roleId: string, currentValue: number) => {
+    e.stopPropagation()
+    setEditingCell({ wbsId, roleId })
+    setEditValue(String(currentValue || ''))
   }
 
   const handleCellBlur = () => {
     if (editingCell) {
       const numValue = parseFloat(editValue) || 0
-      onUpdateHours(editingCell.wbsId, editingCell.roleId, editingCell.periodKey, numValue)
+      onUpdateHours(editingCell.wbsId, editingCell.roleId, activePeriod, numValue)
       setEditingCell(null)
       setEditValue('')
     }
@@ -121,7 +139,7 @@ export function LaborMatrixView({
   // Empty state
   if (wbsElements.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16">
+      <div className="flex flex-col items-center justify-center h-full py-16">
         <Clock className="w-16 h-16 text-gray-300 mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">No WBS elements yet</h3>
         <p className="text-sm text-gray-500 text-center max-w-sm mb-4">
@@ -138,198 +156,133 @@ export function LaborMatrixView({
   return (
     <div className="h-full flex flex-col">
       {/* Period tabs */}
-      <div className="flex-shrink-0 px-6 py-3 border-b border-gray-200 bg-gray-50">
+      <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-2">
           {periods.map(period => (
-            <button
+            <Badge
               key={period.id}
-              onClick={() => onPeriodChange(period.id)}
-              className={`
-                px-4 py-2 text-sm font-medium rounded-lg transition-colors
-                ${activePeriod === period.id
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-                }
-              `}
+              variant={activePeriod === period.id ? 'default' : 'outline'}
+              className={`cursor-pointer px-3 py-1 ${
+                activePeriod === period.id
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'hover:bg-gray-100'
+              }`}
             >
-              {period.shortLabel}
-            </button>
+              {period.label}
+            </Badge>
           ))}
         </div>
       </div>
 
       {/* Matrix table */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full border-collapse min-w-max">
-          {/* Header row with role columns */}
-          <thead className="sticky top-0 z-10">
-            <tr className="bg-gray-100 border-b border-gray-200">
-              <th className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider px-4 py-3 w-64 sticky left-0 bg-gray-100 z-20">
-                WBS Element
-              </th>
+      <div className="flex-1 overflow-auto p-4">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-gray-50">
+              <TableHead className="w-16 font-semibold">WBS #</TableHead>
+              <TableHead className="min-w-[200px] font-semibold">Task Name</TableHead>
+              <TableHead className="w-28 font-semibold">Method</TableHead>
+              <TableHead className="w-24 font-semibold">Confidence</TableHead>
               {usedRoles.map(role => (
-                <th
-                  key={role.id}
-                  className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wider px-3 py-3 w-24"
-                >
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <span className="truncate block max-w-[80px]">{role.title}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>{role.title}</TooltipContent>
-                  </Tooltip>
-                </th>
+                <TableHead key={role.id} className="w-24 text-center font-semibold">
+                  {role.title}
+                </TableHead>
               ))}
-              <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wider px-3 py-3 w-24 bg-emerald-50">
-                Total
-              </th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-gray-100">
+              <TableHead className="w-24 text-center font-semibold bg-emerald-50">
+                Total Hours
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {wbsElements.map(wbs => {
-              const isExpanded = expandedWbs.has(wbs.id)
               const wbsTotal = getWbsPeriodTotal(wbs)
 
               return (
-                <React.Fragment key={wbs.id}>
-                  {/* WBS row */}
-                  <tr className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 sticky left-0 bg-white z-10">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => toggleExpanded(wbs.id)}
-                          className="p-0.5 hover:bg-gray-200 rounded"
-                        >
-                          {isExpanded ? (
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4 text-gray-400" />
-                          )}
-                        </button>
-                        <div className="min-w-0">
+                <TableRow
+                  key={wbs.id}
+                  className="cursor-pointer hover:bg-gray-50"
+                  onClick={() => onViewWbs(wbs)}
+                >
+                  <TableCell className="font-mono text-sm text-emerald-600 font-semibold">
+                    {wbs.wbsNumber}
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-medium text-gray-900">{wbs.title}</span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={`text-xs capitalize ${getMethodColor(wbs.estimateMethod)}`}
+                    >
+                      {wbs.estimateMethod}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <ConfidenceDots level={wbs.confidence} />
+                  </TableCell>
+                  {usedRoles.map(role => {
+                    const hours = getCellHours(wbs, role.id)
+                    const isEditing = editingCell?.wbsId === wbs.id && editingCell?.roleId === role.id
+
+                    return (
+                      <TableCell key={role.id} className="text-center p-1">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={handleCellBlur}
+                            onKeyDown={handleCellKeyDown}
+                            className="w-20 h-8 text-center text-sm font-mono mx-auto"
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
                           <button
-                            onClick={() => onViewWbs(wbs)}
-                            className="flex items-center gap-2 hover:text-emerald-600"
+                            onClick={(e) => handleCellClick(e, wbs.id, role.id, hours)}
+                            className={`
+                              w-20 h-8 rounded text-sm font-mono transition-colors mx-auto block
+                              ${hours > 0
+                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium'
+                                : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+                              }
+                            `}
                           >
-                            <span className="text-xs font-mono font-semibold text-emerald-600">
-                              {wbs.wbsNumber}
-                            </span>
-                            <span className="text-sm font-medium text-gray-900 truncate max-w-[160px]">
-                              {wbs.title}
-                            </span>
+                            {hours > 0 ? formatHours(hours) : '—'}
                           </button>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] px-1 py-0 h-4 ${getConfidenceColor(wbs.confidence)}`}
-                            >
-                              {wbs.confidence}
-                            </Badge>
-                            <span className="text-xs text-gray-400">
-                              <Users className="w-3 h-3 inline mr-0.5" />
-                              {wbs.laborEstimates.length}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Role hour cells */}
-                    {usedRoles.map(role => {
-                      const hours = getCellHours(wbs, role.id)
-                      const isEditing = editingCell?.wbsId === wbs.id && editingCell?.roleId === role.id
-
-                      return (
-                        <td key={role.id} className="px-2 py-2 text-center">
-                          {isEditing ? (
-                            <Input
-                              type="number"
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={handleCellBlur}
-                              onKeyDown={handleCellKeyDown}
-                              className="w-20 h-8 text-center text-sm mx-auto"
-                              autoFocus
-                            />
-                          ) : (
-                            <button
-                              onClick={() => handleCellClick(wbs.id, role.id, hours)}
-                              className={`
-                                w-20 h-8 rounded text-sm font-medium transition-colors mx-auto block
-                                ${hours > 0
-                                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                  : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
-                                }
-                              `}
-                            >
-                              {hours > 0 ? formatHours(hours) : '—'}
-                            </button>
-                          )}
-                        </td>
-                      )
-                    })}
-
-                    {/* WBS total */}
-                    <td className="px-2 py-2 text-center bg-emerald-50/50">
-                      <span className="text-sm font-semibold text-emerald-700">
-                        {formatHours(wbsTotal)}
-                      </span>
-                    </td>
-                  </tr>
-
-                  {/* Expanded details */}
-                  {isExpanded && (
-                    <tr>
-                      <td colSpan={usedRoles.length + 2} className="bg-gray-50 px-4 py-3">
-                        <div className="pl-8 space-y-2">
-                          <div className="text-xs text-gray-500">
-                            <strong>Why:</strong> {wbs.why || 'Not specified'}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            <strong>What:</strong> {wbs.what || 'Not specified'}
-                          </div>
-                          {wbs.assumptions.length > 0 && (
-                            <div className="text-xs text-gray-500">
-                              <strong>Assumptions:</strong>
-                              <ul className="list-disc list-inside mt-1">
-                                {wbs.assumptions.slice(0, 3).map((a, i) => (
-                                  <li key={i}>{a}</li>
-                                ))}
-                                {wbs.assumptions.length > 3 && (
-                                  <li className="text-gray-400">+{wbs.assumptions.length - 3} more</li>
-                                )}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                        )}
+                      </TableCell>
+                    )
+                  })}
+                  <TableCell className="text-center bg-emerald-50/50">
+                    <span className="text-sm font-semibold font-mono text-emerald-700">
+                      {formatHours(wbsTotal)}
+                    </span>
+                  </TableCell>
+                </TableRow>
               )
             })}
 
             {/* Totals row */}
-            <tr className="bg-emerald-100 font-semibold sticky bottom-0">
-              <td className="px-4 py-3 sticky left-0 bg-emerald-100 z-10">
-                <span className="text-sm text-emerald-800">Period Total</span>
-              </td>
+            <TableRow className="bg-emerald-100 font-semibold">
+              <TableCell colSpan={4} className="text-emerald-800">
+                Period Total
+              </TableCell>
               {usedRoles.map(role => (
-                <td key={role.id} className="px-2 py-3 text-center">
-                  <span className="text-sm text-emerald-700">
+                <TableCell key={role.id} className="text-center">
+                  <span className="text-sm font-mono text-emerald-700">
                     {formatHours(periodTotals[role.id] || 0)}
                   </span>
-                </td>
+                </TableCell>
               ))}
-              <td className="px-2 py-3 text-center bg-emerald-200/50">
-                <span className="text-sm font-bold text-emerald-800">
+              <TableCell className="text-center bg-emerald-200/50">
+                <span className="text-sm font-bold font-mono text-emerald-800">
                   {formatHours(periodTotals.total)}
                 </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
     </div>
   )
