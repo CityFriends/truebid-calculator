@@ -263,8 +263,8 @@ export function TabsNavigation() {
     })
   }
 
-  // Show solicitation bar on main bid flow tabs (not estimate, not utility tools)
-  const showSolicitationBar = !isUtilityToolActive && activeTab !== 'estimate' && solicitation?.solicitationNumber
+  // Show solicitation bar only when user expands it (key info now in header)
+  const showSolicitationBar = !isUtilityToolActive && showSolicitationExpanded && solicitation?.solicitationNumber
 
   // Get proposal display name
   const proposalName = solicitation?.title || solicitation?.solicitationNumber || 'New Proposal'
@@ -282,34 +282,81 @@ export function TabsNavigation() {
         aria-atomic="true"
       />
 
-      {/* Breadcrumb Header */}
+      {/* Proposal Header with Breadcrumb + Metadata */}
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50 shrink-0">
         <div className="container mx-auto px-4 md:px-6">
-          <div className="flex items-center justify-between h-12">
-            {/* Left: Breadcrumb */}
-            <nav className="flex items-center gap-2 min-w-0" aria-label="Breadcrumb">
-              <a 
+          <div className="flex items-center justify-between h-14 gap-4">
+            {/* Left: Breadcrumb + Title */}
+            <div className="flex items-center gap-3 min-w-0">
+              <a
                 href="/dashboard"
-                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors shrink-0"
+                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors shrink-0"
               >
                 <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-                <span>Dashboard</span>
+                <span className="hidden sm:inline">Dashboard</span>
               </a>
               <span className="text-gray-300 dark:text-gray-600" aria-hidden="true">/</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+              <h1 className="text-sm font-semibold text-gray-900 dark:text-white truncate max-w-[200px] md:max-w-md">
                 {proposalName}
-              </span>
-            </nav>
+              </h1>
+            </div>
 
-            {/* Right: Status indicator */}
-{(
-  <div className="flex items-center gap-3 shrink-0">
-    <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-      <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
-      Saved
-    </span>
-  </div>
-)}
+            {/* Center: Metadata Badges */}
+            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+              {solicitation?.solicitationNumber && (
+                <Badge variant="outline" className="text-xs font-normal text-gray-600 border-gray-300">
+                  <FileText className="w-3 h-3 mr-1" aria-hidden="true" />
+                  {solicitation.solicitationNumber}
+                </Badge>
+              )}
+              {solicitation?.contractType && (
+                <Badge variant="secondary" className="text-xs">
+                  {solicitation.contractType}
+                </Badge>
+              )}
+              {solicitation?.clientAgency && (
+                <Badge variant="outline" className="text-xs font-normal text-gray-600 border-gray-300">
+                  <Building2 className="w-3 h-3 mr-1" aria-hidden="true" />
+                  {solicitation.clientAgency}
+                </Badge>
+              )}
+              {daysUntilDue !== null && (
+                <Badge
+                  variant="outline"
+                  className={`text-xs font-normal ${
+                    isOverdue
+                      ? 'bg-red-50 text-red-700 border-red-200'
+                      : isUrgent
+                      ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                      : 'text-gray-600 border-gray-300'
+                  }`}
+                >
+                  <Clock className="w-3 h-3 mr-1" aria-hidden="true" />
+                  {isOverdue ? 'Overdue' : `${daysUntilDue}d left`}
+                </Badge>
+              )}
+            </div>
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Saved indicator */}
+              <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mr-2">
+                <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
+                Saved
+              </span>
+
+              {/* Settings button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => openSolicitationEditor()}
+                className="h-8 px-3 text-gray-600 hover:text-gray-900"
+                aria-label="Open settings"
+              >
+                <Wrench className="w-4 h-4 md:mr-1.5" aria-hidden="true" />
+                <span className="hidden md:inline">Settings</span>
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -399,130 +446,32 @@ export function TabsNavigation() {
         </div>
       )}
 
-      {/* Solicitation Bar - Own row below tabs */}
+      {/* Expanded Solicitation Details Panel */}
       {showSolicitationBar && (
-        <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 shrink-0" role="region" aria-label="Solicitation information">
-          <div className="container mx-auto px-4 md:px-6">
-            {/* Collapsed view */}
-            <div className="flex items-center justify-between py-2 gap-2">
-              <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                <div className="flex items-center gap-2 shrink-0">
-                  <FileText className="w-4 h-4 text-gray-400 hidden sm:block" aria-hidden="true" />
-                  <span className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[120px] sm:max-w-none">
-                    {solicitation.solicitationNumber}
-                  </span>
-                  {solicitation.title && (
-                    <>
-                      <span className="text-gray-300 dark:text-gray-600 hidden md:inline" aria-hidden="true">·</span>
-                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[150px] md:max-w-md hidden md:inline">
-                        {solicitation.title}
-                      </span>
-                    </>
-                  )}
-                </div>
-                
-                {/* Badges */}
-                <div className="flex items-center gap-1 md:gap-2 shrink-0" aria-label="Contract details">
-                  {solicitation.contractType && (
-                    <Badge variant="secondary" className="text-xs">
-                      {solicitation.contractType}
-                    </Badge>
-                  )}
-                  {solicitation.setAside && solicitation.setAside !== 'full-open' && (
-                    <Badge 
-                      variant="outline" 
-                      className="text-xs bg-purple-50 text-purple-700 border-purple-200"
-                    >
-                      {SET_ASIDE_LABELS[solicitation.setAside] || solicitation.setAside}
-                    </Badge>
-                  )}
-                  {solicitation.clearanceLevel && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-full">
-                      <Shield className="w-3 h-3" aria-hidden="true" />
-                      <span>{CLEARANCE_LEVEL_LABELS[solicitation.clearanceLevel] || solicitation.clearanceLevel}</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1 md:gap-3 shrink-0">
-                {/* Due date */}
-                {daysUntilDue !== null && (
-                  <div 
-                    className={`flex items-center gap-1 md:gap-1.5 px-1.5 md:px-2 py-1 rounded text-xs font-medium ${
-                      isOverdue 
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' 
-                        : isUrgent 
-                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                    }`}
-                    role="status"
-                    aria-label={isOverdue ? 'Proposal is overdue' : `${daysUntilDue} days until proposal is due`}
-                  >
-                    <Clock className="w-3 h-3" aria-hidden="true" />
-                    <span>{isOverdue ? 'Overdue' : `${daysUntilDue}d`}</span>
-                  </div>
-                )}
-
-                {/* Versions button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsVersionsSlideoutOpen(true)}
-                  className="h-7 px-1.5 md:px-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  aria-label="View version history"
-                >
-                  <History className="w-3.5 h-3.5 md:mr-1" aria-hidden="true" />
-                  <span className="hidden md:inline">Versions</span>
-                  {projectVersions.length > 0 && (
-                    <Badge variant="secondary" className="ml-1 md:ml-1.5 h-4 px-1 text-[10px]">
-                      {projectVersions.length}
-                    </Badge>
-                  )}
-                </Button>
-
-                {/* Edit button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => openSolicitationEditor()}
-                  className="h-7 px-1.5 md:px-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  aria-label="Edit solicitation details"
-                >
-                  <Pencil className="w-3.5 h-3.5 md:mr-1" aria-hidden="true" />
-                  <span className="hidden md:inline">Edit</span>
-                </Button>
-
-                {/* Expand/Collapse */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowSolicitationExpanded(!showSolicitationExpanded)}
-                  className="h-7 w-7 p-0 text-gray-400 dark:text-gray-500"
-                  aria-expanded={showSolicitationExpanded}
-                  aria-label={showSolicitationExpanded ? 'Collapse solicitation details' : 'Expand solicitation details'}
-                >
-                  {showSolicitationExpanded ? (
-                    <ChevronUp className="w-4 h-4" aria-hidden="true" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" aria-hidden="true" />
-                  )}
-                </Button>
-              </div>
+        <div className="bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-800 shrink-0" role="region" aria-label="Solicitation details">
+          <div className="container mx-auto px-4 md:px-6 py-4">
+            {/* Header with close */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Solicitation Details</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSolicitationExpanded(false)}
+                className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
+                aria-label="Close details panel"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </Button>
             </div>
 
-            {/* Expanded view */}
-            {showSolicitationExpanded && (
-              <div className="pb-4 pt-3 border-t border-gray-100">
-                {/* Title row */}
-                {solicitation.title && (
-                  <div className="mb-3">
-                    <h3 className="text-sm font-semibold text-gray-900">
-                      {solicitation.title}
-                    </h3>
-                  </div>
-                )}
+            {/* Title row */}
+            {solicitation?.title && (
+              <div className="mb-4">
+                <p className="text-sm text-gray-700">{solicitation.title}</p>
+              </div>
+            )}
 
+            <div>
                 {/* Pricing Assumptions - Prominent top section */}
                 <div 
                   className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200"
@@ -707,7 +656,7 @@ export function TabsNavigation() {
                 )}
 
                 {isOverdue && (
-                  <div 
+                  <div
                     className="flex items-center gap-2 mt-4 p-3 bg-red-50 rounded-lg border border-red-200"
                     role="alert"
                   >
@@ -717,8 +666,7 @@ export function TabsNavigation() {
                     </p>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}

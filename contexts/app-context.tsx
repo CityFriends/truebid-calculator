@@ -1003,15 +1003,13 @@ export interface GSAContractInfo {
 // ==================== CONTEXT INTERFACE ====================
 
 // Main application tab type for navigation (matches tabs-navigation.tsx TabType)
-// Note: 'sub-rates' is now a utility tool in the Tools menu, not a main tab
-// Note: 'gsa-bid' functionality merged into Upload tab (contract type selection)
-// Workflow order: Upload → Estimate → Roles → Teaming → Rate Justification → Export
-export type MainTabId = 
-  | 'upload' 
+// Redesigned to 3 main tabs with sidebar navigation within each:
+//   - Estimate: WBS elements + Requirements (Upload is now a sidebar action)
+//   - Team: Roles & Pricing, Rate Justification, Teaming Partners (via sidebar)
+//   - Export: Export documents
+export type MainTabId =
   | 'estimate'
-  | 'roles'  // Roles & Pricing
-  | 'teaming-partners'
-  | 'rate-justification' 
+  | 'team'
   | 'export';
 
   // Utility tool type - accessed via Tools menu in header
@@ -1393,14 +1391,15 @@ const getInitialCompanySettings = (): CompanySettings => {
 export function AppProvider({ children }: { children: ReactNode }) {
   
   // ==================== MAIN TAB NAVIGATION ====================
-  const [activeMainTab, setActiveMainTab] = useState<MainTabId>('upload');
+  const [activeMainTab, setActiveMainTab] = useState<MainTabId>('estimate');
   const [selectedRoleIdForJustification, setSelectedRoleIdForJustification] = useState<string | null>(null);
   
   const navigateToRateJustification = (roleId?: string) => {
     if (roleId) {
       setSelectedRoleIdForJustification(roleId);
     }
-    setActiveMainTab('rate-justification');
+    // Rate justification is now a view within the Team tab
+    setActiveMainTab('team');
   };
   
  const clearSelectedRoleForJustification = () => {

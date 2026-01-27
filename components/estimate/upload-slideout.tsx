@@ -26,8 +26,10 @@ const mapContractType = (type: string): 'FFP' | 'T&M' | 'CPFF' | 'IDIQ' => {
 }
 
 // Map set-aside to context format
-const mapSetAside = (setAside: string): string => {
-  const mapping: Record<string, string> = {
+type SetAsideType = '' | 'full-open' | 'small-business' | '8a' | 'hubzone' | 'sdvosb' | 'wosb' | 'edwosb'
+
+const mapSetAside = (setAside: string): SetAsideType => {
+  const mapping: Record<string, SetAsideType> = {
     'Small Business': 'small-business',
     'small-business': 'small-business',
     '8(a)': '8a',
