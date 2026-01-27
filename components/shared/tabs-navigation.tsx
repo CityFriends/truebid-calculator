@@ -770,28 +770,39 @@ export function TabsNavigation() {
         />
       )}
 
-      {/* Tab Content */}
-      <main className="container mx-auto px-4 md:px-6 py-4 md:py-6 flex-1 overflow-y-auto">
-        {/* Utility Tools (shown when active) */}
-        {activeUtilityTool === 'sub-rates' && <SubRatesTab />}
-        
-        {/* Main Bid Flow (hidden when utility tool is active) */}
-        {!isUtilityToolActive && (
-          <div
-            role="tabpanel"
-            id={`tabpanel-${activeTab}`}
-            aria-labelledby={`tab-${activeTab}`}
-            tabIndex={0}
-          >
-            {activeTab === 'upload' && <UploadTab onContinue={() => handleTabChange('estimate')} />}
-            {activeTab === 'estimate' && <EstimateTab />}
-            {activeTab === 'roles' && <RolesAndPricingTab />}
-            {activeTab === 'rate-justification' && <RateJustificationTab />}
-            {activeTab === 'teaming-partners' && <TeamingPartnersTab />}
-            {activeTab === 'export' && <ExportTab />}
-          </div>
-        )}
-      </main>
+      {/* Tab Content - Estimate tab gets full-bleed layout, others get container */}
+      {!isUtilityToolActive && activeTab === 'estimate' ? (
+        <div
+          className="flex-1 overflow-hidden relative"
+          role="tabpanel"
+          id="tabpanel-estimate"
+          aria-labelledby="tab-estimate"
+          tabIndex={0}
+        >
+          <EstimateTab />
+        </div>
+      ) : (
+        <main className="container mx-auto px-4 md:px-6 py-4 md:py-6 flex-1 overflow-y-auto">
+          {/* Utility Tools (shown when active) */}
+          {activeUtilityTool === 'sub-rates' && <SubRatesTab />}
+
+          {/* Main Bid Flow (hidden when utility tool is active) */}
+          {!isUtilityToolActive && (
+            <div
+              role="tabpanel"
+              id={`tabpanel-${activeTab}`}
+              aria-labelledby={`tab-${activeTab}`}
+              tabIndex={0}
+            >
+              {activeTab === 'upload' && <UploadTab onContinue={() => handleTabChange('estimate')} />}
+              {activeTab === 'roles' && <RolesAndPricingTab />}
+              {activeTab === 'rate-justification' && <RateJustificationTab />}
+              {activeTab === 'teaming-partners' && <TeamingPartnersTab />}
+              {activeTab === 'export' && <ExportTab />}
+            </div>
+          )}
+        </main>
+      )}
     </div>
   )
 }
