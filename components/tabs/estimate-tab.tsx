@@ -15,6 +15,7 @@ import {
   LaborMatrixView,
   TimelineView,
   WBSSlideout,
+  UploadSlideout,
   type SOORequirement,
   type EnhancedWBSElement,
   type LaborEstimate,
@@ -58,6 +59,9 @@ export function EstimateTab() {
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatingRequirementIds, setGeneratingRequirementIds] = useState<Set<string>>(new Set())
+
+  // Upload slideout state
+  const [showUploadSlideout, setShowUploadSlideout] = useState(false)
 
   // Initialize state ref
   const isInitializedRef = useRef(false)
@@ -486,6 +490,7 @@ export function EstimateTab() {
           onViewChange={setActiveView}
           requirementsCount={stats.total}
           wbsCount={stats.wbsCount}
+          onUploadDocument={() => setShowUploadSlideout(true)}
         />
 
         {/* Main Content */}
@@ -561,6 +566,15 @@ export function EstimateTab() {
           periods={periods}
           isEditing={isEditingWbs}
           isNew={isNewWbs}
+        />
+
+        {/* Upload Slideout */}
+        <UploadSlideout
+          isOpen={showUploadSlideout}
+          onClose={() => setShowUploadSlideout(false)}
+          onUploadComplete={() => {
+            toast.success('RFP analyzed successfully')
+          }}
         />
       </div>
     </TooltipProvider>

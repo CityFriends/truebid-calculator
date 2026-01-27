@@ -2,19 +2,18 @@
 
 import React, { useState, useCallback, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { 
-  Upload, 
-  Users, 
-  TrendingUp, 
-  Building2, 
-  FileDown, 
-  FileText, 
-  Clock, 
-  ChevronUp, 
-  ChevronDown, 
-  X, 
-  Pencil, 
-  Shield, 
+import {
+  Users,
+  TrendingUp,
+  Building2,
+  FileDown,
+  FileText,
+  Clock,
+  ChevronUp,
+  ChevronDown,
+  X,
+  Pencil,
+  Shield,
   AlertCircle,
   Layers,
   HelpCircle,
@@ -37,7 +36,7 @@ import {
   TooltipProvider,
 } from '@/components/ui/tooltip'
 import { useAppContext } from '@/contexts/app-context'
-import { UploadTab } from '@/components/tabs/upload-tab'
+// UploadTab removed - functionality moved to Estimate sidebar
 import { EstimateTab } from '@/components/tabs/estimate-tab'
 import { RolesAndPricingTab } from '@/components/tabs/roles-and-pricing-tab'
 import { RateJustificationTab } from '@/components/tabs/rate-justification-tab'
@@ -83,12 +82,11 @@ const EVALUATION_METHOD_LABELS: Record<string, string> = {
 } as const
 
 // Tab type definition - main flow only (utilities are separate)
-type TabType = 
-  | 'upload' 
+type TabType =
   | 'estimate'
-  | 'roles' 
+  | 'roles'
   | 'rate-justification'
-  | 'teaming-partners' 
+  | 'teaming-partners'
   | 'export'
 
 // Tab configuration with accessibility metadata
@@ -139,21 +137,16 @@ export function TabsNavigation() {
   const searchParams = useSearchParams()
   useEffect(() => {
     const tabParam = searchParams.get('tab')
-    if (tabParam && ['upload', 'estimate', 'roles', 'rate-justification', 'teaming-partners', 'export'].includes(tabParam)) {
+    if (tabParam && ['estimate', 'roles', 'rate-justification', 'teaming-partners', 'export'].includes(tabParam)) {
       setActiveMainTab(tabParam as TabType)
     }
   }, [searchParams, setActiveMainTab])
 
   // Main bid flow tabs - ordered by workflow sequence
-  // Upload → Estimate → Roles & Pricing → Rate Justification → Teaming Partners → Export
+  // Estimate → Roles & Pricing → Rate Justification → Teaming Partners → Export
+  // Note: Upload functionality moved to Estimate tab sidebar
   const bidFlowTabs: TabConfig[] = [
-    { 
-      id: 'upload', 
-      label: 'Upload', 
-      icon: Upload,
-      description: 'Upload and analyze RFP documents, select contract type'
-    },
-    { 
+    {
       id: 'estimate',
       label: 'Estimate',
       icon: Layers,
@@ -285,8 +278,8 @@ export function TabsNavigation() {
     })
   }
 
-  // Show solicitation bar on main bid flow tabs (not upload, not estimate, not utility tools)
-  const showSolicitationBar = !isUtilityToolActive && activeTab !== 'upload' && activeTab !== 'estimate' && solicitation?.solicitationNumber
+  // Show solicitation bar on main bid flow tabs (not estimate, not utility tools)
+  const showSolicitationBar = !isUtilityToolActive && activeTab !== 'estimate' && solicitation?.solicitationNumber
 
   // Get proposal display name
   const proposalName = solicitation?.title || solicitation?.solicitationNumber || 'New Proposal'
@@ -323,8 +316,8 @@ export function TabsNavigation() {
               </span>
             </nav>
 
-            {/* Right: Status indicator - only show on editing tabs */}
-{activeTab !== 'upload' && (
+            {/* Right: Status indicator */}
+{(
   <div className="flex items-center gap-3 shrink-0">
     <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
       <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
@@ -794,7 +787,7 @@ export function TabsNavigation() {
               aria-labelledby={`tab-${activeTab}`}
               tabIndex={0}
             >
-              {activeTab === 'upload' && <UploadTab onContinue={() => handleTabChange('estimate')} />}
+              {/* Upload functionality moved to Estimate sidebar */}
               {activeTab === 'roles' && <RolesAndPricingTab />}
               {activeTab === 'rate-justification' && <RateJustificationTab />}
               {activeTab === 'teaming-partners' && <TeamingPartnersTab />}
