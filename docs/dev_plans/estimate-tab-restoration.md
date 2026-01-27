@@ -30,10 +30,16 @@ Restore full WBS functionality in the redesigned two-column Estimate tab. AI gen
 
 ## Tasks
 
-### Phase 1: Data Loading
-- [ ] Load real requirements from Upload tab extraction (check localStorage, context, or Supabase)
-- [ ] Load Labor Categories from Account Center
-- [ ] Pass Labor Categories to `/api/generate-wbs` as `availableRoles`
+### Phase 1: Data Loading ✅
+- [x] Load real requirements from Upload tab extraction (check localStorage, context, or Supabase)
+  - Requirements stored in context: `extractedRequirements` via `useAppContext()`
+  - Persisted via `requirementsApi.list(proposalId)` / `requirementsApi.create()`
+  - Upload tab loads from API on mount, stores in context
+- [x] Load Labor Categories from Account Center
+  - Labor Categories = `companyRoles` in context via `useAppContext()`
+  - Persisted via `rolesApi.list()` with localStorage fallback (`'truebid-company-roles'`)
+- [x] Pass Labor Categories to `/api/generate-wbs` as `availableRoles`
+  - Already implemented in estimate-tab.tsx:367-378
 
 ### Phase 2: WBS Generation
 - [ ] Create shared `generateWbsForRequirement()` function
@@ -72,11 +78,14 @@ Restore full WBS functionality in the redesigned two-column Estimate tab. AI gen
 - [ ] Roles & Pricing shows aggregated FTE from WBS labor estimates
 
 ## Open Questions
-- [ ] Where exactly are requirements saved after Upload extraction? (localStorage key, context, or Supabase)
-- [ ] Where exactly are Labor Categories stored? (Account Center storage location)
+- [x] Where exactly are requirements saved after Upload extraction?
+  - **Answer**: Context state `extractedRequirements` + Supabase via `requirementsApi`. Upload tab calls `requirementsApi.create(proposalId, requirements)` after extraction.
+- [x] Where exactly are Labor Categories stored?
+  - **Answer**: Context state `companyRoles` + API via `rolesApi.list()` + localStorage fallback (`'truebid-company-roles'`). The Labor Page (`components/account/labor-page.tsx`) manages these.
 - [ ] Should risks also be AI-generated or just manual?
 
 ## Session Log
 | Date | What was done | What's next |
 |------|---------------|-------------|
 | 2025-01-19 | Created dev plan from handover doc | Start Phase 1: find where requirements and Labor Categories are stored |
+| 2025-01-27 | Investigated data storage: requirements in `extractedRequirements` context + `requirementsApi`, Labor Categories in `companyRoles` context + `rolesApi`. Found Phase 1 already implemented in estimate-tab.tsx | Phase 2: Add per-card ✨ button for single requirement WBS generation |
