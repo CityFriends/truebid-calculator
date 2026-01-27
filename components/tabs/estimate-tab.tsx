@@ -1,8 +1,6 @@
 "use client"
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { ClipboardList, Grid3X3, Calendar } from 'lucide-react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { useAppContext, type ExtractedRequirement } from '@/contexts/app-context'
 import { requirementsApi } from '@/lib/api'
@@ -12,6 +10,7 @@ import { toast } from 'sonner'
 // Import estimate components
 import {
   StatsBar,
+  EstimateSidebar,
   RequirementsView,
   LaborMatrixView,
   TimelineView,
@@ -24,6 +23,8 @@ import {
   mapToSOOType,
   mapTypeToCategory,
 } from '@/components/estimate'
+
+type EstimateView = 'requirements' | 'labor-matrix' | 'timeline'
 
 export function EstimateTab() {
   const {
@@ -40,7 +41,7 @@ export function EstimateTab() {
   const proposalId = params?.id as string | undefined
 
   // View state
-  const [activeView, setActiveView] = useState<string>('requirements')
+  const [activeView, setActiveView] = useState<EstimateView>('requirements')
   const [activePeriod, setActivePeriod] = useState<string>('base')
 
   // Requirements state
@@ -478,85 +479,70 @@ export function EstimateTab() {
 
   return (
     <TooltipProvider>
-      <div className="absolute inset-0 flex flex-col bg-white overflow-hidden">
-        {/* Stats Bar */}
-        <StatsBar
-          totalRequirements={stats.total}
-          selectedRequirements={stats.selected}
+      <div className="absolute inset-0 flex bg-white overflow-hidden">
+        {/* Sidebar */}
+        <EstimateSidebar
+          activeView={activeView}
+          onViewChange={setActiveView}
+          requirementsCount={stats.total}
           wbsCount={stats.wbsCount}
-          totalHours={stats.totalHours}
-          estimatedCost={stats.estimatedCost}
-          periods={periods}
-          activePeriod={activePeriod}
-          onPeriodChange={setActivePeriod}
         />
 
-        {/* Tabs */}
-        <Tabs value={activeView} onValueChange={setActiveView} className="flex-1 flex flex-col min-h-0">
-          <div className="flex-shrink-0 border-b border-gray-200 px-4">
-            <TabsList className="h-12 bg-transparent p-0 gap-4">
-              <TabsTrigger
-                value="requirements"
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-600 rounded-none px-1 pb-3 pt-3"
-              >
-                <ClipboardList className="w-4 h-4 mr-2" />
-                Requirements
-              </TabsTrigger>
-              <TabsTrigger
-                value="labor-matrix"
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-600 rounded-none px-1 pb-3 pt-3"
-              >
-                <Grid3X3 className="w-4 h-4 mr-2" />
-                Labor Matrix
-              </TabsTrigger>
-              <TabsTrigger
-                value="timeline"
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-600 rounded-none px-1 pb-3 pt-3"
-              >
-                <Calendar className="w-4 h-4 mr-2" />
-                Timeline
-              </TabsTrigger>
-            </TabsList>
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Stats Bar */}
+          <StatsBar
+            totalRequirements={stats.total}
+            selectedRequirements={stats.selected}
+            wbsCount={stats.wbsCount}
+            totalHours={stats.totalHours}
+            estimatedCost={stats.estimatedCost}
+            periods={periods}
+            activePeriod={activePeriod}
+            onPeriodChange={setActivePeriod}
+          />
+
+          {/* Content Area */}
+          <div className="flex-1 overflow-hidden">
+            {activeView === 'requirements' && (
+              <RequirementsView
+                requirements={requirements}
+                wbsElements={wbsElements}
+                selectedIds={selectedRequirements}
+                onToggleSelection={handleToggleRequirementSelection}
+                onSelectAll={handleSelectAllRequirements}
+                onGenerateWbs={handleGenerateWbs}
+                onGenerateSingleWbs={handleGenerateSingleWbs}
+                isGenerating={isGenerating}
+                generatingIds={generatingRequirementIds}
+                onViewWbs={handleViewWbs}
+                hasUploadedRfp={!!solicitation?.analyzedFromDocument}
+                allSelected={allSelected}
+              />
+            )}
+
+            {activeView === 'labor-matrix' && (
+              <LaborMatrixView
+                wbsElements={wbsElements}
+                periods={periods}
+                activePeriod={activePeriod}
+                companyRoles={companyRoles.map(r => ({ id: r.id, title: r.title }))}
+                onUpdateHours={handleUpdateHours}
+                onViewWbs={handleViewWbs}
+                onAddWbs={handleAddWbs}
+              />
+            )}
+
+            {activeView === 'timeline' && (
+              <TimelineView
+                wbsElements={wbsElements}
+                periods={periods}
+                companyRoles={companyRoles.map(r => ({ id: r.id, title: r.title }))}
+                billableHoursPerMonth={uiBillableHours || 160}
+              />
+            )}
           </div>
-
-          <TabsContent value="requirements" className="flex-1 m-0 overflow-hidden">
-            <RequirementsView
-              requirements={requirements}
-              wbsElements={wbsElements}
-              selectedIds={selectedRequirements}
-              onToggleSelection={handleToggleRequirementSelection}
-              onSelectAll={handleSelectAllRequirements}
-              onGenerateWbs={handleGenerateWbs}
-              onGenerateSingleWbs={handleGenerateSingleWbs}
-              isGenerating={isGenerating}
-              generatingIds={generatingRequirementIds}
-              onViewWbs={handleViewWbs}
-              hasUploadedRfp={!!solicitation?.analyzedFromDocument}
-              allSelected={allSelected}
-            />
-          </TabsContent>
-
-          <TabsContent value="labor-matrix" className="flex-1 m-0 overflow-hidden">
-            <LaborMatrixView
-              wbsElements={wbsElements}
-              periods={periods}
-              activePeriod={activePeriod}
-              companyRoles={companyRoles.map(r => ({ id: r.id, title: r.title }))}
-              onUpdateHours={handleUpdateHours}
-              onViewWbs={handleViewWbs}
-              onAddWbs={handleAddWbs}
-            />
-          </TabsContent>
-
-          <TabsContent value="timeline" className="flex-1 m-0 overflow-hidden">
-            <TimelineView
-              wbsElements={wbsElements}
-              periods={periods}
-              companyRoles={companyRoles.map(r => ({ id: r.id, title: r.title }))}
-              billableHoursPerMonth={uiBillableHours || 160}
-            />
-          </TabsContent>
-        </Tabs>
+        </div>
 
         {/* WBS Slideout */}
         <WBSSlideout
