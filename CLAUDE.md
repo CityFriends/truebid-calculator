@@ -185,3 +185,31 @@ Not every role needs to weigh in on every question - use judgment on which persp
 - Does this look professional enough for a client demo?
 - What will impress them? What might disappoint them?
 - Is there anything that needs explanation before they see it?
+
+## Dev Plans
+
+TrueBid uses dev plans to maintain context across sessions.
+
+### Before starting feature work:
+1. Check `docs/dev_plans/_INDEX.md` for relevant plans
+2. Read the full dev plan before coding
+3. Note the current status and what's next in Session Log
+
+### During work:
+- Update Decisions table when choices are made
+- Check off Tasks as completed
+- Add new Tasks if scope changes
+
+### Ending a session:
+- Update Session Log with date, what was done, what's next
+- Update Status if changed (🟡 → 🟢 etc.)
+
+### Creating a new plan:
+1. Copy `docs/dev_plans/_TEMPLATE.md`
+2. Fill in all sections
+3. Add to `docs/dev_plans/_INDEX.md`
+
+### Plan locations:
+- Template: `docs/dev_plans/_TEMPLATE.md`
+- Index: `docs/dev_plans/_INDEX.md`
+- Active plans: `docs/dev_plans/*.md`
