@@ -395,10 +395,16 @@ export function EstimateTab() {
     const data = await response.json()
     const generatedWbs = data.wbsElements || []
 
-    const newWbs = generatedWbs.map((wbs: EnhancedWBSElement) => ({
-      ...wbs,
-      id: `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    }))
+    // Transform API response: convert linkedRequirementId (singular) to linkedRequirementIds (array)
+    const newWbs = generatedWbs.map((wbs: EnhancedWBSElement & { linkedRequirementId?: string }) => {
+      const linkedRequirementIds = wbs.linkedRequirementIds ||
+        (wbs.linkedRequirementId ? [wbs.linkedRequirementId] : [])
+      return {
+        ...wbs,
+        id: `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        linkedRequirementIds,
+      }
+    })
 
     setWbsElements(prev => [...prev, ...newWbs])
     setEstimateWbsElements(prev => [...(prev || []), ...newWbs])
@@ -425,6 +431,10 @@ export function EstimateTab() {
     try {
       const newWbs = await generateWbsForRequirements(selectedReqs)
       toast.success(`Generated ${newWbs?.length || 0} WBS element${(newWbs?.length || 0) !== 1 ? 's' : ''}`)
+      // Switch to Labor Matrix view after successful generation (per spec 2.2)
+      if (newWbs && newWbs.length > 0) {
+        setActiveView('labor-matrix')
+      }
     } catch (err) {
       console.error('[EstimateTab] WBS generation failed:', err)
       toast.error('Failed to generate WBS. Please try again.')
@@ -442,8 +452,12 @@ export function EstimateTab() {
     setGeneratingRequirementIds(prev => new Set([...prev, reqId]))
 
     try {
-      await generateWbsForRequirements([req])
+      const newWbs = await generateWbsForRequirements([req])
       toast.success('WBS generated successfully')
+      // Switch to Labor Matrix view after successful generation (per spec 2.2)
+      if (newWbs && newWbs.length > 0) {
+        setActiveView('labor-matrix')
+      }
     } catch (err) {
       console.error('[EstimateTab] Single WBS generation failed:', err)
       toast.error('Failed to generate WBS. Please try again.')
