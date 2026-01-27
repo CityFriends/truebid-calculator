@@ -16,6 +16,7 @@ interface RequirementsViewProps {
   onToggleSelection: (id: string) => void
   onSelectAll: () => void
   onGenerateWbs: () => void
+  onGenerateSingleWbs: (reqId: string) => void
   isGenerating: boolean
   generatingIds: Set<string>
   onViewWbs: (wbs: EnhancedWBSElement) => void
@@ -30,6 +31,7 @@ export function RequirementsView({
   onToggleSelection,
   onSelectAll,
   onGenerateWbs,
+  onGenerateSingleWbs,
   isGenerating,
   generatingIds,
   onViewWbs,
@@ -96,6 +98,7 @@ export function RequirementsView({
           {requirements.map((req) => {
             const isSelected = selectedIds.has(req.id)
             const isReqGenerating = generatingIds.has(req.id)
+            const hasLinkedWbs = req.linkedWbsIds.length > 0
 
             return (
               <div
@@ -123,8 +126,28 @@ export function RequirementsView({
                     >
                       {req.type}
                     </Badge>
+                    {hasLinkedWbs && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-emerald-50 text-emerald-700 border-emerald-200">
+                        {req.linkedWbsIds.length} WBS
+                      </Badge>
+                    )}
                     {isReqGenerating && (
                       <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                    )}
+                    {/* Per-card generate button - only show for unmapped requirements */}
+                    {isSelected && !hasLinkedWbs && !isReqGenerating && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onGenerateSingleWbs(req.id)
+                        }}
+                        disabled={isGenerating}
+                        className="ml-auto flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Generate WBS for this requirement"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        Generate
+                      </button>
                     )}
                   </div>
                   <h4 className={`text-sm font-medium ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>

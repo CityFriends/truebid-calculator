@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { useAppContext, type ExtractedRequirement } from '@/contexts/app-context'
 import { requirementsApi } from '@/lib/api'
 import { useParams } from 'next/navigation'
+import { toast } from 'sonner'
 
 // Import estimate components
 import {
@@ -356,13 +357,9 @@ export function EstimateTab() {
     }))
   }, [companyRoles, setEstimateWbsElements])
 
-  // Generate WBS for selected requirements
-  const handleGenerateWbs = useCallback(async () => {
-    const selectedReqs = requirements.filter(r => selectedRequirements.has(r.id))
-    if (selectedReqs.length === 0) return
-
-    setIsGenerating(true)
-    setGeneratingRequirementIds(new Set(selectedReqs.map(r => r.id)))
+  // Shared function to generate WBS for given requirements
+  const generateWbsForRequirements = useCallback(async (reqs: SOORequirement[]) => {
+    if (reqs.length === 0) return
 
     const availableRolesForApi = companyRoles.map(r => ({
       id: r.id,
@@ -377,50 +374,87 @@ export function EstimateTab() {
       })),
     }))
 
-    try {
-      const response = await fetch('/api/generate-wbs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requirements: selectedReqs,
-          availableRoles: availableRolesForApi,
-          existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
-          contractContext: {
-            title: solicitation?.title || 'Untitled',
-            agency: solicitation?.clientAgency || 'Government Agency',
-            contractType: solicitation?.contractType?.toLowerCase() || 'tm',
-            periodOfPerformance: solicitation?.periodOfPerformance || { baseYear: true, optionYears: 2 }
-          }
-        })
-      })
-
-      if (!response.ok) throw new Error('Failed to generate WBS')
-
-      const data = await response.json()
-      const generatedWbs = data.wbsElements || []
-
-      const newWbs = generatedWbs.map((wbs: EnhancedWBSElement) => ({
-        ...wbs,
-        id: `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      }))
-
-      setWbsElements(prev => [...prev, ...newWbs])
-      setEstimateWbsElements(prev => [...(prev || []), ...newWbs])
-
-      newWbs.forEach((wbs: EnhancedWBSElement) => {
-        if (wbs.linkedRequirementIds) {
-          wbs.linkedRequirementIds.forEach(reqId => {
-            handleLinkWbsToRequirement(reqId, wbs.id)
-          })
+    const response = await fetch('/api/generate-wbs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requirements: reqs,
+        availableRoles: availableRolesForApi,
+        existingWbsNumbers: wbsElements.map(w => w.wbsNumber),
+        contractContext: {
+          title: solicitation?.title || 'Untitled',
+          agency: solicitation?.clientAgency || 'Government Agency',
+          contractType: solicitation?.contractType?.toLowerCase() || 'tm',
+          periodOfPerformance: solicitation?.periodOfPerformance || { baseYear: true, optionYears: 2 }
         }
       })
+    })
+
+    if (!response.ok) throw new Error('Failed to generate WBS')
+
+    const data = await response.json()
+    const generatedWbs = data.wbsElements || []
+
+    const newWbs = generatedWbs.map((wbs: EnhancedWBSElement) => ({
+      ...wbs,
+      id: `wbs-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    }))
+
+    setWbsElements(prev => [...prev, ...newWbs])
+    setEstimateWbsElements(prev => [...(prev || []), ...newWbs])
+
+    newWbs.forEach((wbs: EnhancedWBSElement) => {
+      if (wbs.linkedRequirementIds) {
+        wbs.linkedRequirementIds.forEach(reqId => {
+          handleLinkWbsToRequirement(reqId, wbs.id)
+        })
+      }
+    })
+
+    return newWbs
+  }, [wbsElements, companyRoles, solicitation, setEstimateWbsElements, handleLinkWbsToRequirement])
+
+  // Generate WBS for selected requirements (bulk)
+  const handleGenerateWbs = useCallback(async () => {
+    const selectedReqs = requirements.filter(r => selectedRequirements.has(r.id))
+    if (selectedReqs.length === 0) return
+
+    setIsGenerating(true)
+    setGeneratingRequirementIds(new Set(selectedReqs.map(r => r.id)))
+
+    try {
+      const newWbs = await generateWbsForRequirements(selectedReqs)
+      toast.success(`Generated ${newWbs?.length || 0} WBS element${(newWbs?.length || 0) !== 1 ? 's' : ''}`)
     } catch (err) {
       console.error('[EstimateTab] WBS generation failed:', err)
+      toast.error('Failed to generate WBS. Please try again.')
     } finally {
       setIsGenerating(false)
       setGeneratingRequirementIds(new Set())
     }
-  }, [requirements, selectedRequirements, wbsElements, companyRoles, solicitation, setEstimateWbsElements, handleLinkWbsToRequirement])
+  }, [requirements, selectedRequirements, generateWbsForRequirements])
+
+  // Generate WBS for a single requirement (per-card button)
+  const handleGenerateSingleWbs = useCallback(async (reqId: string) => {
+    const req = requirements.find(r => r.id === reqId)
+    if (!req) return
+
+    setGeneratingRequirementIds(prev => new Set([...prev, reqId]))
+
+    try {
+      await generateWbsForRequirements([req])
+      toast.success('WBS generated successfully')
+    } catch (err) {
+      console.error('[EstimateTab] Single WBS generation failed:', err)
+      toast.error('Failed to generate WBS. Please try again.')
+    } finally {
+      setGeneratingRequirementIds(prev => {
+        const next = new Set(prev)
+        next.delete(reqId)
+        return next
+      })
+    }
+  }, [requirements, generateWbsForRequirements])
 
   // Get linked requirements for WBS slideout
   const getLinkedRequirements = useCallback((wbs: EnhancedWBSElement | null) => {
@@ -479,6 +513,7 @@ export function EstimateTab() {
               onToggleSelection={handleToggleRequirementSelection}
               onSelectAll={handleSelectAllRequirements}
               onGenerateWbs={handleGenerateWbs}
+              onGenerateSingleWbs={handleGenerateSingleWbs}
               isGenerating={isGenerating}
               generatingIds={generatingRequirementIds}
               onViewWbs={handleViewWbs}
