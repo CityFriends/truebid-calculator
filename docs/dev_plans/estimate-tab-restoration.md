@@ -76,7 +76,8 @@ Restore full WBS functionality in the redesigned two-column Estimate tab. AI gen
   - Already implemented
 
 ### Phase 4: Integration
-- [ ] Update requirement card to show mapped status after WBS creation
+- [x] Update requirement card to show mapped status after WBS creation
+  - Fixed: API returns `linkedRequirementId` but client expected `linkedRequirementIds`. Added transform in `generateWbsForRequirements()`
 - [ ] Roll up WBS labor hours to Roles & Pricing tab
 - [ ] Calculate FTE per role (hours ÷ 2080)
 
@@ -107,3 +108,4 @@ Restore full WBS functionality in the redesigned two-column Estimate tab. AI gen
 | 2025-01-27 | Phase 2 partial: Created shared `generateWbsForRequirements()` function, added per-card ✨ Generate button, wired single/bulk generation with loading states and toast notifications | Phase 2: Wire drag-drop OR Phase 3: Improve WBS slideout panel |
 | 2025-01-27 | Removed drag-drop from scope (redundant with per-card button). Phase 2 complete. | Phase 3: WBS Slideout Panel with tabs |
 | 2025-01-27 | Phase 3 complete: Added tabbed layout (Overview, Labor, Assumptions, Risks), added full Risks functionality with probability/impact/mitigation | Phase 4: Integration - Roll up hours to Roles & Pricing |
+| 2025-01-27 | Bug fix: WBS preview not showing generated elements. API returned `linkedRequirementId` (singular) but client expected `linkedRequirementIds` (array). Added transform. Also added view switch to Labor Matrix after generation. | Phase 4: Integration |
