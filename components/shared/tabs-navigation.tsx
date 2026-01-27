@@ -36,11 +36,9 @@ import {
   TooltipProvider,
 } from '@/components/ui/tooltip'
 import { useAppContext } from '@/contexts/app-context'
-// UploadTab removed - functionality moved to Estimate sidebar
+// Consolidated tab imports
 import { EstimateTab } from '@/components/tabs/estimate-tab'
-import { RolesAndPricingTab } from '@/components/tabs/roles-and-pricing-tab'
-import { RateJustificationTab } from '@/components/tabs/rate-justification-tab'
-import { TeamingPartnersTab } from '@/components/tabs/teaming-partners-tab'
+import { TeamTab } from '@/components/team'
 import { SubRatesTab } from '@/components/tabs/sub-rates-tab'
 import { ExportTab } from '@/components/tabs/export-tab'
 
@@ -81,12 +79,10 @@ const EVALUATION_METHOD_LABELS: Record<string, string> = {
   'tradeoff': 'Tradeoff'
 } as const
 
-// Tab type definition - main flow only (utilities are separate)
+// Tab type definition - 3 main tabs (utilities are separate)
 type TabType =
   | 'estimate'
-  | 'roles'
-  | 'rate-justification'
-  | 'teaming-partners'
+  | 'team'
   | 'export'
 
 // Tab configuration with accessibility metadata
@@ -137,7 +133,7 @@ export function TabsNavigation() {
   const searchParams = useSearchParams()
   useEffect(() => {
     const tabParam = searchParams.get('tab')
-    if (tabParam && ['estimate', 'roles', 'rate-justification', 'teaming-partners', 'export'].includes(tabParam)) {
+    if (tabParam && ['estimate', 'team', 'export'].includes(tabParam)) {
       setActiveMainTab(tabParam as TabType)
     }
   }, [searchParams, setActiveMainTab])
@@ -145,6 +141,7 @@ export function TabsNavigation() {
   // Main bid flow tabs - ordered by workflow sequence
   // Estimate → Roles & Pricing → Rate Justification → Teaming Partners → Export
   // Note: Upload functionality moved to Estimate tab sidebar
+  // 3 main tabs per redesign spec
   const bidFlowTabs: TabConfig[] = [
     {
       id: 'estimate',
@@ -152,27 +149,15 @@ export function TabsNavigation() {
       icon: Layers,
       description: 'Build your Basis of Estimate with WBS elements and labor hours'
     },
-    { 
-      id: 'roles', 
-      label: 'Roles & Pricing', 
+    {
+      id: 'team',
+      label: 'Team',
       icon: Users,
-      description: 'Define team roles and calculate pricing'
+      description: 'Manage team roles, pricing, rate justifications, and teaming partners'
     },
-    { 
-      id: 'rate-justification', 
-      label: 'Rate Justification', 
-      icon: TrendingUp,
-      description: 'Document rate justifications for audit defense'
-    },
-    { 
-      id: 'teaming-partners', 
-      label: 'Teaming Partners', 
-      icon: Building2,
-      description: 'Manage subcontractor companies and teaming arrangements'
-    },
-    { 
-      id: 'export', 
-      label: 'Export', 
+    {
+      id: 'export',
+      label: 'Export',
       icon: FileDown,
       description: 'Generate proposal documents and exports'
     },
@@ -763,7 +748,7 @@ export function TabsNavigation() {
         />
       )}
 
-      {/* Tab Content - Estimate tab gets full-bleed layout, others get container */}
+      {/* Tab Content - Estimate and Team tabs get full-bleed layout with sidebars */}
       {!isUtilityToolActive && activeTab === 'estimate' ? (
         <div
           className="flex-1 overflow-hidden relative"
@@ -774,24 +759,30 @@ export function TabsNavigation() {
         >
           <EstimateTab />
         </div>
+      ) : !isUtilityToolActive && activeTab === 'team' ? (
+        <div
+          className="flex-1 overflow-hidden relative"
+          role="tabpanel"
+          id="tabpanel-team"
+          aria-labelledby="tab-team"
+          tabIndex={0}
+        >
+          <TeamTab />
+        </div>
       ) : (
         <main className="container mx-auto px-4 md:px-6 py-4 md:py-6 flex-1 overflow-y-auto">
           {/* Utility Tools (shown when active) */}
           {activeUtilityTool === 'sub-rates' && <SubRatesTab />}
 
-          {/* Main Bid Flow (hidden when utility tool is active) */}
-          {!isUtilityToolActive && (
+          {/* Main Bid Flow - Export tab */}
+          {!isUtilityToolActive && activeTab === 'export' && (
             <div
               role="tabpanel"
-              id={`tabpanel-${activeTab}`}
-              aria-labelledby={`tab-${activeTab}`}
+              id="tabpanel-export"
+              aria-labelledby="tab-export"
               tabIndex={0}
             >
-              {/* Upload functionality moved to Estimate sidebar */}
-              {activeTab === 'roles' && <RolesAndPricingTab />}
-              {activeTab === 'rate-justification' && <RateJustificationTab />}
-              {activeTab === 'teaming-partners' && <TeamingPartnersTab />}
-              {activeTab === 'export' && <ExportTab />}
+              <ExportTab />
             </div>
           )}
         </main>
